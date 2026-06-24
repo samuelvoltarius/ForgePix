@@ -16,7 +16,8 @@ cross‑platform (Windows / macOS / Linux).
 - **Four modules, one app:** 🔬 **Macro** (focus stacking, with Product/Coin/Food presets),
   🌌 **Astro** (star stacking), 🌗 **Hybrid** (Moon/Sun **mosaic** + **Focus+Astro**:
   denoise each position, then focus‑stack) and 📷 **Long exposure** (from a burst, **no ND filter**:
-  silky water/clouds, light trails, remove movers — with AI effect suggestion).
+  silky water/clouds, light trails, remove movers — with AI effect suggestion and a
+  **virtual exposure time** slider (continuous partial averaging)).
 - **Own engine** (OpenCV/NumPy) — no external stacking software required.
 - **RAW** (ARW/NEF/CR2/DNG …) developed faithfully to 16‑bit before stacking; **EXIF kept**.
 - **Built‑in Camera‑Raw editor:** exposure/contrast/white balance, **tone curve**,
