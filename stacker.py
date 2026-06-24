@@ -129,6 +129,8 @@ def focus_stack(images, min_size=32, deghost=False, deghost_thresh=0.35, log=pri
         raise ValueError("keine Bilder")
     dtype = images[0].dtype
     maxval = 65535.0 if dtype == np.uint16 else 255.0
+    # Graustufen → 3-Kanal, damit die Pyramiden-Fusion (erwartet HxWx3) robust läuft
+    images = [im if im.ndim == 3 else cv2.cvtColor(im, cv2.COLOR_GRAY2BGR) for im in images]
     fl = [im.astype(np.float32) for im in images]
     h, w = fl[0].shape[:2]
     levels = max(1, int(np.log2(min(h, w) / min_size)))

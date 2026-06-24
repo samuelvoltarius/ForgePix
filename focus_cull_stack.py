@@ -602,6 +602,10 @@ def main():
                     help="Near-Duplicate-Culling aktivieren (VORSICHT bei Stacks)")
     ap.add_argument("--dup-thresh", type=float, default=0.004,
                     help="Near-Duplicate-Schwelle (kleiner = strenger, Default 0.004)")
+    ap.add_argument("--reject-blurry", action="store_true",
+                    help="Verwackelte/global unscharfe Frames automatisch aussortieren")
+    ap.add_argument("--blurry-rel", type=float, default=0.45,
+                    help="Verwackelt-Schwelle: Frame raus, wenn schärfste Kachel < rel*Serien-Median (Default 0.45)")
     ap.add_argument("--max-side", type=int, default=1600,
                     help="Analyse-Downscale Langseite px (Default 1600)")
     ap.add_argument("--prefix", default="stack_", help="Output-Prefix")
@@ -1061,6 +1065,7 @@ def process(args, input_dir, work_dir):
         args.multilayer = True   # immer Ebenen-TIFF fürs Weiterbearbeiten
         args.web_jpg = True      # immer ein teilbares JPG dazu
         args.ai_enhance = True   # Feinschliff (mit KI falls da, sonst fester Standard)
+        args.reject_blurry = True  # verwackelte/unscharfe Frames automatisch raus
         sug = None
         if args.vlm_endpoint:
             print("== Automatik: KI bestimmt Einstellungen ==")
@@ -1080,6 +1085,22 @@ def process(args, input_dir, work_dir):
         print(f"  Begründung: {sug.get('rationale', '')}")
 
     median = cull(frames, grays, args.dip_ratio, args.abs_min, args.dedup, args.dup_thresh)
+
+    # Verwackelte / global unscharfe Frames zusätzlich aussortieren (klassisch, erklärbar)
+    if getattr(args, "reject_blurry", False):
+        try:
+            import focus_analysis as fa
+            M = fa.sharpness_matrix([f.path for f in frames], grid=12, log=lambda *a: None)
+            bad = dict((i, r) for i, _n, r in fa.detect_blurry(M, [f.path for f in frames],
+                                                               rel=getattr(args, "blurry_rel", 0.45)))
+            for i, f in enumerate(frames):
+                if i in bad and f.keep:
+                    f.keep = False
+                    f.reasons.append(f"verwackelt/unscharf (Schärfe {int(bad[i]*100)}% vom Serien-Maximum)")
+            if bad:
+                print(f"== Verwackelt-Filter: {len(bad)} Frame(s) aussortiert ==")
+        except Exception as e:
+            print(f"  (Verwackelt-Filter übersprungen: {e})", file=sys.stderr)
 
     if args.vlm_endpoint and getattr(args, "vlm_qc", False):
         print("== VLM-QC ==")
@@ -1123,6 +1144,24 @@ def process(args, input_dir, work_dir):
             out_files += [os.path.join(d, f) for f in os.listdir(d)
                           if os.path.splitext(f)[1].lower() in (".jpg", ".jpeg", ".tif", ".tiff", ".png")]
     copy_exif(orig_first, out_files)
+
+    # Qualitätsbewertung des fertigen Stacks (Schärfe / Halos / Ghosting)
+    try:
+        import focus_analysis as fa
+        stack_imgs = [os.path.join(out, f) for f in os.listdir(out)
+                      if os.path.splitext(f)[1].lower() in (".tif", ".tiff", ".jpg", ".jpeg", ".png")]
+        if stack_imgs:
+            res = cv2.imread(max(stack_imgs, key=os.path.getmtime), cv2.IMREAD_UNCHANGED)
+            srcs = [cv2.imread(os.path.join(selected_dir, f.name), cv2.IMREAD_UNCHANGED) for f in kept[:12]]
+            srcs = [s for s in srcs if s is not None]
+            q = fa.stack_quality(res, srcs if len(srcs) >= 3 else None)
+            print(f"\n== Stack-Qualität: {q['score']}/100 ==")
+            for r in q["findings"]:
+                print(f"   • {r}")
+            with open(os.path.join(work_dir, "quality.json"), "w") as fh:
+                json.dump(q, fh, indent=2, ensure_ascii=False)
+    except Exception as e:
+        print(f"  (Qualitätsbewertung übersprungen: {e})", file=sys.stderr)
 
     print(f"\nFertig. Ergebnis in: {out}")
     return out
