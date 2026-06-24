@@ -21,7 +21,8 @@ def _cache_path(prefix, src):
     return os.path.join("/tmp", f"{prefix}{hashlib.md5(key).hexdigest()[:16]}.png")
 
 from PySide6.QtCore import Qt, QProcess, QSettings, QRect, QSize
-from PySide6.QtGui import QPixmap, QFont, QIcon, QPainter, QColor, QPen, QCursor, QImage
+from PySide6.QtGui import (QPixmap, QFont, QIcon, QPainter, QColor, QPen, QCursor, QImage,
+                           QShortcut, QKeySequence)
 from PySide6.QtWidgets import (
     QApplication, QWidget, QMainWindow, QVBoxLayout, QHBoxLayout, QGridLayout,
     QGroupBox, QLabel, QLineEdit, QPushButton, QFileDialog, QPlainTextEdit,
@@ -118,6 +119,11 @@ class MainWindow(QMainWindow):
         self.mode_box.currentIndexChanged.connect(lambda _i: self._apply_visibility())
         header.addWidget(self.mode_box)
         header.addSpacing(12)
+        kbd_btn = QPushButton("⌨")
+        kbd_btn.setToolTip(tr("Tastenkürzel anzeigen (F1)"))
+        kbd_btn.setFixedWidth(40)
+        kbd_btn.clicked.connect(self._show_shortcuts)
+        header.addWidget(kbd_btn)
         setup_btn = QPushButton(tr("⚙  Setup"))
         setup_btn.setToolTip(tr("Sprache, KI-Server und weitere Einstellungen"))
         setup_btn.clicked.connect(self.settings_dialog.show)
@@ -732,6 +738,7 @@ class MainWindow(QMainWindow):
         self._restore_settings()
         self._set_step(0)
         self._set_task()
+        self._setup_shortcuts()
         # Dropdowns an Textlänge anpassen (gegen abgeschnittene Texte, auch bei EN)
         for cb in self.findChildren(QComboBox):
             cb.setSizeAdjustPolicy(QComboBox.AdjustToContents)
@@ -847,6 +854,72 @@ class MainWindow(QMainWindow):
         self.task_box.setCurrentIndex(task_index)
         self._set_task()
         self.top_stack.setCurrentIndex(1)
+
+    # ---------- Tastatursteuerung ----------
+    # Hinweis: Qt bildet "Ctrl+…" auf macOS automatisch auf ⌘ ab.
+    SHORTCUTS = [
+        ("Ctrl+O", "Eingabe-Ordner wählen"),
+        ("Ctrl+Return", "Automatik starten (beste Qualität)"),
+        ("Ctrl+Shift+Return", "Manuell starten (Profi)"),
+        ("Esc", "Stop / zurück zur Modul-Auswahl"),
+        ("Ctrl+1 … Ctrl+4", "Modul: Makro / Astro / Hybrid / Langzeit"),
+        ("Ctrl+B", "Anfänger ⟷ Profi umschalten"),
+        ("Ctrl+M", "Zur Modul-Auswahl"),
+        ("Ctrl+,", "Setup-Menü"),
+        ("Ctrl+E", "Ergebnis bearbeiten (Camera-Raw)"),
+        ("Ctrl+Shift+A", "Reihe analysieren (Fokus)"),
+        ("Ctrl+D", "DOF-Rechner / Shooting-Assistent"),
+        ("Ctrl+] / Ctrl+[", "Wizard: weiter / zurück"),
+        ("F1 / Ctrl+/", "Diese Tastenkürzel anzeigen"),
+    ]
+
+    def _setup_shortcuts(self):
+        def sc(seq, fn):
+            s = QShortcut(QKeySequence(seq), self)
+            s.activated.connect(fn)
+            return s
+        sc("Ctrl+O", self.pick_input)
+        sc("Ctrl+Return", lambda: self.run(auto=True))
+        sc("Ctrl+Enter", lambda: self.run(auto=True))
+        sc("Ctrl+Shift+Return", lambda: self.run(auto=False) if self.mode_box.currentIndex() == 1 else None)
+        sc("Ctrl+,", self.settings_dialog.show)
+        sc("Ctrl+B", lambda: self.mode_box.setCurrentIndex(1 - self.mode_box.currentIndex()))
+        sc("Ctrl+M", lambda: self.top_stack.setCurrentIndex(0))
+        sc("Ctrl+E", lambda: self.open_adjust() if self.adjust_btn.isEnabled() else None)
+        sc("Ctrl+Shift+A", lambda: self.analyze_series() if not self.is_astro and not self.is_hybrid
+           and not self.is_longexp else None)
+        sc("Ctrl+D", self.open_dof)
+        sc("Ctrl+]", lambda: self._go_step(1))
+        sc("Ctrl+[", lambda: self._go_step(-1))
+        sc("F1", self._show_shortcuts)
+        sc("Ctrl+/", self._show_shortcuts)
+        for n in range(4):
+            sc(f"Ctrl+{n + 1}", lambda i=n: self._choose_module(i))
+        sc("Esc", self._on_escape)
+
+    def _on_escape(self):
+        if self.proc and self.proc.state() != QProcess.NotRunning:
+            self.stop()
+        elif self.top_stack.currentIndex() == 1:
+            self.top_stack.setCurrentIndex(0)
+
+    def _show_shortcuts(self):
+        def disp(k):
+            if sys.platform == "darwin":
+                for a, b in (("Ctrl", "⌘"), ("Shift", "⇧"), ("Return", "⏎"),
+                             ("Enter", "⏎"), ("Esc", "⎋")):
+                    k = k.replace(a, b)
+            return k
+        rows = "".join(f"<tr><td style='padding:3px 14px 3px 0;color:#b6a9ff;'><b>{disp(k)}</b></td>"
+                       f"<td style='padding:3px 0;'>{tr(v)}</td></tr>" for k, v in self.SHORTCUTS)
+        dlg = QDialog(self); dlg.setWindowTitle(tr("Tastenkürzel")); dlg.resize(420, 440)
+        lay = QVBoxLayout(dlg)
+        lbl = QLabel(f"<h3>{tr('Tastenkürzel')}</h3><table>{rows}</table>")
+        lbl.setTextFormat(Qt.RichText)
+        sc = QScrollArea(); sc.setWidgetResizable(True); sc.setWidget(lbl)
+        lay.addWidget(sc)
+        b = QPushButton(tr("Schließen")); b.clicked.connect(dlg.accept); lay.addWidget(b)
+        dlg.show(); self._sc_dlg = dlg
 
     def _set_task(self):
         i = self.task_box.currentIndex()
