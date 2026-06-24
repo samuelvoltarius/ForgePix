@@ -24,11 +24,16 @@ MODES = ("smooth", "trails", "declutter", "bright")
 _METHOD = {"smooth": "average", "trails": "max", "declutter": "median"}
 
 
-def combine(paths, mode="smooth", align="none", work_dir=None, detector="ORB",
+def combine(paths, mode="smooth", align="none", strength=1.0, work_dir=None, detector="ORB",
             transform="rigid", log=print):
-    """Serie zu einer Langzeitbelichtung verrechnen. Gibt float32 [0..1] (BGR) zurück."""
+    """Serie zu einer Langzeitbelichtung verrechnen. Gibt float32 [0..1] (BGR) zurück.
+
+    strength = „virtuelle Belichtungszeit" (0..1): gewichtetes Teil-Mitteln zwischen einem
+    scharfen Einzelbild (0 = kurze Belichtung, Bewegung eingefroren) und der vollen Kombination
+    (1 = längste Belichtung, maximale Glättung/Spuren). Dazwischen stufenlos."""
     if mode not in MODES:
         mode = "smooth"
+    strength = float(max(0.0, min(1.0, strength)))
     work_dir = work_dir or os.path.dirname(paths[0])
 
     # 1) Ausrichten (optional). Stativ -> 'none'. Sonst Shift (Phasenkorrelation) oder Feature.
@@ -64,6 +69,14 @@ def combine(paths, mode="smooth", align="none", work_dir=None, detector="ORB",
     else:
         # smooth/trails/declutter -> astro.stack (average/max/median), ohne Helligkeits-Normierung
         result = astro.stack(proc, method=_METHOD[mode], normalize=False, log=log)
+
+    # 3) Virtuelle Belichtungszeit: gewichtetes Teil-Mitteln mit einem scharfen Referenzbild
+    if strength < 0.999:
+        ref = astro._read_float(proc[len(proc) // 2])
+        if ref.shape != result.shape:
+            ref = cv2.resize(ref, (result.shape[1], result.shape[0]))
+        log(f"    virtuelle Belichtung {int(strength*100)} % (Teil-Mitteln)")
+        result = ref * (1.0 - strength) + result * strength
 
     # Temp-Ausrichtung aufräumen
     if align in ("shift", "feature"):

@@ -601,6 +601,9 @@ def main():
                          "declutter=Median (Störer weg), bright=additiv (dunkel aufhellen)")
     ap.add_argument("--longexp-align", choices=["none", "shift", "feature"], default="none",
                     help="Ausrichten: none=Stativ, shift=leichtes Verwackeln, feature=Freihand")
+    ap.add_argument("--longexp-strength", type=int, default=100,
+                    help="Virtuelle Belichtungszeit 0–100 %% (gewichtetes Teil-Mitteln; "
+                         "100=volle Glättung/Spuren, 0=Einzelbild eingefroren)")
     ap.add_argument("--astro-method", choices=["sigma", "winsor", "average", "median", "max"],
                     default="sigma", help="Astro-Stacking-Methode (Default sigma=Kappa-Sigma)")
     ap.add_argument("--astro-kappa", type=float, default=2.5, help="Kappa für Sigma-Clipping")
@@ -907,10 +910,11 @@ def run_longexp(input_dir, work_dir, args):
             mode = sug["mode"]
     except Exception as e:
         print(f"  (Modus-Vorschlag übersprungen: {e})", file=sys.stderr)
+    strength = max(0, min(100, getattr(args, "longexp_strength", 100))) / 100.0
     print(f"== Langzeitbelichtung: {len(paths)} Aufnahmen, Modus={mode}, "
-          f"Ausrichten={args.longexp_align} ==")
-    result = longexp.combine(paths, mode=mode, align=args.longexp_align, work_dir=work_dir,
-                             detector=args.detector, transform=args.transform)
+          f"Ausrichten={args.longexp_align}, virtuelle Belichtung={int(strength*100)} % ==")
+    result = longexp.combine(paths, mode=mode, align=args.longexp_align, strength=strength,
+                             work_dir=work_dir, detector=args.detector, transform=args.transform)
 
     stack_dir = os.path.join(work_dir, "stack")
     if os.path.isdir(stack_dir):

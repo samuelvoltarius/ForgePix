@@ -195,7 +195,8 @@ class MainWindow(QMainWindow):
 
         # Vorlage (Motiv) — setzt passende Makro-Einstellungen
         self.preset_group = QGroupBox(tr("Vorlage (Motiv)"))
-        pgl = QHBoxLayout(self.preset_group)
+        pgv = QVBoxLayout(self.preset_group)
+        pgl = QHBoxLayout()
         self.preset_box = QComboBox()
         self.preset_box.addItems([tr("Standard"), tr("Produkte"), tr("Münzen"), tr("Food")])
         self.preset_box.currentIndexChanged.connect(lambda i: self._apply_preset(i))
@@ -203,6 +204,12 @@ class MainWindow(QMainWindow):
         pgl.addWidget(help_btn("Schnellvorlage je Motiv: setzt sinnvolle Werte (Schärfen, "
                                "Ausrichtung, Erkennung). „Produkte/Münzen/Food“ — danach manuell "
                                "feinjustierbar."))
+        pgv.addLayout(pgl)
+        mk_info = QLabel(tr("Makro/Fokus: mehrere Nahaufnahmen mit Fokus von vorn nach hinten → "
+                            "ein durchgehend scharfes Bild. Empfohlen: 10–40 Aufnahmen (so viele, "
+                            "bis alles scharf abgedeckt ist), Stativ, gleiche Belichtung."))
+        mk_info.setWordWrap(True); mk_info.setStyleSheet("color:#9b90b5;font-size:11px;")
+        pgv.addWidget(mk_info)
         p1.addWidget(self.preset_group)
 
         # RAW-Entwicklung
@@ -292,6 +299,11 @@ class MainWindow(QMainWindow):
         ar.addWidget(help_btn("Speichert das fertige Stack-Ergebnis zusätzlich als 32-bit-FITS "
                               "(neben dem TIFF) — für PixInsight/Siril. FITS-Lights werden auch "
                               "direkt eingelesen."), 10, 3)
+        as_info = QLabel(tr("Astro: viele Aufnahmen desselben Himmelsausschnitts → Rauschen mitteln. "
+                            "Empfohlen: 20–100+ Lights (mehr = weniger Rauschen) · Darks 15–30 · "
+                            "Flats 15–30 · Bias 30+. Optional als Ordner/Datei angeben."))
+        as_info.setWordWrap(True); as_info.setStyleSheet("color:#9b90b5;font-size:11px;")
+        ar.addWidget(as_info, 11, 0, 1, 4)
         p1.addWidget(g_astro)
 
         # Hybrid — Mosaik (Mond/Sonne) ODER Fokus+Astro
@@ -317,6 +329,11 @@ class MainWindow(QMainWindow):
         mg.addWidget(self.fa_row, 2, 0); mg.addWidget(self.hybrid_group, 2, 1, 1, 2)
         mg.addWidget(help_btn("Nur wenn KEINE Unterordner: so viele aufeinanderfolgende Fotos = eine "
                               "Fokus-Position. Besser: je Position einen Unterordner anlegen."), 2, 3)
+        hy_info = QLabel(tr("Hybrid: Mosaik = überlappende Kacheln (Mond/Sonne) zusammensetzen, "
+                            "~30 % Überlappung, 4–20+ Kacheln. Fokus+Astro = je Fokus-Position "
+                            "mehrere Shots (5–15) in einem Unterordner, mehrere Positionen."))
+        hy_info.setWordWrap(True); hy_info.setStyleSheet("color:#9b90b5;font-size:11px;")
+        mg.addWidget(hy_info, 3, 0, 1, 4)
         self.hybrid_kind.currentIndexChanged.connect(lambda _i: self._hybrid_kind_changed())
         p1.addWidget(g_mos)
 
@@ -341,13 +358,30 @@ class MainWindow(QMainWindow):
         lg.addWidget(QLabel(tr("Ausrichten")), 1, 0); lg.addWidget(self.longexp_align, 1, 1, 1, 2)
         lg.addWidget(help_btn("Vom Stativ: „nicht ausrichten“. Bei leichtem Verwackeln „Versatz“ "
                               "(verschiebt), aus der Hand „Merkmale“ (richtet voll aus)."), 1, 3)
+        # Virtuelle Belichtungszeit (gewichtetes Teil-Mitteln)
+        self.longexp_strength = QSlider(Qt.Horizontal)
+        self.longexp_strength.setRange(0, 100); self.longexp_strength.setValue(100)
+        self.longexp_strength_lbl = QLabel("100 %")
+        self.longexp_strength.valueChanged.connect(
+            lambda v: self.longexp_strength_lbl.setText(f"{v} %"))
+        lg.addWidget(QLabel(tr("Virtuelle Belichtung")), 2, 0)
+        lg.addWidget(self.longexp_strength, 2, 1)
+        lg.addWidget(self.longexp_strength_lbl, 2, 2)
+        lg.addWidget(help_btn("„Virtuelle Belichtungszeit“: stufenlos zwischen Einzelbild "
+                              "(0 % = Bewegung eingefroren, kurze Zeit) und voller Glättung/"
+                              "Spuren (100 % = längste Zeit). Gewichtetes Teil-Mitteln mit einem "
+                              "scharfen Referenzbild — wie eine kürzere/längere Verschlusszeit."), 2, 3)
         le_sug = QPushButton(tr("🤖 Effekt vorschlagen"))
         le_sug.setToolTip(tr("Analysiert die Bewegung in der Serie und schlägt den passenden Effekt vor"))
         le_sug.clicked.connect(self._suggest_longexp)
-        lg.addWidget(le_sug, 2, 0, 1, 3)
+        lg.addWidget(le_sug, 3, 0, 1, 3)
         lg.addWidget(help_btn("Misst, wo & wie sich die Aufnahmen unterscheiden (klassisch, kein "
                               "Server nötig) und wählt Glatt/Lichtspuren/Störer/Aufhellen — mit "
-                              "Begründung. Du kannst den Vorschlag jederzeit überstimmen."), 2, 3)
+                              "Begründung. Du kannst den Vorschlag jederzeit überstimmen."), 3, 3)
+        le_info = QLabel(tr("Empfohlen: Glatt 10–30 · Lichtspuren 30–300+ (lückenlos) · "
+                            "Störer entfernen 8–20 · Aufhellen 10–60. Vom Stativ, gleiche Belichtung."))
+        le_info.setWordWrap(True); le_info.setStyleSheet("color:#9b90b5;font-size:11px;")
+        lg.addWidget(le_info, 4, 0, 1, 4)
         p1.addWidget(g_le)
 
         # Selektion
@@ -682,13 +716,17 @@ class MainWindow(QMainWindow):
         grid = QGridLayout(); grid.setSpacing(16)
         cards = [
             (0, "🔬", tr("Makro / Fokus-Stacking"),
-             tr("Mehrere Nahaufnahmen → ein durchgehend scharfes Bild. Produkte, Münzen, Insekten, Food.")),
+             tr("Mehrere Nahaufnahmen → ein durchgehend scharfes Bild. Produkte, Münzen, Insekten, Food.  "
+                "Empfohlen: 10–40 Aufnahmen.")),
             (1, "🌌", tr("Astro"),
-             tr("Sternenhimmel/Deep-Sky: Kalibrieren, ausrichten, Rauschen mitteln, schlechte Subs aussortieren.")),
+             tr("Sternenhimmel/Deep-Sky: kalibrieren, ausrichten, Rauschen mitteln, schlechte Subs aussortieren.  "
+                "Empfohlen: 20–100+ Lights (+ Darks/Flats).")),
             (2, "🌗", tr("Hybrid"),
-             tr("Mond-/Sonnen-Mosaik aus Kacheln — oder Fokus+Astro (erst entrauschen, dann fokus-stacken).")),
+             tr("Mond-/Sonnen-Mosaik aus Kacheln — oder Fokus+Astro (erst entrauschen, dann fokus-stacken).  "
+                "Mosaik 4–20+ Kacheln · Fokus+Astro 5–15 Shots je Position.")),
             (3, "📷", tr("Langzeitbelichtung"),
-             tr("Aus einer Serie eine Langzeitbelichtung ohne ND-Filter: seidiges Wasser, Lichtspuren, Störer weg.")),
+             tr("Aus einer Serie eine Langzeitbelichtung ohne ND-Filter: seidiges Wasser, Lichtspuren, Störer weg.  "
+                "Empfohlen: 10–30 (Wasser) bis 300+ (Lichtspuren).")),
         ]
         for n, (idx, emoji, name, desc) in enumerate(cards):
             btn = QPushButton()
@@ -885,7 +923,8 @@ class MainWindow(QMainWindow):
         if getattr(self, "is_longexp", False):
             args += ["--longexp",
                      "--longexp-mode", self.longexp_mode.currentData(),
-                     "--longexp-align", self.longexp_align.currentData()]
+                     "--longexp-align", self.longexp_align.currentData(),
+                     "--longexp-strength", str(self.longexp_strength.value())]
         return args
 
     def _build_args(self, auto):
@@ -1382,6 +1421,7 @@ class MainWindow(QMainWindow):
             "hybrid_group": (lambda v: self.hybrid_group.setValue(int(v)), self.hybrid_group.value),
             "longexp_mode": (lambda v: self.longexp_mode.setCurrentIndex(int(v)), self.longexp_mode.currentIndex),
             "longexp_align": (lambda v: self.longexp_align.setCurrentIndex(int(v)), self.longexp_align.currentIndex),
+            "longexp_strength": (lambda v: self.longexp_strength.setValue(int(v)), self.longexp_strength.value),
         }
 
     def _save_settings(self):
