@@ -44,7 +44,8 @@ def run_siril_astro(paths, work_dir, kappa=3.0, dark=None, flat=None, bias=None,
         shutil.copy2(p, os.path.join(seq_dir, f"light_{i:04d}{os.path.splitext(p)[1].lower()}"))
 
     seq = "light_"
-    lines = ["requires 1.2.0", "convert light"]
+    # Mindestversion bewusst niedrig (1.0.0) — läuft auf älteren wie neueren Siril
+    lines = ["requires 1.0.0", "convert light"]
     cal = []
     for opt, val in (("-dark=", dark), ("-flat=", flat), ("-bias=", bias)):
         if val and os.path.isfile(val):

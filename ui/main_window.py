@@ -7,11 +7,18 @@ und Ergebnis-Vorschau. Ruft focus_cull_stack.py als Subprozess auf (streamt stdo
 Einstiegspunkt: focus_stack_gui.py (dünner Launcher) bzw. StackForge.app.
 """
 import os
+import hashlib
 import re
 import subprocess
 import sys
 
 from i18n import tr, set_language, available_languages, current_language
+
+
+def _cache_path(prefix, src):
+    """Stabiler /tmp-Cache-Pfad (md5 statt hash() — nicht zufallssalted, kollisionssicher)."""
+    key = f"{src}:{os.path.getmtime(src)}".encode()
+    return os.path.join("/tmp", f"{prefix}{hashlib.md5(key).hexdigest()[:16]}.png")
 
 from PySide6.QtCore import Qt, QProcess, QSettings, QRect, QSize
 from PySide6.QtGui import QPixmap, QFont, QIcon, QPainter, QColor, QPen, QCursor, QImage
@@ -1034,6 +1041,23 @@ class MainWindow(QMainWindow):
         if not inp or not os.path.isdir(inp):
             QMessageBox.warning(self, "Fehler", "Bitte einen gültigen Eingabe-Ordner wählen.")
             return
+        # Vorab-Check: genug Bilder vorhanden? (Astro/Langzeit/Mosaik brauchen ≥2)
+        try:
+            import focus_cull_stack as F
+            n = len(F.list_images(inp))
+            if n == 0:  # evtl. Batch/Hybrid mit Unterordnern
+                n = sum(len(F.list_images(os.path.join(inp, d)))
+                        for d in os.listdir(inp) if os.path.isdir(os.path.join(inp, d)))
+            need = 1 if (getattr(self, "is_longexp", False) is False and not getattr(self, "is_astro", False)
+                         and not getattr(self, "is_hybrid", False)) else 2
+            if n < max(need, 1) or (need == 2 and n < 2):
+                if QMessageBox.question(
+                        self, tr("Wenige Bilder"),
+                        tr("Im Ordner wurden nur %d Bild(er) gefunden. Trotzdem starten?") % n
+                        ) != QMessageBox.Yes:
+                    return
+        except Exception:
+            pass
         args = self._build_args(auto)
         self.log.clear()
         self.preview.setText("— läuft —"); self.preview.setPixmap(QPixmap())
@@ -1054,7 +1078,10 @@ class MainWindow(QMainWindow):
 
     def stop(self):
         if self.proc and self.proc.state() != QProcess.NotRunning:
-            self.proc.kill()
+            # SIGTERM zuerst (Watch-Modus beendet sauber zwischen zwei Stacks); danach hart
+            self.proc.terminate()
+            if not self.proc.waitForFinished(3000):
+                self.proc.kill()
             self._append("\n[abgebrochen]\n")
 
     # ---------- KI-Vorschlag ----------
@@ -1205,7 +1232,7 @@ class MainWindow(QMainWindow):
         if max(h, w) > 1400:
             f = 1400 / max(h, w)
             img = cv2.resize(img, (int(w * f), int(h * f)), interpolation=cv2.INTER_AREA)
-        out = os.path.join("/tmp", "sf_prev_" + str(abs(hash(src + str(os.path.getmtime(src))))) + ".png")
+        out = _cache_path("sf_prev_", src)
         cv2.imwrite(out, img)
         return out
 
@@ -1353,7 +1380,7 @@ class MainWindow(QMainWindow):
         h, w = img.shape[:2]
         f = 90 / h
         img = cv2.resize(img, (max(1, int(w * f)), 90), interpolation=cv2.INTER_AREA)
-        out = os.path.join("/tmp", "sf_th_" + str(abs(hash(src + str(os.path.getmtime(src))))) + ".png")
+        out = _cache_path("sf_th_", src)
         cv2.imwrite(out, img)
         return out
 

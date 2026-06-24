@@ -26,9 +26,7 @@ from dataclasses import dataclass, field, asdict
 import cv2
 import numpy as np
 
-RAW_EXTS = {".arw", ".cr2", ".cr3", ".nef", ".raf", ".rw2", ".dng", ".orf", ".pef", ".srw"}
-STD_EXTS = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp"}
-FITS_EXTS = {".fit", ".fits", ".fts"}  # nur Astro
+from constants import RAW_EXTS, STD_EXTS, FITS_EXTS
 
 
 def list_images(folder):
@@ -83,18 +81,19 @@ def develop_all(paths, dev_dir, args):
         shutil.rmtree(dev_dir)
     os.makedirs(dev_dir)
     out = []
-    for p in paths:
+    # Index-Präfix erhält die Aufnahmereihenfolge (Nachbar-Logik des Cullings hängt davon ab)
+    for i, p in enumerate(paths):
         ext = os.path.splitext(p)[1].lower()
         name = os.path.basename(p)
         if ext in RAW_EXTS:
-            outp = os.path.join(dev_dir, os.path.splitext(name)[0] + ".tif")
+            outp = os.path.join(dev_dir, f"{i:04d}_" + os.path.splitext(name)[0] + ".tif")
             print(f"  RAW entwickeln: {name} -> {os.path.basename(outp)}")
             bgr = develop_raw_to_bgr(p, args.raw_wb, args.raw_auto_bright,
                                      args.raw_bps, args.raw_half)
             cv2.imwrite(outp, bgr, [int(cv2.IMWRITE_TIFF_COMPRESSION), 1])
             out.append(outp)
         else:
-            dst = os.path.join(dev_dir, name)
+            dst = os.path.join(dev_dir, f"{i:04d}_" + name)
             shutil.copy2(p, dst)
             out.append(dst)
     return out
@@ -197,7 +196,11 @@ def _vlm_chat(endpoint, model, messages, max_tokens=300, api_key=None, timeout=1
     Mit API-Key (OpenAI/OpenRouter/…) -> Authorization-Header, KEIN Reasoning-Param
     (Cloud-APIs lehnen unbekannte Felder ab). Ohne Key (lokal) -> enable_thinking:false
     für lokale Qwen-Reasoner."""
-    import requests
+    try:
+        import requests
+    except ImportError:
+        raise RuntimeError("Für den KI-Server wird das Paket 'requests' benötigt "
+                           "(pip install requests). Die Automatik läuft auch ohne KI weiter.")
     headers = {"Content-Type": "application/json"}
     payload = {"model": model, "messages": messages, "max_tokens": max_tokens, "temperature": 0}
     if api_key:
@@ -464,7 +467,8 @@ EXPORT_TARGETS = {
 
 
 def export_targets(stack_dir, export_dir, targets):
-    """Pro Ziel ein skaliertes + ausgabe-geschärftes JPG schreiben (für Insta/WhatsApp/…)."""
+    """Pro Ziel ein skaliertes + ausgabe-geschärftes Bild schreiben (für Insta/WhatsApp/…).
+    „print" bleibt verlustarm: volle Auflösung, 16-bit-TIFF, mildere Schärfung."""
     import stacker
     if not os.path.isdir(stack_dir):
         return
@@ -472,16 +476,23 @@ def export_targets(stack_dir, export_dir, targets):
     for f in os.listdir(stack_dir):
         if os.path.splitext(f)[1].lower() not in (".tif", ".tiff", ".png", ".jpg", ".jpeg"):
             continue
-        img = cv2.imread(os.path.join(stack_dir, f), cv2.IMREAD_UNCHANGED)
-        if img is None:
+        src = cv2.imread(os.path.join(stack_dir, f), cv2.IMREAD_UNCHANGED)
+        if src is None:
             continue
-        if img.dtype != np.uint8:
-            img = (img / 256).astype(np.uint8) if img.max() > 255 else img.astype(np.uint8)
         base = os.path.splitext(f)[0]
         for t in targets:
             if t not in EXPORT_TARGETS:
                 continue
             longside, sharp = EXPORT_TARGETS[t]
+            if t == "print":
+                # Verlustarm: Originaltiefe (16-bit falls vorhanden) behalten, sanfte Schärfung
+                out = stacker.unsharp_mask(src, min(sharp, 12), 1.0)
+                p = os.path.join(export_dir, f"{base}_print.tif")
+                cv2.imwrite(p, out, [int(cv2.IMWRITE_TIFF_COMPRESSION), 1])
+                continue
+            img = src
+            if img.dtype != np.uint8:
+                img = (img / 256).astype(np.uint8) if img.max() > 255 else img.astype(np.uint8)
             out = img
             h, w = img.shape[:2]
             if longside and max(h, w) > longside:
@@ -1132,13 +1143,17 @@ def watch_loop(args, input_dir, work_dir):
     """Beobachtet den Eingabe-Ordner. Sobald sich der Bildbestand 'settle' Sekunden
     nicht mehr ändert (Kopiervorgang fertig) und neu ist, wird gestackt."""
     import time
+    import signal
     settle = max(2, int(getattr(args, "watch_settle", 5)))
     poll = 2
+    # Sauberes Beenden: SIGTERM (GUI-Stop) NICHT mitten im Stacken hart killen
+    stop = {"flag": False}
+    signal.signal(signal.SIGTERM, lambda *a: stop.__setitem__("flag", True))
     print(f"== WATCH-Modus == Ordner: {input_dir}")
-    print(f"(stabil für {settle}s -> stacken; Strg-C oder Stop zum Beenden)")
+    print(f"(stabil für {settle}s -> stacken; Strg-C, SIGTERM oder Stop zum Beenden)")
     last_done = None
     stable_sig, stable_since = None, 0.0
-    while True:
+    while not stop["flag"]:
         sig = _folder_signature(input_dir)
         now = time.time()
         if sig != stable_sig:
@@ -1146,12 +1161,13 @@ def watch_loop(args, input_dir, work_dir):
         elif sig and sig != last_done and (now - stable_since) >= settle:
             print(f"\n>>> Neuer stabiler Bestand ({len(sig)} Bilder) erkannt — verarbeite …")
             try:
-                process(args, input_dir, work_dir)
+                process(args, input_dir, work_dir)  # läuft fertig, bevor erneut auf Stop geprüft wird
             except Exception as e:
                 print(f"Fehler beim Verarbeiten: {e}", file=sys.stderr)
             last_done = sig
             print("\n... warte auf nächste Änderung im Ordner ...")
         time.sleep(poll)
+    print("Watch-Modus beendet.")
 
 
 if __name__ == "__main__":

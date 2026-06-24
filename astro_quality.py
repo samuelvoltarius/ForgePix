@@ -13,7 +13,7 @@ import os
 import numpy as np
 import cv2
 
-RAW_EXTS = {".arw", ".cr2", ".cr3", ".nef", ".raf", ".rw2", ".dng", ".orf", ".pef", ".srw"}
+from constants import RAW_EXTS
 
 
 def _read_gray(path, max_side=1600):
