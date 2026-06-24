@@ -1169,19 +1169,46 @@ class MainWindow(QMainWindow):
             pass
         return None
 
+    def _representative_input(self):
+        """Ein Original-Frame (mittlerer) als „Vorher“ für den Vergleich — modulübergreifend."""
+        folder = self.in_edit.text().strip()
+        if not folder or not os.path.isdir(folder):
+            return None
+        try:
+            import focus_cull_stack as F
+            paths = F.list_images(folder)
+            if not paths:  # Hybrid Fokus+Astro: Bilder liegen in Unterordnern
+                for s in sorted(os.listdir(folder)):
+                    sub = os.path.join(folder, s)
+                    if os.path.isdir(sub):
+                        paths = F.list_images(sub)
+                        if paths:
+                            break
+            return paths[len(paths) // 2] if paths else None
+        except Exception:
+            return None
+
     def _show_result(self):
         res = self._find_result()
         if not res:
             self.preview.setText("(kein Stack-Output — Selektionslauf?)")
             return
         self.result_path = res
-        self.before_path = self._sharpest_kept(res)
+        # „Vorher“: schärfster behaltener Frame (Makro) — sonst ein repräsentatives Original
+        self.before_path = self._sharpest_kept(res) or self._representative_input()
         self._set_preview(res)
-        self.open_btn.setEnabled(True); self.retouch_btn.setEnabled(True)
+        self.open_btn.setEnabled(True)
         self.openfolder_btn.setEnabled(True); self.adjust_btn.setEnabled(True)
         self.cmp_btn.setEnabled(bool(self.before_path))
         self.ghost_btn.setEnabled(bool(self._ghostmap_path()))
         self.send_btn.setEnabled(True); self.reimport_btn.setEnabled(True)
+        # Retusche nur wo es Sinn macht (Fokus-Stacking): Makro + Hybrid Fokus+Astro
+        fa = getattr(self, "is_hybrid", False) and self.hybrid_kind.currentData() == "fa"
+        retouch_ok = (not getattr(self, "is_astro", False)
+                      and not getattr(self, "is_longexp", False)
+                      and (not getattr(self, "is_hybrid", False) or fa))
+        self.retouch_btn.setVisible(retouch_ok)
+        self.retouch_btn.setEnabled(retouch_ok)
         self._build_filmstrip(res)
 
     def open_compare(self):
