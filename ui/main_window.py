@@ -619,17 +619,39 @@ class MainWindow(QMainWindow):
                   self.ghost_btn, self.retouch_btn):
             res_btns.addWidget(b)
         rv.addLayout(res_btns)
-        # zweite Reihe: Weitergabe an externe Tools + Reimport
+        # zweite Reihe: externe Astro-Tools (GraXpert/StarNet) — Ein-Klick falls installiert
+        try:
+            import tools_engine
+            self._has_graxpert = tools_engine.graxpert_available()
+            self._has_starnet = tools_engine.starnet_available()
+        except Exception:
+            self._has_graxpert = self._has_starnet = False
         res_btns2 = QHBoxLayout()
-        self.send_btn = QPushButton(tr("📤  Für GraXpert/StarNet öffnen"))
-        self.send_btn.setToolTip("Zeigt das (32-bit-lineare) Ergebnis im Dateimanager — dort in "
-                                 "GraXpert / StarNet++ / PixInsight öffnen.")
-        self.send_btn.clicked.connect(self.send_to_tool); self.send_btn.setEnabled(False)
+        gx_label = tr("🌌  GraXpert (Gradient)") if self._has_graxpert else tr("🌌  GraXpert öffnen")
+        self.graxpert_btn = QPushButton(gx_label)
+        self.graxpert_btn.setToolTip(tr("GraXpert: Hintergrund/Gradient (Lichtverschmutzung) "
+                                        "entfernen. Installiert = Ein-Klick + automatischer Reimport; "
+                                        "sonst Ergebnis im Dateimanager zeigen."))
+        self.graxpert_btn.clicked.connect(lambda: self._run_external_tool("graxpert"))
+        self.graxpert_btn.setEnabled(False)
+        sn_label = tr("⭐  StarNet (starless)") if self._has_starnet else tr("⭐  StarNet öffnen")
+        self.starnet_btn = QPushButton(sn_label)
+        self.starnet_btn.setToolTip(tr("StarNet++: Sterne entfernen (starless). Installiert = "
+                                       "Ein-Klick + automatischer Reimport; sonst Ergebnis im "
+                                       "Dateimanager zeigen."))
+        self.starnet_btn.clicked.connect(lambda: self._run_external_tool("starnet"))
+        self.starnet_btn.setEnabled(False)
         self.reimport_btn = QPushButton(tr("📥  Bearbeitetes reimportieren"))
-        self.reimport_btn.setToolTip("Das im externen Tool bearbeitete Bild zurück in StackForge "
-                                     "laden (für Vorschau/Bearbeiten/Export).")
+        self.reimport_btn.setToolTip(tr("Ein extern bearbeitetes Bild zurück in StackForge laden "
+                                        "(für Vorschau/Bearbeiten/Export)."))
         self.reimport_btn.clicked.connect(self.reimport_result); self.reimport_btn.setEnabled(False)
-        res_btns2.addWidget(self.send_btn); res_btns2.addWidget(self.reimport_btn)
+        # send_btn bleibt als generischer „im Dateimanager zeigen“-Knopf (PixInsight & Co.)
+        self.send_btn = QPushButton(tr("📤  Im Dateimanager zeigen"))
+        self.send_btn.setToolTip(tr("Zeigt das 32-bit-lineare Ergebnis im Dateimanager — für "
+                                    "PixInsight oder andere Tools."))
+        self.send_btn.clicked.connect(self.send_to_tool); self.send_btn.setEnabled(False)
+        for b in (self.graxpert_btn, self.starnet_btn, self.reimport_btn, self.send_btn):
+            res_btns2.addWidget(b)
         res_btns2.addStretch(1)
         rv.addLayout(res_btns2)
 
@@ -1224,6 +1246,11 @@ class MainWindow(QMainWindow):
         self.cmp_btn.setEnabled(bool(self.before_path))
         self.ghost_btn.setEnabled(bool(self._ghostmap_path()))
         self.send_btn.setEnabled(True); self.reimport_btn.setEnabled(True)
+        # GraXpert/StarNet nur bei Himmels-Modulen sinnvoll (Astro/Langzeit/Hybrid), nicht Makro
+        sky = (getattr(self, "is_astro", False) or getattr(self, "is_longexp", False)
+               or getattr(self, "is_hybrid", False))
+        for b in (self.graxpert_btn, self.starnet_btn):
+            b.setVisible(sky); b.setEnabled(sky)
         # Retusche nur wo es Sinn macht (Fokus-Stacking): Makro + Hybrid Fokus+Astro
         fa = getattr(self, "is_hybrid", False) and self.hybrid_kind.currentData() == "fa"
         retouch_ok = (not getattr(self, "is_astro", False)
@@ -1331,6 +1358,42 @@ class MainWindow(QMainWindow):
         reveal_in_files(f)
         self._append(f"\n📤 Im Dateimanager: {os.path.basename(f)}\n   → in GraXpert / StarNet++ / "
                      "PixInsight öffnen, dann „📥 Bearbeitetes reimportieren“.\n")
+
+    def _run_external_tool(self, which):
+        """GraXpert/StarNet++ headless aufs 32-bit-Linear anwenden und das Ergebnis automatisch
+        reimportieren. Ist das Tool nicht installiert, im Dateimanager zeigen (manueller Weg)."""
+        f = self._best_export_file()
+        if not f or not os.path.isfile(f):
+            QMessageBox.information(self, which, tr("Erst ein Astro-Ergebnis erzeugen."))
+            return
+        try:
+            import tools_engine
+        except Exception as e:
+            QMessageBox.warning(self, which, f"{e}"); return
+        installed = (self._has_graxpert if which == "graxpert" else self._has_starnet)
+        if not installed:
+            reveal_in_files(f)
+            name = "GraXpert" if which == "graxpert" else "StarNet++"
+            self._append(f"\n📤 {name} nicht gefunden — Datei im Dateimanager: "
+                         f"{os.path.basename(f)}\n   → dort öffnen, dann „📥 Bearbeitetes "
+                         "reimportieren“.\n")
+            return
+        runner = tools_engine.run_graxpert if which == "graxpert" else tools_engine.run_starnet
+        name = "GraXpert" if which == "graxpert" else "StarNet++"
+        self._append(f"\n⏳ {name} läuft … (kann dauern)\n")
+        QApplication.processEvents()
+        try:
+            out = runner(f, log=self._append)
+        except Exception as e:
+            QMessageBox.warning(self, name, f"{name}: {e}")
+            self._append(f"\n⚠️ {name} fehlgeschlagen: {e}\n")
+            return
+        self.result_path = out
+        self.before_path = f          # „Vorher“ = Eingang, „Nachher“ = bearbeitet
+        self._set_preview(out)
+        self.cmp_btn.setEnabled(True); self.adjust_btn.setEnabled(True)
+        self.open_btn.setEnabled(True); self.openfolder_btn.setEnabled(True)
+        self._append(f"\n✅ {name} fertig & reimportiert: {os.path.basename(out)}\n")
 
     def reimport_result(self):
         start = os.path.dirname(self.result_path) if self.result_path else os.path.expanduser("~")
