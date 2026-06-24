@@ -44,6 +44,8 @@ def _read_float(path):
         img = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR); maxv = 65535.0
     else:
         img = cv2.imread(path, cv2.IMREAD_UNCHANGED)
+        if img is None:
+            raise RuntimeError(f"Bild nicht lesbar: {path}")
         maxv = 65535.0 if img.dtype == np.uint16 else 255.0
     f = img.astype(np.float32) / maxv
     if f.ndim == 2:
@@ -159,6 +161,8 @@ def register_and_cache(paths, out_dir, dark=None, flat=None, do_register=True,
 def stack(paths, method="sigma", kappa=2.5, normalize=True, log=print):
     """Speicherschonendes Stacken über die Platte (zweistufig bei sigma/winsor).
     Gibt float32-Ergebnis [0..1] (BGR) zurück."""
+    if not paths:
+        raise RuntimeError("keine Frames zum Stacken")
     n = len(paths)
     first = _read_float(paths[0])
     shape = first.shape

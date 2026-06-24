@@ -20,7 +20,7 @@ def _cache_path(prefix, src):
     key = f"{src}:{os.path.getmtime(src)}".encode()
     return os.path.join("/tmp", f"{prefix}{hashlib.md5(key).hexdigest()[:16]}.png")
 
-from PySide6.QtCore import Qt, QProcess, QSettings, QRect, QSize
+from PySide6.QtCore import Qt, QProcess, QSettings, QRect, QSize, QThread, Signal
 from PySide6.QtGui import (QPixmap, QFont, QIcon, QPainter, QColor, QPen, QCursor, QImage,
                            QShortcut, QKeySequence)
 from PySide6.QtWidgets import (
@@ -51,6 +51,24 @@ IMG_EXTS = {".jpg", ".jpeg", ".png", ".tif", ".tiff"}
 from ui.components import (CompareSlider, CurveWidget, AdjustDialog, RetouchDialog, _Canvas,
                            _bgr_to_pixmap, histogram_pixmap, adjust_image, HSL_BANDS,
                            help_btn, _row, reveal_in_files, open_path, notify)
+
+
+class _AnalyzeWorker(QThread):
+    """Fokusreihen-Analyse im Hintergrund-Thread (blockiert die GUI nicht, auch bei RAWs)."""
+    done = Signal(object)
+    failed = Signal(str)
+
+    def __init__(self, paths):
+        super().__init__()
+        self.paths = paths
+
+    def run(self):
+        try:
+            import focus_analysis as fa
+            self.done.emit(fa.analyze_series(self.paths, log=lambda *a: None))
+        except Exception as e:  # noqa: BLE001
+            self.failed.emit(str(e))
+
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -1587,26 +1605,52 @@ class MainWindow(QMainWindow):
 
     # ---------- Fokus-Werkzeuge ----------
     def analyze_series(self):
-        """Fokusreihe analysieren (in-process): Verwackler, redundante Frames, Abdeckung,
-        optimale Bildanzahl. Read-only, kein Subprozess."""
+        """Fokusreihe analysieren (Hintergrund-Thread): Verwackler, redundante Frames,
+        Abdeckung, optimale Bildanzahl. Read-only, blockiert die GUI nicht."""
+        if getattr(self, "_analyze_worker", None) and self._analyze_worker.isRunning():
+            return  # läuft schon
         folder = self.in_edit.text().strip()
         if not folder or not os.path.isdir(folder):
             QMessageBox.information(self, tr("Reihe analysieren"),
                                     tr("Bitte zuerst einen Eingabe-Ordner wählen.")); return
         try:
-            import focus_analysis as fa, focus_cull_stack as F
+            import focus_cull_stack as F
         except Exception as e:
             QMessageBox.warning(self, tr("Reihe analysieren"), f"{e}"); return
         paths = F.list_images(folder)
         if len(paths) < 3:
             QMessageBox.information(self, tr("Reihe analysieren"),
                                     tr("Mindestens 3 Aufnahmen nötig.")); return
-        from PySide6.QtGui import QGuiApplication
-        QGuiApplication.setOverrideCursor(Qt.WaitCursor)
-        try:
-            rep = fa.analyze_series(paths, log=lambda *a: None)
-        finally:
-            QGuiApplication.restoreOverrideCursor()
+        # Fortschritts-/Abbruch-Dialog (unbestimmt), Analyse im Worker-Thread
+        busy = QDialog(self); busy.setWindowTitle(tr("Reihe analysieren"))
+        bl = QVBoxLayout(busy)
+        bl.addWidget(QLabel(tr("Analysiere %d Aufnahmen …") % len(paths)))
+        bar = QProgressBar(); bar.setRange(0, 0); bl.addWidget(bar)
+        cancel = QPushButton(tr("Abbrechen")); bl.addWidget(cancel)
+        self._analyze_busy = busy
+        self._analyze_worker = _AnalyzeWorker(paths)
+
+        def on_done(rep):
+            busy.accept()
+            self._render_analysis(rep, paths)
+
+        def on_fail(msg):
+            busy.accept()
+            QMessageBox.warning(self, tr("Reihe analysieren"), msg)
+
+        def do_cancel():
+            if self._analyze_worker.isRunning():
+                self._analyze_worker.terminate()
+            busy.reject()
+
+        self._analyze_worker.done.connect(on_done)
+        self._analyze_worker.failed.connect(on_fail)
+        cancel.clicked.connect(do_cancel)
+        self._analyze_worker.start()
+        busy.exec()
+
+    def _render_analysis(self, rep, paths):
+        """Analyse-Report als Dialog aufbauen (läuft im GUI-Thread, schnell)."""
         self._analyze_paths = paths
         self._analyze_M = rep["M"]
         sweep = rep["sweep"]; opt = rep["optimizer"]

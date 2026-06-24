@@ -62,7 +62,10 @@ def run_graxpert(infile, outfile=None, op="background-extraction", path=None, lo
         outfile = f"{b}_graxpert{e or '.tif'}"
     cmd = [exe, "-cli", "-cmd", op, infile, "-output", outfile]
     log("  GraXpert: " + " ".join(cmd))
-    proc = subprocess.run(cmd, capture_output=True, text=True, timeout=1800)
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=1800)
+    except subprocess.TimeoutExpired:
+        raise RuntimeError("GraXpert: Zeitüberschreitung (30 min)")
     # GraXpert hängt je nach Version ein Suffix an — flexibel nach dem Ergebnis suchen
     if os.path.isfile(outfile):
         return outfile
@@ -90,7 +93,10 @@ def run_starnet(infile, outfile=None, path=None, log=print):
     workdir = os.path.dirname(exe)            # Gewichte + dylibs liegen hier
     cmd = [exe, infile, outfile]
     log("  StarNet++: " + " ".join(cmd) + f"  (cwd={workdir})")
-    proc = subprocess.run(cmd, capture_output=True, text=True, timeout=1800, cwd=workdir)
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=1800, cwd=workdir)
+    except subprocess.TimeoutExpired:
+        raise RuntimeError("StarNet++: Zeitüberschreitung (30 min)")
     if os.path.isfile(outfile):
         return outfile
     cand = _newest_sibling(outfile, infile)

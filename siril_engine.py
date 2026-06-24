@@ -60,8 +60,11 @@ def run_siril_astro(paths, work_dir, kappa=3.0, dark=None, flat=None, bias=None,
     open(script, "w").write("\n".join(lines) + "\n")
     log("  Siril: " + cli)
     log("  Skript: " + " ; ".join(lines))
-    proc = subprocess.run([cli, "-d", seq_dir, "-s", script],
-                          capture_output=True, text=True, timeout=3600)
+    try:
+        proc = subprocess.run([cli, "-d", seq_dir, "-s", script],
+                              capture_output=True, text=True, timeout=3600)
+    except subprocess.TimeoutExpired:
+        raise RuntimeError("Siril: Zeitüberschreitung (60 min)")
     for ext in (".tif", ".tiff", ".fit", ".fits"):
         out = os.path.join(seq_dir, "siril_result" + ext)
         if os.path.isfile(out):

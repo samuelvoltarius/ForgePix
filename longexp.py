@@ -31,6 +31,8 @@ def combine(paths, mode="smooth", align="none", strength=1.0, work_dir=None, det
     strength = „virtuelle Belichtungszeit" (0..1): gewichtetes Teil-Mitteln zwischen einem
     scharfen Einzelbild (0 = kurze Belichtung, Bewegung eingefroren) und der vollen Kombination
     (1 = längste Belichtung, maximale Glättung/Spuren). Dazwischen stufenlos."""
+    if not paths:
+        raise RuntimeError("keine Aufnahmen für die Langzeitbelichtung")
     if mode not in MODES:
         mode = "smooth"
     strength = float(max(0.0, min(1.0, strength)))
@@ -41,6 +43,8 @@ def combine(paths, mode="smooth", align="none", strength=1.0, work_dir=None, det
         import stacker
         imgs = [cv2.imread(p, cv2.IMREAD_UNCHANGED) for p in paths]
         imgs = [im for im in imgs if im is not None]
+        if not imgs:
+            raise RuntimeError("keine lesbaren Aufnahmen für die Ausrichtung")
         h, w = imgs[len(imgs) // 2].shape[:2]
         imgs = [cv2.resize(im, (w, h)) if im.shape[:2] != (h, w) else im for im in imgs]
         imgs = stacker.align_images(imgs, mode=transform, detector=detector)
