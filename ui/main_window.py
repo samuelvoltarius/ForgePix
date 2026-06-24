@@ -827,7 +827,9 @@ class MainWindow(QMainWindow):
         for g in (self.g_sel, self.g_ab, self.g_stk, self.g_exp):
             g.setVisible(makro)
         self.g_raw.setVisible(pro and makro)
-        self.adv_folder.setVisible(pro and makro)
+        # Batch/Watch: Makro, Astro, Langzeit (je Unterordner eine Serie). Nicht Hybrid
+        # (Mosaik nutzt alle Kacheln; Fokus+Astro nutzt Unterordner als Positionen).
+        self.adv_folder.setVisible(pro and (makro or astro or longexp))
         # KI-Konfiguration liegt im Setup-Menü. Navigation nur im Profi-Makro-Fluss.
         nav = pro and makro
         for wdg in (self.crumb, self.back_btn, self.next_btn):

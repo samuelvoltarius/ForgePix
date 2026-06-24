@@ -716,8 +716,10 @@ def main():
         os.path.join(os.path.dirname(input_dir), "stack_work")
     os.makedirs(work_dir, exist_ok=True)
 
-    # Automatik erkennt selbst, ob der Ordner mehrere Serien (Unterordner) enthält
-    if getattr(args, "auto", False) and not args.batch and not args.watch and not list_images(input_dir):
+    # Automatik erkennt selbst, ob der Ordner mehrere Serien (Unterordner) enthält.
+    # NICHT bei Hybrid Fokus+Astro: dort sind Unterordner die Fokus-Positionen (kein Batch!).
+    if (getattr(args, "auto", False) and not args.batch and not args.watch
+            and not getattr(args, "hybrid_fa", False) and not list_images(input_dir)):
         if any(os.path.isdir(os.path.join(input_dir, d)) and list_images(os.path.join(input_dir, d))
                for d in os.listdir(input_dir)):
             args.batch = True
