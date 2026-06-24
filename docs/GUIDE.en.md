@@ -49,15 +49,18 @@ Great for products, coins, insects, food.
 **🔍 Focus tools** (Pro mode, "Selection" step):
 - **Drop shaky/blurry frames automatically** — removes photos that are sharp *nowhere*
   (shake/misfocus), with reasons in the log. On by default in Automatic.
-- **🔍 Analyse series** — examines the focus series *before* stacking: which photos are shaky,
-  which are redundant (no new sharpness contribution), which image area carries the focus, and —
-  as a **stack optimizer** — how much sharpness coverage remains with fewer frames (e.g. 40 →
-  99%, 30 → 98%, 20 → 95%). So you can decide how many frames are really needed.
-- **📐 DOF calculator / shooting assistant** — enter sensor, focal length, aperture and
+- **🔍 Analyse series** (shot analysis) — examines the focus series *before* stacking and shows
+  e.g.: *"37 frames detected · focus range complete · frame 14 shaky · frame 21 outside the
+  focus series"*. A status per frame (✓ usable / ♻️ redundant / ⚠️ shaky / ⤳ out of sequence).
+  Plus the **stack optimizer**: how much sharpness coverage remains with fewer frames (e.g. 40 →
+  99%, 30 → 98%, 20 → 95%). Button **🗺️ Focus map** colours each area by **which photo** the
+  sharpest details come from (blue = early, red = late) — shows gaps at a glance.
+- **📐 DOF calculator / focus-bracketing assistant** — enter sensor, focal length, aperture and
   magnification (e.g. 1:1) or distance → depth of field per frame, recommended **step size** and
-  **number of frames** for the desired subject depth. Perfect e.g. for A7V + 105mm macro.
-- **Stack quality** — after each stack a score (0–100) with findings (sharpness, halos,
-  ghosting) is automatically written to the log.
+  **number of frames**. **📷 Read from photo (EXIF):** pick a photo → focal length, aperture,
+  sensor and (if present) focus distance are filled in automatically. Perfect for A7V + 105mm macro.
+- **Stack confidence** — after each stack a score (0–100) with **real metrics**: focus range
+  complete?, halos, ghosting, sharpness — not AI marketing, but measurements.
 
 ### 🌌 Astro
 Many frames of the same sky area are aligned and **averaged** to **reduce noise**. Bad frames

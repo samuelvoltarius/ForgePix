@@ -49,16 +49,19 @@ Mehrere Nahaufnahmen, bei denen der Fokus **von vorne nach hinten** wandert, wer
 **🔍 Fokus-Werkzeuge** (Profi-Modus, Schritt „Auswahl"):
 - **Verwackelte/unscharfe automatisch aussortieren** — wirft Fotos raus, die *nirgends* scharf
   sind (Verwackler/Fehlfokus), mit Begründung im Log. In der Automatik standardmäßig an.
-- **🔍 Reihe analysieren** — untersucht die Fokusreihe *bevor* du stackst: welche Bilder
-  verwackelt sind, welche redundant sind (kein neuer Schärfe-Beitrag), welcher Bildbereich den
-  Fokus trägt und — als **Stack-Optimizer** — wie viel Schärfen-Abdeckung bei weniger Bildern
-  bleibt (z. B. 40 Bilder → 99 %, 30 → 98 %, 20 → 95 %). So entscheidest du, wie viele Bilder
-  wirklich nötig sind.
-- **📐 DOF-Rechner / Shooting-Assistent** — Sensor, Brennweite, Blende und Abbildung (z. B. 1:1)
-  oder Distanz eingeben → Schärfentiefe je Bild, empfohlene **Schrittweite** und **benötigte
-  Bildanzahl** für die gewünschte Motivtiefe. Perfekt z. B. für A7V + 105 mm Makro.
-- **Stack-Qualität** — nach jedem Stack wird automatisch ein Score (0–100) mit Befunden
-  (Schärfe, Halos, Ghosting) ins Log geschrieben.
+- **🔍 Reihe analysieren** (Aufnahmeanalyse) — untersucht die Fokusreihe *bevor* du stackst und
+  zeigt z. B.: *„37 Bilder erkannt · Fokusbereich vollständig · Bild 14 verwackelt · Bild 21
+  außerhalb der Fokusreihe"*. Pro Bild ein Status (✓ nutzbar / ♻️ redundant / ⚠️ verwackelt /
+  ⤳ außerhalb der Reihe). Dazu der **Stack-Optimizer**: wie viel Schärfen-Abdeckung bei weniger
+  Bildern bleibt (z. B. 40 → 99 %, 30 → 98 %, 20 → 95 %). So entscheidest du, wie viele Bilder
+  wirklich nötig sind. Knopf **🗺️ Fokus-Map** färbt jeden Bereich danach, **aus welchem Foto** die
+  schärfsten Details stammen (blau = frühe, rot = späte Aufnahmen) — zeigt Lücken auf einen Blick.
+- **📐 DOF-Rechner / Focus-Bracketing-Assistent** — Sensor, Brennweite, Blende und Abbildung
+  (z. B. 1:1) oder Distanz → Schärfentiefe je Bild, empfohlene **Schrittweite** und **benötigte
+  Bildanzahl**. **📷 Aus Foto lesen (EXIF):** ein Foto wählen → Brennweite, Blende, Sensor und
+  (falls vorhanden) Fokusdistanz werden automatisch übernommen. Perfekt für A7V + 105 mm Makro.
+- **Stack-Konfidenz** — nach jedem Stack ein Score (0–100) mit **echten Metriken**:
+  Fokusbereich vollständig?, Halos, Ghosting, Schärfe — kein KI-Marketing, sondern Messwerte.
 
 ### 🌌 Astro
 Viele Aufnahmen desselben Himmelsausschnitts werden ausgerichtet und **gemittelt**, um
