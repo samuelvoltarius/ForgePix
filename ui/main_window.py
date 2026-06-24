@@ -1604,6 +1604,36 @@ class MainWindow(QMainWindow):
                         f"➡️ Für {depth.value():.1f} mm Motivtiefe: <b>{n} Aufnahmen</b>.")
         for w in (sensor, focal, aperture, mag, dist, depth, overlap):
             (w.valueChanged if hasattr(w, "valueChanged") else w.currentIndexChanged).connect(lambda *a: compute())
+
+        def from_exif():
+            start = self.in_edit.text().strip() or os.path.expanduser("~")
+            f, _ = QFileDialog.getOpenFileName(dlg, tr("Foto wählen (EXIF lesen)"), start,
+                                               "Bilder (*.arw *.nef *.cr2 *.cr3 *.dng *.jpg *.jpeg *.tif *.tiff)")
+            if not f:
+                return
+            e = fa.read_exif_optics(f)
+            if not e:
+                QMessageBox.information(dlg, tr("Aus Foto lesen"),
+                                       tr("Keine EXIF-Optikdaten gefunden (exiftool nötig).")); return
+            if e.get("focal_mm"):
+                focal.setValue(e["focal_mm"])
+            if e.get("f_number"):
+                aperture.setValue(e["f_number"])
+            si = sensor.findData(e.get("sensor", "fullframe"))
+            if si >= 0:
+                sensor.setCurrentIndex(si)
+            if e.get("distance_m"):                     # Distanz bekannt → Abbildung daraus
+                dist.setValue(e["distance_m"]); mag.setValue(0.0)
+            cam = e.get("model") or "?"; lens = e.get("lens") or "?"
+            self._append(f"\n📷 EXIF: {cam} · {lens} · {e.get('focal_mm')}mm f/{e.get('f_number')}"
+                         f"{' · '+str(e['distance_m'])+'m' if e.get('distance_m') else ''}\n")
+            compute()
+
+        exif_btn = QPushButton(tr("📷 Aus Foto lesen (EXIF)"))
+        exif_btn.setToolTip(tr("Brennweite, Blende, Sensor und (falls vorhanden) Fokusdistanz "
+                               "aus den EXIF-Daten eines Fotos übernehmen."))
+        exif_btn.clicked.connect(from_exif)
+        lay.addWidget(exif_btn)
         compute()
         btn = QPushButton(tr("Schließen")); btn.clicked.connect(dlg.accept); lay.addWidget(btn)
         dlg.show(); self._dof_dlg = dlg
@@ -1777,7 +1807,6 @@ class MainWindow(QMainWindow):
 
 
 THEME = """
-* { font-family: -apple-system, "SF Pro Text", "Segoe UI", "Inter", sans-serif; }
 QWidget { background:#141319; color:#e9e7f0; font-size:13px; }
 QMainWindow, QDialog { background:#141319; }
 

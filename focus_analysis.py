@@ -174,6 +174,46 @@ def frames_for_depth(total_depth_mm, step_mm):
     return int(np.ceil(total_depth_mm / step_mm)) + 1
 
 
+def read_exif_optics(path):
+    """Brennweite / Blende / Sensor / Fokusdistanz aus den EXIF-Daten lesen (via exiftool).
+    Gibt ein Dict zurück (Werte ggf. None) oder None, wenn exiftool fehlt/nichts lesbar ist.
+    Sensor wird aus dem 35-mm-Äquivalent (Crop-Faktor) abgeleitet."""
+    import shutil as _sh
+    import subprocess
+    import json as _json
+    import re
+    if not _sh.which("exiftool"):
+        return None
+    tags = ["-FocalLength", "-FNumber", "-Aperture", "-Model", "-Make",
+            "-FocalLengthIn35mmFormat", "-FocusDistance", "-SubjectDistance",
+            "-FocusDistance2", "-LensModel"]
+    try:
+        out = subprocess.run(["exiftool", "-json", *tags, path],
+                             capture_output=True, text=True, timeout=30)
+        d = _json.loads(out.stdout)[0]
+    except Exception:
+        return None
+
+    def num(v):
+        if v is None:
+            return None
+        m = re.search(r"[\d.]+", str(v))
+        return float(m.group()) if m else None
+
+    focal = num(d.get("FocalLength"))
+    fn = num(d.get("FNumber")) or num(d.get("Aperture"))
+    f35 = num(d.get("FocalLengthIn35mmFormat"))
+    dist = (num(d.get("FocusDistance")) or num(d.get("SubjectDistance"))
+            or num(d.get("FocusDistance2")))
+    sensor = "fullframe"
+    if focal and f35 and focal > 0:
+        crop = f35 / focal
+        sensor = ("fullframe" if crop < 1.2 else "apsc" if crop < 1.8
+                  else "mft" if crop < 2.3 else "fullframe")
+    return {"focal_mm": focal, "f_number": fn, "distance_m": dist, "sensor": sensor,
+            "model": d.get("Model"), "lens": d.get("LensModel")}
+
+
 # -------------------------------------------------------- Qualität des Stacks ----
 
 def stack_quality(result_bgr, sources=None):
