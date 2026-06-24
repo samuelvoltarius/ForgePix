@@ -131,7 +131,9 @@ Nach jedem Lauf rechts in der Ergebnis-Leiste:
 - **✏️ Retusche** — Pinsel: scharfe Stellen aus Einzelfotos übers Ergebnis malen
   (nur Fokus-Stacking: Makro + Hybrid Fokus+Astro).
 - **👻 Geister-Karte** — zeigt Bewegungsartefakte beim Fokus-Stacking.
-- **Export-Voreinstellungen:** Instagram / WhatsApp / Web / 4K / Druck.
+- **📦 Export** (oder ⌘E) — Dialog: du wählst **was** exportiert wird — Ziele (Web-JPG /
+  Instagram / WhatsApp / Web / 4K / Druck als 16-bit-TIFF), **Ausgabe-Schärfung**, **JPG-Qualität**,
+  **Photoshop-Ebenen-Datei** und verlustfreies **16-bit-TIFF**.
 - **Batch:** je Unterordner ein eigener Stack. **Watch-Ordner:** automatisch stacken, sobald
   neue Fotos fertig kopiert sind. (Makro, Astro, Langzeit)
 

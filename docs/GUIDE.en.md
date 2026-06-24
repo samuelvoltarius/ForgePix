@@ -130,7 +130,9 @@ After each run, in the result bar on the right:
 - **✏️ Retouch** — brush sharp areas from single frames onto the result
   (focus stacking only: Macro + Hybrid Focus+Astro).
 - **👻 Ghost map** — shows motion artefacts in focus stacking.
-- **Export presets:** Instagram / WhatsApp / Web / 4K / Print.
+- **📦 Export** (or ⌘E) — a dialog where you choose **what** to export — targets (Web JPG /
+  Instagram / WhatsApp / Web / 4K / Print as 16-bit TIFF), **output sharpening**, **JPG quality**,
+  **Photoshop layered file** and lossless **16-bit TIFF**.
 - **Batch:** one stack per subfolder. **Watch folder:** stack automatically once new photos
   finish copying. (Macro, Astro, Long exposure)
 

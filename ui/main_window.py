@@ -262,7 +262,7 @@ class MainWindow(QMainWindow):
         self.auto_btn.clicked.connect(lambda: self.run(auto=True))
         p1.addWidget(self.auto_btn)
         hint = QLabel("Ein Klick genügt. Für mehr Kontrolle mit „Weiter →“ durch die Schritte.")
-        hint.setStyleSheet("color:#888;"); hint.setWordWrap(True)
+        hint.setStyleSheet("color:#9aa09a;"); hint.setWordWrap(True)
         p1.addWidget(hint)
 
         # Vorlage (Motiv) — setzt passende Makro-Einstellungen
@@ -608,7 +608,7 @@ class MainWindow(QMainWindow):
         vg = QVBoxLayout(g_vlm)
         note = QLabel("Ohne KI läuft alles per Heuristik (überall lauffähig). Optional eine "
                       "Bild-KI zuschalten — lokal/Server oder ein Anbieter mit API-Schlüssel.")
-        note.setWordWrap(True); note.setStyleSheet("color:#888;")
+        note.setWordWrap(True); note.setStyleSheet("color:#9aa09a;")
         vg.addWidget(note)
         self.vlm_provider = QComboBox()
         # (Anzeige, Endpoint, Modell-Vorschlag, braucht_key)
@@ -682,10 +682,10 @@ class MainWindow(QMainWindow):
         self.preview = QLabel("Ordner hierher ziehen oder oben wählen — dann ⚡ Automatik")
         self.preview.setAlignment(Qt.AlignCenter)
         self.preview.setMinimumHeight(220)
-        self.preview.setStyleSheet("color:#888;border:1px solid #444;")
+        self.preview.setStyleSheet("color:#8a8f88;border:1px dashed #34383f;border-radius:10px;")
         rv.addWidget(QLabel(tr("Ergebnis")))
         rv.addWidget(self.preview, 2)
-        res_btns = QHBoxLayout()
+        res_btns = QHBoxLayout(); res_btns.setSpacing(8)
         self.cmp_btn = QPushButton(tr("🔍  Vorher/Nachher"))
         self.cmp_btn.setToolTip("Schieberegler: schärfstes Einzelfoto gegen das fertige Bild vergleichen.")
         self.cmp_btn.setEnabled(False)
@@ -706,12 +706,15 @@ class MainWindow(QMainWindow):
         self.ghost_btn.setToolTip("Zeigt rot, wo Bewegung/Ghosting wahrscheinlich ist "
                                   "(nur wenn beim Lauf erzeugt).")
         self.ghost_btn.clicked.connect(self.open_ghostmap); self.ghost_btn.setEnabled(False)
+        self.export_btn = QPushButton(tr("📦  Export"))
+        self.export_btn.setToolTip(tr("Exportieren: Ziele, Schärfung, Photoshop-Ebenen, 16-bit (⌘E)."))
+        self.export_btn.clicked.connect(self.export_result); self.export_btn.setEnabled(False)
         for b in (self.cmp_btn, self.openfolder_btn, self.open_btn, self.adjust_btn,
-                  self.ghost_btn, self.retouch_btn):
+                  self.ghost_btn, self.retouch_btn, self.export_btn):
             res_btns.addWidget(b)
         rv.addLayout(res_btns)
         # zweite Reihe: externe Astro-Tools (GraXpert/StarNet) — Ein-Klick falls Pfad gesetzt/gefunden
-        res_btns2 = QHBoxLayout()
+        res_btns2 = QHBoxLayout(); res_btns2.setSpacing(8)
         self.graxpert_btn = QPushButton(tr("🌌  GraXpert (Gradient)"))
         self.graxpert_btn.setToolTip(tr("GraXpert: Hintergrund/Gradient (Lichtverschmutzung) "
                                         "entfernen. Gefunden = Ein-Klick + automatischer Reimport; "
@@ -829,12 +832,12 @@ class MainWindow(QMainWindow):
         lay = QVBoxLayout(page)
         lay.setContentsMargins(40, 30, 40, 30)
         head = QLabel("StackForge")
-        head.setStyleSheet("font-size:30px;font-weight:bold;")
+        head.setStyleSheet("font-size:30px;font-weight:800;letter-spacing:0.5px;")
         head.setAlignment(Qt.AlignCenter)
-        sub = QLabel(tr("Was möchtest du stacken? Modul wählen — später jederzeit über „◀ Module“ wechselbar."))
-        sub.setStyleSheet("color:#7bd36a;font-size:14px;")
+        sub = QLabel(tr("Schritt 1: Wähle ein Modul"))
+        sub.setStyleSheet("color:#7bd36a;font-size:15px;font-weight:600;")
         sub.setAlignment(Qt.AlignCenter)
-        lay.addWidget(head); lay.addWidget(sub); lay.addSpacing(18)
+        lay.addWidget(head); lay.addSpacing(2); lay.addWidget(sub); lay.addSpacing(22)
 
         grid = QGridLayout(); grid.setSpacing(16)
         cards = [
@@ -858,19 +861,26 @@ class MainWindow(QMainWindow):
             btn.setText(f"{emoji}\n\n{name}\n")
             btn.setToolTip(desc)
             btn.setStyleSheet(
-                "QPushButton{font-size:17px;font-weight:bold;text-align:center;"
-                "border:1px solid #4a3a6e;border-radius:12px;padding:14px;background:#241a38;}"
-                "QPushButton:hover{background:#3c2d5e;border-color:#5cc85c;}")
-            d = QLabel(desc); d.setWordWrap(True); d.setStyleSheet("color:#9aa09a;font-size:12px;")
-            cell = QWidget(); cv = QVBoxLayout(cell); cv.setContentsMargins(0, 0, 0, 0)
+                "QPushButton{font-size:18px;font-weight:bold;text-align:center;color:#e8eae6;"
+                "border:1px solid #34383f;border-radius:14px;padding:16px;background:#202227;}"
+                "QPushButton:hover{background:#262a2c;border:2px solid #4caf50;}")
+            d = QLabel(desc); d.setWordWrap(True)
+            d.setStyleSheet("color:#9aa09a;font-size:12px;padding:0 6px;")
+            d.setAlignment(Qt.AlignCenter)
+            cell = QWidget(); cv = QVBoxLayout(cell); cv.setContentsMargins(0, 0, 0, 0); cv.setSpacing(6)
             cv.addWidget(btn); cv.addWidget(d)
             btn.clicked.connect(lambda _=False, t=idx: self._choose_module(t))
             grid.addWidget(cell, n // 2, n % 2)
         lay.addLayout(grid)
+        lay.addSpacing(20)
+        # Klarer 3-Schritt-Ablauf (löst die „wo Ordner einfügen?"-Verwirrung)
+        steps = QLabel(tr("So geht's:&nbsp;&nbsp; <b style='color:#7bd36a'>1</b> Modul wählen &nbsp;→&nbsp; "
+                          "<b style='color:#7bd36a'>2</b> Ordner wählen oder aufs Fenster ziehen &nbsp;→&nbsp; "
+                          "<b style='color:#7bd36a'>3</b> ⚡ Automatik"))
+        steps.setTextFormat(Qt.RichText); steps.setAlignment(Qt.AlignCenter)
+        steps.setStyleSheet("font-size:13px;color:#b9bdb6;")
+        lay.addWidget(steps)
         lay.addStretch(1)
-        hint = QLabel(tr("Tipp: Im Anfänger-Modus genügt „Ordner wählen“ — die Automatik erklärt ihre Entscheidungen."))
-        hint.setStyleSheet("color:#777;"); hint.setAlignment(Qt.AlignCenter)
-        lay.addWidget(hint)
         return page
 
     def _choose_module(self, task_index):
@@ -1437,6 +1447,7 @@ class MainWindow(QMainWindow):
         self.cmp_btn.setEnabled(bool(self.before_path))
         self.ghost_btn.setEnabled(bool(self._ghostmap_path()))
         self.send_btn.setEnabled(True); self.reimport_btn.setEnabled(True)
+        self.export_btn.setEnabled(True)
         # GraXpert/StarNet nur bei Himmels-Modulen sinnvoll (Astro/Langzeit/Hybrid), nicht Makro
         sky = (getattr(self, "is_astro", False) or getattr(self, "is_longexp", False)
                or getattr(self, "is_hybrid", False))
@@ -1954,27 +1965,83 @@ class MainWindow(QMainWindow):
         self._set_preview(paths[self._strip_idx])
 
     def export_result(self):
-        """Aktuelles Ergebnis exportieren: teilbares JPG + gewählte Presets, dann Ordner zeigen."""
+        """Export-Dialog: auswählen WAS exportiert wird (Ziele, Schärfung, Photoshop-Ebenen,
+        16-bit-TIFF), dann schreiben + Ordner zeigen."""
         if not self.result_path or cv2 is None:
             QMessageBox.information(self, tr("Exportieren"), tr("Erst ein Ergebnis erzeugen.")); return
-        try:
+        dlg = QDialog(self); dlg.setWindowTitle(tr("Exportieren")); dlg.resize(440, 480)
+        lay = QVBoxLayout(dlg)
+
+        g1 = QGroupBox(tr("Ziele")); g1l = QVBoxLayout(g1)
+        targets = {}
+        for key, lbl in [("webjpg", tr("Web-JPG (zum Teilen)")), ("instagram", "Instagram (1080 px)"),
+                         ("whatsapp", "WhatsApp (1600 px)"), ("web", "Web (2048 px)"),
+                         ("4k", "4K (3840 px)"), ("print", tr("Druck (16-bit-TIFF, volle Größe)"))]:
+            cb = QCheckBox(lbl); targets[key] = cb; g1l.addWidget(cb)
+        targets["webjpg"].setChecked(True)
+        lay.addWidget(g1)
+
+        g2 = QGroupBox(tr("Optionen")); g2l = QGridLayout(g2)
+        psd = QCheckBox(tr("Photoshop-Ebenen-Datei (.tif mit Ebenen)"))
+        tiff16 = QCheckBox(tr("16-bit-TIFF (verlustfrei)"))
+        g2l.addWidget(psd, 0, 0, 1, 2); g2l.addWidget(tiff16, 1, 0, 1, 2)
+        g2l.addWidget(QLabel(tr("Ausgabe-Schärfung")), 2, 0)
+        sharp = QSpinBox(); sharp.setRange(0, 50); sharp.setValue(0); sharp.setSuffix(" %")
+        sharp.setToolTip(tr("Leichtes Nachschärfen beim Export. 0 = aus."))
+        g2l.addWidget(sharp, 2, 1)
+        g2l.addWidget(QLabel(tr("JPG-Qualität")), 3, 0)
+        jq = QSpinBox(); jq.setRange(60, 100); jq.setValue(92); g2l.addWidget(jq, 3, 1)
+        lay.addWidget(g2)
+
+        info = QLabel(); info.setStyleSheet("color:#9aa09a;font-size:11px;"); lay.addWidget(info)
+        row = QHBoxLayout()
+        ok = QPushButton(tr("Exportieren")); ok.setObjectName("primary")
+        cancel = QPushButton(tr("Abbrechen"))
+        row.addStretch(1); row.addWidget(cancel); row.addWidget(ok); lay.addLayout(row)
+        cancel.clicked.connect(dlg.reject)
+
+        def do_export():
             import focus_cull_stack as F
-        except Exception as e:
-            QMessageBox.warning(self, tr("Exportieren"), f"{e}"); return
-        stack_dir = os.path.dirname(self.result_path)
-        export_dir = os.path.join(self._work_dir(), "export")
-        chosen = [k for k, cb in self.exp_targets.items() if cb.isChecked()]
-        try:
-            F.export_web_jpg(stack_dir, export_dir)
-            if chosen:
-                F.export_targets(stack_dir, export_dir, chosen)
-        except Exception as e:
-            QMessageBox.warning(self, tr("Exportieren"), f"{e}"); return
-        n = len(os.listdir(export_dir)) if os.path.isdir(export_dir) else 0
-        self._append(f"\n📦 Exportiert ({', '.join(chosen) if chosen else 'Web-JPG'}) → "
-                     f"{export_dir} ({n} Datei(en))\n")
-        if os.path.isdir(export_dir):
+            import stacker
+            stack_dir = os.path.dirname(self.result_path)
+            export_dir = os.path.join(self._work_dir(), "export")
+            os.makedirs(export_dir, exist_ok=True)
+            chosen = [k for k in ("instagram", "whatsapp", "web", "4k", "print") if targets[k].isChecked()]
+            res = cv2.imread(self.result_path, cv2.IMREAD_UNCHANGED)
+            base = os.path.splitext(os.path.basename(self.result_path))[0]
+            written = 0
+            try:
+                if sharp.value() > 0 and res is not None:
+                    res = stacker.unsharp_mask(res, sharp.value(), 0.8)
+                if targets["webjpg"].isChecked() and res is not None:
+                    img8 = (res / 256).astype("uint8") if res.dtype != cv2.CV_8U and res.max() > 255 else res
+                    cv2.imwrite(os.path.join(export_dir, f"{base}_web.jpg"), img8,
+                                [int(cv2.IMWRITE_JPEG_QUALITY), jq.value()]); written += 1
+                if tiff16.isChecked() and res is not None:
+                    out = res if res.dtype == "uint16" else (res.astype("float32") * 257).astype("uint16") \
+                        if res.dtype == "uint8" else res
+                    cv2.imwrite(os.path.join(export_dir, f"{base}_16bit.tif"), out,
+                                [int(cv2.IMWRITE_TIFF_COMPRESSION), 1]); written += 1
+                if chosen:
+                    F.export_targets(stack_dir, export_dir, chosen); written += len(chosen)
+                if psd.isChecked():
+                    srcs, names = self._gather_sources()
+                    if srcs and res is not None:
+                        srcs = [cv2.resize(s, (res.shape[1], res.shape[0])) if s.shape[:2] != res.shape[:2]
+                                else s for s in srcs if s is not None]
+                        named = [("Stack (Ergebnis)", res)] + [(n, s) for n, s in zip(names, srcs)]
+                        stacker.write_layered_tiff(os.path.join(export_dir, f"{base}_ebenen.tif"),
+                                                   named, flat_bgr=res); written += 1
+                    else:
+                        self._append("\n⚠️ Ebenen-Datei: keine Quellfotos gefunden (nur Makro).\n")
+            except Exception as e:
+                QMessageBox.warning(dlg, tr("Exportieren"), f"{e}"); return
+            self._append(f"\n📦 Exportiert ({written} Datei(en)) → {export_dir}\n")
             reveal_in_files(export_dir)
+            dlg.accept()
+
+        ok.clicked.connect(do_export)
+        dlg.show(); self._export_dlg = dlg
 
     def resizeEvent(self, e):
         super().resizeEvent(e)
