@@ -4,6 +4,15 @@ Alle nennenswerten Änderungen an StackForge. Format orientiert an
 [Keep a Changelog](https://keepachangelog.com/de/), Versionierung nach
 [SemVer](https://semver.org/lang/de/).
 
+## [1.6.0] – 2026-06-25
+### Geändert (foto-zentriertes Layout)
+- **Bild groß oben, Log klein unten** — das Ergebnis bekommt die Hauptfläche, der Log ist Nebensache.
+- **Echte Statuszeile** statt grünem Strich: Bereit · Ordner geladen · Läuft · Analysiere · Stacke · Fertig
+  (farbcodiert, aus dem Live-Log abgeleitet).
+- **Größerer Header:** Logo + „StackForge" + Untertitel „Computational Photography Suite".
+- **README:** „Warum StackForge?"-Bullets geschärft + **Bilderstrecke** (Input → Analyse → Fokus-Map →
+  Ergebnis) mit echten Fotos; Screenshots auf das neue Layout aktualisiert.
+
 ## [1.5.0] – 2026-06-25
 ### Geändert (UX-Politur)
 - **Startbildschirm:** hochwertigere Karten — große Icons, Titel, Kategorie und Beispiele

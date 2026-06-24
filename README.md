@@ -12,23 +12,29 @@ the best possible quality for further editing. Self‑contained, free (MIT), cro
 
 ## Why StackForge?
 
-> **Focus Stacking + Astro + Long Exposure — one app.**
->
-> - ✓ **Analyses focus series** — which frames carry the focus, which are redundant
-> - ✓ **Removes rejects automatically** — shaky/misfocused frames out, *with measured reasons*
-> - ✓ **Computes the optimal frame count** — “30 frames → 98 % coverage”
-> - ✓ **Explains every decision** — no black box, real metrics instead of AI marketing
-> - ✓ **Works without AI** — fully local, no server, no model download
+> - ✓ **Analyses focus series**
+> - ✓ **Removes rejects automatically**
+> - ✓ **Computes the optimal frame count**
+> - ✓ **Long exposure without an ND filter**
+> - ✓ **Astro + macro in one app**
+> - ✓ **Works without AI** (fully local, no server)
+
+## How it works
+
+A soft focus series becomes one fully sharp image — and you see *what* happens at every step:
+
+| 1 · Input (series) | 2 · Analysis | 3 · Focus map | 4 · Result |
+|---|---|---|---|
+| ![Input](assets/shots/p1_input.jpg) | ![Analysis](assets/shots/p2_analyse.png) | ![Focus map](assets/shots/05_focusmap.png) | ![Result](assets/shots/p4_result.jpg) |
+| *9 frames, each only partly sharp* | *shaky dropped, optimal frame count* | *which area from which photo* | *fully sharp, ready to edit* |
 
 📖 **Full guide:** [docs/GUIDE.en.md](docs/GUIDE.en.md) · *[🇩🇪 Anleitung](docs/GUIDE.de.md)*
 
 | Start screen | Macro module |
 |---|---|
 | ![Start](assets/shots/01_start.png) | ![Macro](assets/shots/02_makro.png) |
-| **Camera‑Raw editor** | **Focus map** |
-| ![Editor](assets/shots/04_editor.png) | ![Focus map](assets/shots/05_focusmap.png) |
-| **Astro module** | **Long exposure** |
-| ![Astro](assets/shots/03_astro.png) | ![Long exposure](assets/shots/06_longexp.png) |
+| **Camera‑Raw editor** | **Astro module** |
+| ![Editor](assets/shots/04_editor.png) | ![Astro](assets/shots/03_astro.png) |
 
 ## Highlights
 

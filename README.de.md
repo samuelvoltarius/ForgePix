@@ -12,23 +12,29 @@ Qualität zum Weiterbearbeiten. Eigenständig, frei (MIT), plattformübergreifen
 
 ## Warum StackForge?
 
-> **Focus Stacking + Astro + Langzeitbelichtung — eine App.**
->
-> - ✓ **Analysiert Fokusreihen** — welche Bilder den Fokus tragen, welche redundant sind
-> - ✓ **Entfernt Ausschuss automatisch** — verwackelte/falsch fokussierte raus, *mit Messwerten*
-> - ✓ **Berechnet die optimale Bildanzahl** — „30 Bilder → 98 % Abdeckung“
-> - ✓ **Erklärt jede Entscheidung** — keine Blackbox, echte Metriken statt KI-Marketing
-> - ✓ **Funktioniert ohne KI** — komplett lokal, kein Server, kein Modell-Download
+> - ✓ **Analysiert Fokusreihen**
+> - ✓ **Entfernt Ausschuss automatisch**
+> - ✓ **Berechnet optimale Bildanzahl**
+> - ✓ **Long Exposure ohne ND-Filter**
+> - ✓ **Astro + Makro in einer App**
+> - ✓ **Funktioniert ohne KI** (komplett lokal, kein Server)
+
+## So funktioniert's
+
+Aus einer unscharfen Fokusreihe wird ein durchgehend scharfes Bild — und du siehst bei jedem Schritt, *was* passiert:
+
+| 1 · Input (Reihe) | 2 · Analyse | 3 · Fokus-Map | 4 · Ergebnis |
+|---|---|---|---|
+| ![Input](assets/shots/p1_input.jpg) | ![Analyse](assets/shots/p2_analyse.png) | ![Fokus-Map](assets/shots/05_focusmap.png) | ![Ergebnis](assets/shots/p4_result.jpg) |
+| *9 Aufnahmen, jede nur teil­scharf* | *verwackelte raus, optimale Bildanzahl* | *welcher Bereich aus welchem Foto* | *durchgehend scharf, zum Weiterbearbeiten* |
 
 📖 **Ausführliche Anleitung:** [docs/GUIDE.de.md](docs/GUIDE.de.md) · *[🇬🇧 Guide](docs/GUIDE.en.md)*
 
 | Startbildschirm | Makro-Modul |
 |---|---|
 | ![Start](assets/shots/01_start.png) | ![Makro](assets/shots/02_makro.png) |
-| **Camera‑Raw-Editor** | **Fokus-Map** |
-| ![Editor](assets/shots/04_editor.png) | ![Fokus-Map](assets/shots/05_focusmap.png) |
-| **Astro-Modul** | **Langzeitbelichtung** |
-| ![Astro](assets/shots/03_astro.png) | ![Langzeit](assets/shots/06_longexp.png) |
+| **Camera‑Raw-Editor** | **Astro-Modul** |
+| ![Editor](assets/shots/04_editor.png) | ![Astro](assets/shots/03_astro.png) |
 
 ## Highlights
 
