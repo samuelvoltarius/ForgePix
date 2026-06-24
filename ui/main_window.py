@@ -505,10 +505,16 @@ class MainWindow(QMainWindow):
                               "Kleiner = strenger."), 4, 2)
         self.reject_blurry = QCheckBox(tr("Verwackelte/unscharfe automatisch aussortieren"))
         self.reject_blurry.setChecked(True)
-        sg.addWidget(self.reject_blurry, 5, 0, 1, 2)
+        self.blurry_rel = QDoubleSpinBox(); self.blurry_rel.setRange(0.10, 0.80)
+        self.blurry_rel.setSingleStep(0.05); self.blurry_rel.setValue(0.45); self.blurry_rel.setDecimals(2)
+        self.blurry_rel.setToolTip(tr("Schwelle: Foto raus, wenn die schärfste Stelle darunter "
+                                      "(× Serien-Median) liegt. Höher = strenger."))
+        self.reject_blurry.toggled.connect(self.blurry_rel.setEnabled)
+        sg.addWidget(self.reject_blurry, 5, 0, 1, 1); sg.addWidget(self.blurry_rel, 5, 1)
         sg.addWidget(help_btn("Misst die Schärfe jeder Aufnahme in Kacheln und wirft Fotos raus, "
                               "die NIRGENDS richtig scharf sind (verwackelt/Fehlfokus) — mit "
-                              "Begründung im Log. Zusätzlich zur Nachbar-Strenge oben."), 5, 2)
+                              "Begründung im Log. Der Wert rechts ist die Strenge (Standard 0.45). "
+                              "Zusätzlich zur Nachbar-Strenge oben."), 5, 2)
         # Fokus-Werkzeuge: Reihe analysieren + DOF-Rechner
         tools = QHBoxLayout()
         self.analyze_btn = QPushButton(tr("🔍 Reihe analysieren"))
@@ -1149,7 +1155,7 @@ class MainWindow(QMainWindow):
         if self.dedup.isChecked():
             args += ["--dedup", "--dup-thresh", str(self.dupthresh.value())]
         if self.reject_blurry.isChecked():
-            args += ["--reject-blurry"]
+            args += ["--reject-blurry", "--blurry-rel", str(self.blurry_rel.value())]
         if self.nostack.isChecked():
             args += ["--no-stack"]
         if self.vlm_group.isChecked() and self.vlm_ep.text().strip():
@@ -1923,6 +1929,7 @@ class MainWindow(QMainWindow):
             "astro_cosmetic": (self.astro_cosmetic.setChecked, self.astro_cosmetic.isChecked),
             "astro_qc": (self.astro_qc.setChecked, self.astro_qc.isChecked),
             "reject_blurry": (self.reject_blurry.setChecked, self.reject_blurry.isChecked),
+            "blurry_rel": (lambda v: self.blurry_rel.setValue(float(v)), self.blurry_rel.value),
             "astro_drizzle": (lambda v: self.astro_drizzle.setCurrentIndex(int(v)), self.astro_drizzle.currentIndex),
             "hybrid_kind": (lambda v: self.hybrid_kind.setCurrentIndex(int(v)), self.hybrid_kind.currentIndex),
             "hybrid_group": (lambda v: self.hybrid_group.setValue(int(v)), self.hybrid_group.value),

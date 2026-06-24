@@ -101,6 +101,14 @@ Aus einer Serie eine Langzeitbelichtung **ohne ND-Filter**. Vier Effekte:
 
 ---
 
+## Tastatursteuerung
+
+Die App ist komplett per Tastatur bedienbar — **F1** (oder der ⌨-Knopf oben) zeigt die volle
+Liste. Die wichtigsten: **⌘O** Ordner wählen, **⌘↩** Automatik starten, **⌘⇧↩** manuell starten,
+**⎋** Stop / zurück zur Modul-Auswahl, **⌘1–4** Modul wechseln, **⌘B** Anfänger/Profi, **⌘E**
+Ergebnis bearbeiten, **⌘⇧A** Reihe analysieren, **⌘D** DOF-Rechner, **⌘] / ⌘[** Wizard weiter/zurück.
+*(Unter Windows/Linux ⌘ = Strg.)*
+
 ## Anfänger- vs. Profi-Modus
 
 Oben rechts umschaltbar.

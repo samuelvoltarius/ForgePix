@@ -16,6 +16,10 @@ plattformübergreifend (Windows / macOS / Linux).
 - **Ein‑Klick‑Automatik** — wählt brauchbare Fotos aus, richtet sie aus, verschmilzt sie zu
   einem durchgehend scharfen Bild und schärft schonend nach. **Anfänger‑** und **Profi‑Modus**.
 - **Start‑Auswahl:** beim Öffnen wählst du das **Modul** (jederzeit über „◀ Module“ wechselbar).
+- **Fokus‑Intelligenz** (Makro): verwackelte Fotos automatisch aussortieren, **Reihen‑Analyse**
+  (Aufnahmeanalyse + Stack‑Optimizer + **Fokus‑Map**), **DOF‑/Focus‑Bracketing‑Assistent** mit
+  **EXIF‑Auslesen**, **Stack‑Konfidenz‑Score** mit echten Metriken.
+- **Komplett per Tastatur bedienbar** (⌘O Ordner, ⌘↩ Automatik, ⌘1–4 Module, F1 = Kürzel‑Übersicht …).
 - **Vier Module, eine App:** 🔬 **Makro** (Fokus‑Stacking, mit Presets Produkte/Münzen/Food),
   🌌 **Astro** (Stern‑Stacking), 🌗 **Hybrid** (Mond‑/Sonnen‑**Mosaik** + **Fokus+Astro**:
   je Position erst entrauschen, dann fokus‑stacken) und 📷 **Langzeitbelichtung** (aus einer Serie
@@ -83,6 +87,20 @@ automatischem Reimport. Nichts davon ist Pflicht.
 Deutsch & Englisch eingebaut (oben rechts umschalten, greift beim Neustart). Eigene Sprache:
 `lang/de.json` kopieren, Werte übersetzen, z.B. als `lang/fr.json` speichern — erscheint
 automatisch in der Sprachauswahl.
+
+## Tastenkürzel
+
+⌘O Ordner · ⌘↩ Automatik · ⌘⇧↩ Manuell · ⎋ Stop/zurück · ⌘1–4 Module · ⌘B Anfänger/Profi ·
+⌘E Bearbeiten · ⌘⇧A Reihe analysieren · ⌘D DOF · **F1** = vollständige Übersicht.
+
+## Tests
+
+```bash
+./run_tests.sh        # oder: python3 -m unittest discover -s tests
+```
+
+24 Engine‑Tests (Standardbibliothek, kein pytest nötig) decken Fokus‑Analyse, Langzeit, Astro,
+Stacker, Mosaik, i18n‑Vollständigkeit und einen GUI‑Smoke‑Test ab.
 
 ## Lizenz
 

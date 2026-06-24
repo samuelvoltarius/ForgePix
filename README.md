@@ -16,6 +16,10 @@ finished image out — in the best possible quality for further editing. Self‑
 - **One‑click Automatic** — picks the usable frames, aligns them, merges them into a
   fully‑sharp image and sharpens gently. **Beginner** and **Pro** mode.
 - **Startup picker:** choose the **module** when you open the app (switch any time via “◀ Modules”).
+- **Focus intelligence** (macro): auto-drop shaky photos, **series analysis** (shot analysis +
+  stack optimizer + **focus map**), **DOF / focus-bracketing assistant** with **EXIF read-out**,
+  **stack confidence score** with real metrics.
+- **Fully keyboard-operable** (⌘O folder, ⌘↩ automatic, ⌘1–4 modules, F1 = shortcut overview …).
 - **Four modules, one app:** 🔬 **Macro** (focus stacking, with Product/Coin/Food presets),
   🌌 **Astro** (star stacking), 🌗 **Hybrid** (Moon/Sun **mosaic** + **Focus+Astro**:
   denoise each position, then focus‑stack) and 📷 **Long exposure** (from a burst, **no ND filter**:
@@ -82,6 +86,20 @@ automatic re‑import. None of it is required.
 German & English built in (switch top‑right, applies on restart). Add your own language:
 copy `lang/de.json`, translate the values, save as e.g. `lang/fr.json` — it appears in the
 language menu automatically.
+
+## Keyboard shortcuts
+
+⌘O folder · ⌘↩ automatic · ⌘⇧↩ manual · ⎋ stop/back · ⌘1–4 modules · ⌘B beginner/pro ·
+⌘E edit · ⌘⇧A analyse series · ⌘D DOF · **F1** = full overview.
+
+## Tests
+
+```bash
+./run_tests.sh        # or: python3 -m unittest discover -s tests
+```
+
+24 engine tests (standard library, no pytest needed) cover focus analysis, long exposure, astro,
+stacker, mosaic, i18n completeness and a GUI smoke test.
 
 ## License
 

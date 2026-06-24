@@ -205,7 +205,7 @@ def focus_map(paths, M=None, out_size=None, grid=12):
     idx = (winners / max(1, n - 1) * 255).astype(np.uint8)
     color = cv2.applyColorMap(idx, cv2.COLORMAP_JET)
     if out_size is None:
-        ref = cv2.imread(paths[0], cv2.IMREAD_REDUCED_COLOR_4)
+        ref = _load_gray(paths[0], max_side=800)        # RAW-fähig (rawpy), nicht nur cv2
         out_size = (ref.shape[1], ref.shape[0]) if ref is not None else (640, 480)
     return cv2.resize(color, out_size, interpolation=cv2.INTER_NEAREST)
 
@@ -228,11 +228,13 @@ def dof_calc(f_number, focal_mm=105.0, magnification=None, distance_m=None,
         dof_mm = 2.0 * N * c * (1.0 + m) / (m * m)        # Makro-Näherung
     elif distance_m and distance_m > 0:
         f = float(focal_mm); s = distance_m * 1000.0
+        if s <= f:                                          # Distanz < Brennweite: unsinnig
+            return None
         H = (f * f) / (N * c) + f                          # Hyperfokaldistanz
         near = s * (H - f) / (H + s - 2 * f)
         far = s * (H - f) / (H - s) if H > s else float("inf")
         dof_mm = (far - near) if far != float("inf") else float("inf")
-        m = f / (s - f) if s > f else 0.0
+        m = f / (s - f)
     else:
         return None
     step_mm = dof_mm * (1.0 - overlap) if dof_mm != float("inf") else float("inf")

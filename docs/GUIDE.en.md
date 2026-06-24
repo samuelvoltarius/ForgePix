@@ -100,6 +100,14 @@ A long exposure from a burst **without an ND filter**. Four effects:
 
 ---
 
+## Keyboard control
+
+The app is fully keyboard-operable — **F1** (or the ⌨ button top-right) shows the full list.
+The most important: **⌘O** choose folder, **⌘↩** start automatic, **⌘⇧↩** start manually,
+**⎋** stop / back to module selection, **⌘1–4** switch module, **⌘B** beginner/pro, **⌘E** edit
+result, **⌘⇧A** analyse series, **⌘D** DOF calculator, **⌘] / ⌘[** wizard next/back.
+*(On Windows/Linux ⌘ = Ctrl.)*
+
 ## Beginner vs. Pro mode
 
 Toggle at the top right.
