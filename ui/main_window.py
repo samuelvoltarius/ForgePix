@@ -1522,24 +1522,29 @@ class MainWindow(QMainWindow):
         from PySide6.QtGui import QGuiApplication
         QGuiApplication.setOverrideCursor(Qt.WaitCursor)
         try:
-            M = fa.sharpness_matrix(paths, grid=12, log=lambda *a: None)
-            blurry = fa.detect_blurry(M, paths)
-            sweep = fa.focus_sweep(M, paths)
-            opt = fa.stack_optimizer(M, paths)
+            rep = fa.analyze_series(paths, log=lambda *a: None)
         finally:
             QGuiApplication.restoreOverrideCursor()
-        lines = [f"<b>{len(paths)} Aufnahmen analysiert.</b>", ""]
-        if blurry:
-            names = ", ".join(n for _i, n, _r in blurry[:12])
-            lines.append(f"⚠️ <b>{len(blurry)} verwackelt/unscharf:</b> {names}")
-        else:
-            lines.append("✅ Keine verwackelten Aufnahmen erkannt.")
+        self._analyze_paths = paths
+        self._analyze_M = rep["M"]
+        sweep = rep["sweep"]; opt = rep["optimizer"]
+        cnt = {"good": 0, "redundant": 0, "blurry": 0, "outlier": 0}
+        for _i, st, _r in rep["status"]:
+            cnt[st] += 1
+        lines = [f"<b>{rep['n']} Aufnahmen erkannt.</b>", ""]
+        lines.append("✅ <b>Fokusbereich vollständig</b>" if rep["complete"]
+                     else f"⚠️ <b>Fokusbereich evtl. mit Lücken</b> ({rep['coverage']:.0f} % abgedeckt)")
         s0, s1 = sweep["sweep"]
-        lines.append(f"🎯 <b>Fokus-Abdeckung:</b> Bild {s0 + 1}–{s1 + 1} tragen den Fokusbereich "
-                     f"({len(sweep['contributing'])} beitragende Aufnahmen).")
-        if sweep["redundant"]:
-            lines.append(f"♻️ <b>{len(sweep['redundant'])} redundante</b> Aufnahmen (kein neuer "
-                         "Schärfe-Beitrag) — könnten weg.")
+        lines.append(f"🎯 Bild {s0 + 1}–{s1 + 1} tragen den Fokus · "
+                     f"✓ {cnt['good']} nutzbar · ♻️ {cnt['redundant']} redundant · "
+                     f"⚠️ {cnt['blurry']} verwackelt · ⤳ {cnt['outlier']} außerhalb der Reihe")
+        # Auffällige Frames einzeln auflisten
+        flagged = [(i, st, r) for i, st, r in rep["status"] if st in ("blurry", "outlier")]
+        if flagged:
+            lines.append("")
+            for i, st, r in flagged[:20]:
+                icon = "⚠️" if st == "blurry" else "⤳"
+                lines.append(f"{icon} <b>Bild {i + 1}</b> ({os.path.basename(paths[i])}): {r}")
         lines.append("")
         lines.append("<b>📉 Optimale Bildanzahl</b> (Fokus-Abdeckung bei weniger Bildern):")
         lines.append("<table cellpadding=4>")
@@ -1549,15 +1554,44 @@ class MainWindow(QMainWindow):
                          f"<td>{lvl['coverage']:.0f}%</td><td>{bar}</td></tr>")
         lines.append("</table>")
         lines.append("<i>100 % = volle Schärfen-Abdeckung wie mit allen Bildern.</i>")
-        dlg = QDialog(self); dlg.setWindowTitle(tr("Reihen-Analyse")); dlg.resize(560, 460)
+        dlg = QDialog(self); dlg.setWindowTitle(tr("Reihen-Analyse")); dlg.resize(580, 500)
         lay = QVBoxLayout(dlg)
         txt = QLabel("<br>".join(lines)); txt.setWordWrap(True); txt.setTextFormat(Qt.RichText)
         txt.setAlignment(Qt.AlignTop)
         sc = QScrollArea(); sc.setWidgetResizable(True); sc.setWidget(txt)
         lay.addWidget(sc)
+        btns = QHBoxLayout()
+        fmap = QPushButton(tr("🗺️ Fokus-Map zeigen"))
+        fmap.setToolTip(tr("Färbt jeden Bereich danach, aus welchem Foto die schärfsten Details stammen."))
+        fmap.clicked.connect(self.show_focus_map)
         close = QPushButton(tr("Schließen")); close.clicked.connect(dlg.accept)
-        lay.addWidget(close)
+        btns.addWidget(fmap); btns.addWidget(close)
+        lay.addLayout(btns)
         dlg.show(); self._analyze_dlg = dlg
+
+    def show_focus_map(self):
+        """Fokus-Herkunfts-Karte als Bild anzeigen (welcher Frame liefert wo die Schärfe)."""
+        paths = getattr(self, "_analyze_paths", None)
+        if not paths:
+            return
+        try:
+            import focus_analysis as fa
+            fmap = fa.focus_map(paths, M=getattr(self, "_analyze_M", None))
+            p = os.path.join("/tmp", "sf_focusmap.png")
+            cv2.imwrite(p, fmap)
+        except Exception as e:
+            QMessageBox.warning(self, tr("Fokus-Map"), f"{e}"); return
+        dlg = QDialog(self); dlg.setWindowTitle(tr("Fokus-Map — Herkunft der Schärfe")); dlg.resize(720, 600)
+        lay = QVBoxLayout(dlg)
+        info = QLabel(tr("Farbe = aus welchem Foto (Reihenfolge) die schärfsten Details kommen. "
+                         "Blau = frühe, Rot = späte Aufnahmen. Gleichmäßiger Verlauf = saubere Reihe."))
+        info.setWordWrap(True); info.setStyleSheet("color:#9b90b5;font-size:11px;")
+        lay.addWidget(info)
+        pic = QLabel(); pic.setAlignment(Qt.AlignCenter)
+        pic.setPixmap(QPixmap(p).scaled(680, 500, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        lay.addWidget(pic, 1)
+        close = QPushButton(tr("Schließen")); close.clicked.connect(dlg.accept); lay.addWidget(close)
+        dlg.show(); self._fmap_dlg = dlg
 
     def open_dof(self):
         """DOF-Rechner / Shooting-Assistent: Optik-Parameter → Schärfentiefe, Schrittweite,

@@ -1149,7 +1149,23 @@ def process(args, input_dir, work_dir):
             srcs = [cv2.imread(os.path.join(selected_dir, f.name), cv2.IMREAD_UNCHANGED) for f in kept[:12]]
             srcs = [s for s in srcs if s is not None]
             q = fa.stack_quality(res, srcs if len(srcs) >= 3 else None)
-            print(f"\n== Stack-Qualität: {q['score']}/100 ==")
+            # Fokus-Abdeckung der verwendeten Frames -> "Fokusbereich vollständig?"
+            try:
+                M = fa.sharpness_matrix([f.path for f in kept], grid=12, log=lambda *a: None)
+                tp = M.max(axis=0); posv = tp[tp > 0]
+                if posv.size:
+                    ref = float(np.median(np.sort(posv)[-max(1, len(posv) // 4):]))
+                    valid = tp > 0.15 * float(np.median(posv))
+                    cov = float(((tp >= 0.25 * ref) & valid).sum() / max(1, valid.sum()))
+                    q["focus_coverage"] = round(100 * cov, 1)
+                    q["focus_complete"] = cov >= 0.92
+                    q["findings"].insert(0, "Fokusbereich vollständig" if cov >= 0.92
+                                         else f"Fokusbereich evtl. mit Lücken ({cov*100:.0f} % abgedeckt)")
+                    if cov < 0.92:
+                        q["score"] = max(0, q["score"] - 8)
+            except Exception:
+                pass
+            print(f"\n== Stack-Konfidenz: {q['score']}/100 ==")
             for r in q["findings"]:
                 print(f"   • {r}")
             with open(os.path.join(work_dir, "quality.json"), "w") as fh:

@@ -138,6 +138,78 @@ def stack_optimizer(M, paths, levels=(1.0, 0.8, 0.6, 0.4), cover_thresh=0.8):
     return {"order": order, "levels": out_levels, "total_tiles": total}
 
 
+def analyze_series(paths, grid=12, max_side=1000, log=print):
+    """Komplette Aufnahmeanalyse in einem Schritt: pro Frame ein Status
+    (✓ trägt bei / ♻ redundant / ⚠ verwackelt / ⤳ außerhalb der Reihe) + Sweep,
+    Abdeckungs-Vollständigkeit und Optimizer-Kurve."""
+    M = sharpness_matrix(paths, grid, max_side, log)
+    n = len(paths)
+    blurry = dict((i, r) for i, _name, r in detect_blurry(M, paths))
+    sweep = focus_sweep(M, paths)
+    contrib = sweep["contrib"]
+    valid = sweep["valid_mask"]
+    winners = sweep["winners"]
+
+    # "Außerhalb der Reihe": Frame, dessen gewonnene Kacheln räumlich weit von denen seiner
+    # zeitlichen Nachbarn liegen (passt nicht in den wandernden Fokus). Schwerpunkt je Frame.
+    def centroid(i):
+        tiles = [t for t in range(len(winners)) if valid[t] and winners[t] == i]
+        if not tiles:
+            return None
+        ys = [t // grid for t in tiles]; xs = [t % grid for t in tiles]
+        return (float(np.mean(ys)), float(np.mean(xs)))
+    cents = [centroid(i) for i in range(n)]
+    out_of_seq = set()
+    seq = [i for i in range(n) if cents[i] is not None]
+    for k, i in enumerate(seq):
+        neigh = [cents[j] for j in seq[max(0, k - 2):k] + seq[k + 1:k + 3] if cents[j]]
+        if len(neigh) >= 2:
+            my = cents[i]
+            md = np.median([np.hypot(my[0] - c[0], my[1] - c[1]) for c in neigh])
+            if md > grid * 0.55:                 # Sprung > ~halbe Bildbreite = Ausreißer
+                out_of_seq.add(i)
+
+    status = []
+    for i in range(n):
+        if i in blurry:
+            status.append((i, "blurry", f"verwackelt/unscharf ({int(blurry[i]*100)} % der Serien-Schärfe)"))
+        elif i in out_of_seq:
+            status.append((i, "outlier", "außerhalb der Fokusreihe (passt nicht in den Verlauf)"))
+        elif contrib[i] > 0:
+            status.append((i, "good", f"trägt bei ({int(contrib[i])} Kacheln)"))
+        else:
+            status.append((i, "redundant", "redundant (kein neuer Schärfe-Beitrag)"))
+
+    # Fokusbereich vollständig? Anteil der Inhalts-Kacheln, die in IRGENDEINEM Frame scharf werden.
+    tile_peak = M.max(axis=0)
+    pos = tile_peak[tile_peak > 0]
+    sharp_ref = float(np.median(np.sort(pos)[-max(1, len(pos)//4):])) if pos.size else 0.0
+    content = valid
+    sharp_enough = (tile_peak >= 0.25 * sharp_ref) & content
+    coverage = float(sharp_enough.sum() / max(1, content.sum()))
+    complete = coverage >= 0.92
+
+    opt = stack_optimizer(M, paths)
+    return {"M": M, "n": n, "blurry": blurry, "status": status, "sweep": sweep,
+            "coverage": round(100 * coverage, 1), "complete": complete, "optimizer": opt}
+
+
+def focus_map(paths, M=None, out_size=None, grid=12):
+    """Fokus-Herkunfts-Karte: färbt jeden Bereich danach, AUS WELCHEM Frame die schärfsten
+    Details dort stammen (Regenbogen über die Frame-Reihenfolge). Lehrreich + zeigt Lücken."""
+    if M is None:
+        M = sharpness_matrix(paths, grid=grid, log=lambda *a: None)
+    n = len(paths)
+    winners = M.argmax(axis=0).reshape(grid, grid).astype(np.float32)
+    # Frame-Index → Farbton (0..255), per Colormap einfärben
+    idx = (winners / max(1, n - 1) * 255).astype(np.uint8)
+    color = cv2.applyColorMap(idx, cv2.COLORMAP_JET)
+    if out_size is None:
+        ref = cv2.imread(paths[0], cv2.IMREAD_REDUCED_COLOR_4)
+        out_size = (ref.shape[1], ref.shape[0]) if ref is not None else (640, 480)
+    return cv2.resize(color, out_size, interpolation=cv2.INTER_NEAREST)
+
+
 # ---------------------------------------------------------------- Optik (DOF) ----
 
 SENSORS = {                     # Zerstreuungskreis (circle of confusion) in mm
