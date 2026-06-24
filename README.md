@@ -12,7 +12,9 @@ cross‑platform (Windows / macOS / Linux).
 
 - **One‑click Automatic** — picks the usable frames, aligns them, merges them into a
   fully‑sharp image and sharpens gently. **Beginner** and **Pro** mode.
-- **Two tasks, one app:** 🔬 **Macro** (focus stacking) and 🌌 **Astro** (star stacking).
+- **Three modules, one app:** 🔬 **Macro** (focus stacking, with Product/Coin/Food presets),
+  🌌 **Astro** (star stacking) and 🌗 **Hybrid** (Moon/Sun **mosaic** + **Focus+Astro**:
+  denoise each position, then focus‑stack).
 - **Own engine** (OpenCV/NumPy) — no external stacking software required.
 - **RAW** (ARW/NEF/CR2/DNG …) developed faithfully to 16‑bit before stacking; **EXIF kept**.
 - **Built‑in Camera‑Raw editor:** exposure/contrast/white balance, **tone curve**,
@@ -23,7 +25,7 @@ cross‑platform (Windows / macOS / Linux).
 - **Astro:** calibration (darks/flats/bias), star alignment, **Sigma/Winsorized rejection**
   (removes satellites/hot pixels), background extraction, **explainable sub‑grading**
   (FWHM, star count, elongation/guiding, clouds, trails — bad subs dropped *with reasons*),
-  32‑bit linear export for GraXpert/StarNet++/PixInsight.
+  32‑bit linear export for GraXpert/StarNet++/PixInsight. **FITS** read & write (optional, via astropy).
 - **Large stacks** are streamed in bundles (memory‑friendly).
 
 ## Runs everywhere — AI is optional

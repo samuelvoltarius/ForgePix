@@ -12,7 +12,9 @@ plattformübergreifend (Windows / macOS / Linux).
 
 - **Ein‑Klick‑Automatik** — wählt brauchbare Fotos aus, richtet sie aus, verschmilzt sie zu
   einem durchgehend scharfen Bild und schärft schonend nach. **Anfänger‑** und **Profi‑Modus**.
-- **Zwei Aufgaben, eine App:** 🔬 **Makro** (Fokus‑Stacking) und 🌌 **Astro** (Stern‑Stacking).
+- **Drei Module, eine App:** 🔬 **Makro** (Fokus‑Stacking, mit Presets Produkte/Münzen/Food),
+  🌌 **Astro** (Stern‑Stacking) und 🌗 **Hybrid** (Mond‑/Sonnen‑**Mosaik** + **Fokus+Astro**:
+  je Position erst entrauschen, dann fokus‑stacken).
 - **Eigene Engine** (OpenCV/NumPy) — keine externe Stacking‑Software nötig.
 - **RAW** (ARW/NEF/CR2/DNG …) treu in 16‑bit entwickelt, **EXIF bleibt erhalten**.
 - **Eingebauter Camera‑Raw‑Editor:** Belichtung/Kontrast/Weißabgleich, **Tonwertkurve**,
@@ -23,7 +25,7 @@ plattformübergreifend (Windows / macOS / Linux).
 - **Astro:** Kalibrierung (Darks/Flats/Bias), Stern‑Ausrichtung, **Sigma/Winsor‑Rejection**
   (entfernt Satelliten/Hot‑Pixel), Hintergrund‑Extraktion, **erklärbare Sub‑Bewertung**
   (FWHM, Sternzahl, Elongation/Guiding, Wolken, Spuren — schlechte Subs fliegen raus *mit Begründung*),
-  32‑bit‑Linear‑Export für GraXpert/StarNet++/PixInsight.
+  32‑bit‑Linear‑Export für GraXpert/StarNet++/PixInsight. **FITS** lesen & schreiben (optional, via astropy).
 - **Große Stacks** werden gebündelt gestreamt (speicherschonend).
 
 ## Läuft überall — KI ist optional
