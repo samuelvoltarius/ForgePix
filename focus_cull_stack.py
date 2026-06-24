@@ -286,20 +286,15 @@ def suggest_settings(frames, endpoint, model, api_key=None):
         "Hoeher=strenger. Bei sauberem Sweep 0.3-0.45, bei vielen Wacklern hoeher.\n"
         "- abs_min (0-100): Frame raus, wenn Schaerfe darunter (strukturlos). Meist 10-20.\n"
         "- dedup (bool): nur true, wenn echte Doppelaufnahmen vermutet werden (bei Stacks meist false).\n"
-        "- bunch (int): >20 Frames in Buendeln stacken, sonst 0. Vorschlag z.B. 12 bei vielen Frames.\n"
         "- vlm_qc (bool): true nur wenn Wind/Bewegung wahrscheinlich (Outdoor-Pflanze o.ae.).\n"
-        "Stacker-Parameter (an ShineStacker):\n"
-        "- algo: 'pyramid' (robust, Standard) oder 'depthmap' (kann bei glatten Flaechen sauberer sein).\n"
+        "Stacker-Parameter (eigene Engine):\n"
         "- transform: 'rigid' (Stativ/Makroschlitten, Standard) oder 'homography' (Freihand/Perspektive).\n"
         "- detector: 'ORB' (schnell, Standard) oder 'SIFT' (robuster bei wenig Textur, langsamer).\n"
-        "- balance_channel: 'LUMI'(Standard)/'RGB'/'HSV'/'HLS'/'LAB' — RGB/LAB bei Farbstich-Drift.\n"
-        "- balance_map: 'LINEAR'(Standard)/'GAMMA'/'MATCH_HIST'.\n"
         "- sharpen (0-50): leichtes Nachschaerfen des Ergebnisses in %, 0=aus. Makro oft 10-25.\n"
         "- reverse (bool): true, wenn der Sweep hinten->vorne fotografiert wurde.\n"
         "Antworte AUSSCHLIESSLICH als JSON: "
-        '{"dip_ratio":0.4,"abs_min":15,"dedup":false,"bunch":0,"vlm_qc":false,'
-        '"algo":"pyramid","transform":"rigid","detector":"ORB",'
-        '"balance_channel":"LUMI","balance_map":"LINEAR","sharpen":0,"reverse":false,'
+        '{"dip_ratio":0.4,"abs_min":15,"dedup":false,"vlm_qc":false,'
+        '"transform":"rigid","detector":"ORB","sharpen":0,"reverse":false,'
         '"subject":"...","rationale":"kurze Begruendung auf Deutsch"}'
     )
     content = [{"type": "text", "text": prompt}]
@@ -309,9 +304,8 @@ def suggest_settings(frames, endpoint, model, api_key=None):
     txt = _vlm_chat(endpoint, model, [{"role": "user", "content": content}],
                     max_tokens=500, api_key=api_key)
     s = txt.find("{"); e = txt.rfind("}")
-    out = {"dip_ratio": 0.4, "abs_min": 15.0, "dedup": False, "bunch": 0,
-           "vlm_qc": False, "algo": "pyramid", "transform": "rigid", "detector": "ORB",
-           "balance_channel": "LUMI", "balance_map": "LINEAR", "sharpen": 0.0,
+    out = {"dip_ratio": 0.4, "abs_min": 15.0, "dedup": False,
+           "vlm_qc": False, "transform": "rigid", "detector": "ORB", "sharpen": 0.0,
            "reverse": False, "subject": "", "rationale": "(keine Antwort geparst)"}
     if s >= 0 and e > s:
         try:

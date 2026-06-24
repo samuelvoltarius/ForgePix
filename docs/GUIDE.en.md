@@ -46,6 +46,19 @@ Great for products, coins, insects, food.
 - **Presets:** Products / Coins / Food set sensible starting values.
 - **Output:** sharp 16-bit image + optional Photoshop-layered TIFF for retouching.
 
+**🔍 Focus tools** (Pro mode, "Selection" step):
+- **Drop shaky/blurry frames automatically** — removes photos that are sharp *nowhere*
+  (shake/misfocus), with reasons in the log. On by default in Automatic.
+- **🔍 Analyse series** — examines the focus series *before* stacking: which photos are shaky,
+  which are redundant (no new sharpness contribution), which image area carries the focus, and —
+  as a **stack optimizer** — how much sharpness coverage remains with fewer frames (e.g. 40 →
+  99%, 30 → 98%, 20 → 95%). So you can decide how many frames are really needed.
+- **📐 DOF calculator / shooting assistant** — enter sensor, focal length, aperture and
+  magnification (e.g. 1:1) or distance → depth of field per frame, recommended **step size** and
+  **number of frames** for the desired subject depth. Perfect e.g. for A7V + 105mm macro.
+- **Stack quality** — after each stack a score (0–100) with findings (sharpness, halos,
+  ghosting) is automatically written to the log.
+
 ### 🌌 Astro
 Many frames of the same sky area are aligned and **averaged** to **reduce noise**. Bad frames
 are dropped automatically (with reasons).

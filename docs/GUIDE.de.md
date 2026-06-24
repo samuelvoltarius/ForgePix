@@ -46,6 +46,20 @@ Mehrere Nahaufnahmen, bei denen der Fokus **von vorne nach hinten** wandert, wer
 - **Vorlagen:** Produkte / Münzen / Food setzen sinnvolle Startwerte.
 - **Ergebnis:** scharfes 16-bit-Bild + optional Photoshop-Ebenen-TIFF zum Nachpinseln.
 
+**🔍 Fokus-Werkzeuge** (Profi-Modus, Schritt „Auswahl"):
+- **Verwackelte/unscharfe automatisch aussortieren** — wirft Fotos raus, die *nirgends* scharf
+  sind (Verwackler/Fehlfokus), mit Begründung im Log. In der Automatik standardmäßig an.
+- **🔍 Reihe analysieren** — untersucht die Fokusreihe *bevor* du stackst: welche Bilder
+  verwackelt sind, welche redundant sind (kein neuer Schärfe-Beitrag), welcher Bildbereich den
+  Fokus trägt und — als **Stack-Optimizer** — wie viel Schärfen-Abdeckung bei weniger Bildern
+  bleibt (z. B. 40 Bilder → 99 %, 30 → 98 %, 20 → 95 %). So entscheidest du, wie viele Bilder
+  wirklich nötig sind.
+- **📐 DOF-Rechner / Shooting-Assistent** — Sensor, Brennweite, Blende und Abbildung (z. B. 1:1)
+  oder Distanz eingeben → Schärfentiefe je Bild, empfohlene **Schrittweite** und **benötigte
+  Bildanzahl** für die gewünschte Motivtiefe. Perfekt z. B. für A7V + 105 mm Makro.
+- **Stack-Qualität** — nach jedem Stack wird automatisch ein Score (0–100) mit Befunden
+  (Schärfe, Halos, Ghosting) ins Log geschrieben.
+
 ### 🌌 Astro
 Viele Aufnahmen desselben Himmelsausschnitts werden ausgerichtet und **gemittelt**, um
 **Rauschen zu senken**. Schlechte Aufnahmen werden automatisch aussortiert (mit Begründung).
