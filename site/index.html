@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ForgePix — Many photos in, one perfect photo out</title>
-<meta name="description" content="ForgePix is a free app that combines a series of photos into one razor-sharp picture — automatically. Great for close-ups, the night sky and silky water. Windows, Mac &amp; Linux. No account, works offline.">
+<title>ForgePix — Automatic focus stacking for macro photos</title>
+<meta name="description" content="ForgePix (Beta) — automatic focus stacking and computational photography for macro, astro and long-exposure series. Runs locally on your own computer, AI optional. Free &amp; open source for Windows, Mac &amp; Linux.">
 <meta name="theme-color" content="#121316">
-<meta property="og:title" content="ForgePix — Many photos in, one perfect photo out">
+<meta property="og:title" content="ForgePix — Automatic focus stacking, free &amp; open source">
 <meta property="og:description" content="A free app that turns a series of photos into one razor-sharp image — automatically. Close-ups, night sky, silky water.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://forgepix.app">
@@ -36,6 +36,8 @@
   .nav-inner{display:flex;align-items:center;gap:18px;height:62px}
   .brand{display:flex;align-items:center;gap:11px;font-weight:700;font-size:18px;letter-spacing:.2px}
   .brand img{width:32px;height:32px;border-radius:8px}
+  .brand .beta{margin-left:7px;font-size:11px;font-weight:700;letter-spacing:.6px;color:var(--green);
+    border:1px solid var(--green-dim);border-radius:6px;padding:1px 6px;text-transform:uppercase}
   nav.links{margin-left:auto;display:flex;gap:22px;align-items:center}
   nav.links a{color:var(--soft);font-size:14.5px;font-weight:500}
   nav.links a:hover{color:#fff}
@@ -63,8 +65,10 @@
   h1{font-size:clamp(32px,6.4vw,50px);line-height:1.07;margin:0 0 18px;letter-spacing:-1px;font-weight:800}
   h1 .g{color:var(--green)}
   .lead{font-size:19px;color:var(--soft);max-width:540px;margin:0 0 14px}
-  .sub{font-size:15.5px;color:var(--muted);max-width:520px;margin:0 0 28px}
-  .cta{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:20px}
+  .sub{font-size:15.5px;color:var(--muted);max-width:520px;margin:0 0 26px}
+  .cta{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:16px}
+  .also{font-size:14px;color:var(--muted);max-width:520px;margin:0 0 22px}
+  .also b{color:var(--soft);font-weight:600}
   .meta{display:flex;gap:18px;flex-wrap:wrap;font-size:13.5px;color:var(--muted)}
   .meta span{display:inline-flex;align-items:center;gap:7px}
   .meta b{color:var(--green);font-weight:700}
@@ -103,6 +107,16 @@
   .gal figure{margin:0;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--card)}
   .gal img{width:100%;aspect-ratio:16/10;object-fit:cover}
   .gal figcaption{padding:10px 14px;font-size:13px;color:var(--muted)}
+  .results{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+  .results figure{margin:0;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#0b0c10}
+  .results img{width:100%;aspect-ratio:4/3;object-fit:cover}
+  .results figcaption{padding:11px 15px;font-size:13.5px;color:var(--soft)}
+  .ba-h{text-align:center;font-size:18px;font-weight:700;margin:48px 0 0}
+  .ba{display:grid;grid-template-columns:1fr auto 1fr;gap:14px;align-items:center;max-width:780px;margin:22px auto 0}
+  .ba figure{margin:0;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#0b0c10}
+  .ba img{width:100%;aspect-ratio:1/1;object-fit:cover}
+  .ba figcaption{padding:9px 13px;font-size:12.5px;color:var(--muted)}
+  .ba .arrow{font-size:22px;color:var(--green);font-weight:800}
 
   .hl{display:grid;grid-template-columns:1.1fr .9fr;gap:40px;align-items:start}
   .hl ul{list-style:none;padding:0;margin:0}
@@ -146,7 +160,9 @@
   }
   @media(max-width:560px){
     section{padding:52px 0}
-    .why,.steps,.gal,.dl{grid-template-columns:1fr}
+    .why,.steps,.gal,.dl,.results{grid-template-columns:1fr}
+    .ba{grid-template-columns:1fr;max-width:320px}
+    .ba .arrow{transform:rotate(90deg)}
     .lead{font-size:17.5px}
     .meta{gap:10px;flex-direction:column}
     .foot-right{margin-left:0}
@@ -157,11 +173,12 @@
 
 <header class="nav">
   <div class="wrap nav-inner">
-    <a class="brand" href="#top"><img src="assets/forgepix.svg" alt="ForgePix logo">ForgePix</a>
+    <a class="brand" href="#top"><img src="assets/forgepix.svg" alt="ForgePix logo">ForgePix<span class="beta">Beta</span></a>
     <nav class="links">
       <a href="#what" data-i18n="nav_what">What it does</a>
       <a href="#how" data-i18n="nav_how">How it works</a>
       <a href="#tools" data-i18n="nav_tools">Tools</a>
+      <a href="#results" data-i18n="nav_results">Results</a>
       <a href="#download" data-i18n="nav_download">Download</a>
       <span class="lang">
         <button data-lang-btn="en">EN</button>
@@ -177,17 +194,18 @@
   <div class="wrap hero-inner">
     <div>
       <span class="pill"><span class="dot"></span> <span data-i18n="hero_pill">Free &amp; open source</span> · <span data-version>latest version</span></span>
-      <h1 data-i18n="hero_h1">Many photos in.<br>One <span class="g">perfect photo</span> out.</h1>
-      <p class="lead" data-i18n="hero_lead">ForgePix takes a bunch of photos of the same thing and automatically builds <b>one razor‑sharp picture</b> out of them.</p>
-      <p class="sub" data-i18n="hero_sub">No technical know‑how needed. Drop your photos in, press one button, get a finished image. It’s free, needs no account, and works without internet.</p>
+      <h1 data-i18n="hero_h1">Many photos in.<br>One <span class="g">sharp result</span> out.</h1>
+      <p class="lead" data-i18n="hero_lead">ForgePix turns a focus series into a clean, sharp <b>macro photo</b> — automatically, on your own computer, with no account.</p>
+      <p class="sub" data-i18n="hero_sub">Drop your photos in and press one button: it removes the bad shots, lines the rest up and builds one sharp image. Free and open source.</p>
       <div class="cta">
         <a class="btn primary" data-release-link href="https://github.com/samuelvoltarius/ForgePix/releases/latest" target="_blank" rel="noopener">⬇ <span data-i18n="hero_dl">Download free</span> · <span data-version>latest</span></a>
         <a class="btn" href="https://github.com/samuelvoltarius/ForgePix" target="_blank" rel="noopener" data-i18n="hero_github">See on GitHub</a>
       </div>
+      <p class="also" data-i18n="hero_also">Also includes tools for <b>astro stacking</b>, <b>Moon mosaics</b> and <b>long‑exposure</b> effects.</p>
       <div class="meta">
         <span><b>✓</b> <span data-i18n="meta1">Windows · Mac · Linux</span></span>
         <span><b>✓</b> <span data-i18n="meta2">No account, no internet needed</span></span>
-        <span><b>✓</b> <span data-i18n="meta3">Free forever</span></span>
+        <span><b>✓</b> <span data-i18n="meta3">Open source (MIT)</span></span>
       </div>
     </div>
     <div class="hero-shot"><img src="assets/shots/01_start.png" alt="The ForgePix start screen"></div>
@@ -244,12 +262,31 @@
     <h2 data-i18n="in_h2">Made for everyone, not just experts</h2>
     <p class="section-lead" data-i18n="in_lead">Clear buttons, a help “?” on every option, a simple Beginner mode, and a photo editor built right in.</p>
     <div class="gal">
-      <figure><img src="assets/shots/02_makro.png" alt=""><figcaption data-i18n="g1">Drop photos in and press one button.</figcaption></figure>
-      <figure><img src="assets/shots/04_editor.png" alt=""><figcaption data-i18n="g2">Built‑in editor — brightness, colour, crop.</figcaption></figure>
-      <figure><img src="assets/shots/03_astro.png" alt=""><figcaption data-i18n="g3">Night‑sky tool with simple settings.</figcaption></figure>
-      <figure><img src="assets/shots/05_focusmap.png" alt=""><figcaption data-i18n="g4">See which photo is sharp where.</figcaption></figure>
-      <figure><img src="assets/shots/06_longexp.png" alt=""><figcaption data-i18n="g5">Long exposure — slide for more or less effect.</figcaption></figure>
-      <figure><img src="assets/shots/01_start.png" alt=""><figcaption data-i18n="g6">Start screen — pick what you want to do.</figcaption></figure>
+      <figure><img src="assets/shots/01_start.png" alt=""><figcaption data-i18n="g1">Start screen — pick a module.</figcaption></figure>
+      <figure><img src="assets/shots/02_makro.png" alt=""><figcaption data-i18n="g2">Macro — one sharp result.</figcaption></figure>
+      <figure><img src="assets/shots/03_astro.png" alt=""><figcaption data-i18n="g3">Astro — deep‑sky stacking.</figcaption></figure>
+      <figure><img src="assets/shots/05_hybrid.png" alt=""><figcaption data-i18n="g4">Hybrid — Moon, Sun &amp; panoramas.</figcaption></figure>
+      <figure><img src="assets/shots/06_longexp.png" alt=""><figcaption data-i18n="g5">Long exposure — virtual exposure time.</figcaption></figure>
+      <figure><img src="assets/shots/05_focusmap.png" alt=""><figcaption data-i18n="g6">Focus map — which photo is sharp where.</figcaption></figure>
+    </div>
+  </div>
+</section>
+
+<section id="results">
+  <div class="wrap">
+    <p class="eyebrow" data-i18n="res_eyebrow">Real results</p>
+    <h2 data-i18n="res_h2">Made with ForgePix</h2>
+    <p class="section-lead" data-i18n="res_lead">Actual photos stacked in ForgePix — straight from the app.</p>
+    <div class="results">
+      <figure><img src="assets/shots/result_macro.jpg" alt="Macro focus stack"><figcaption data-i18n="res1">Macro — flies in amber, fully sharp.</figcaption></figure>
+      <figure><img src="assets/shots/result_cocoon.jpg" alt="Cocoon Nebula"><figcaption data-i18n="res2">Astro — Cocoon Nebula (IC 5146).</figcaption></figure>
+      <figure><img src="assets/shots/result_orion.jpg" alt="Orion Nebula"><figcaption data-i18n="res3">Astro — Orion Nebula (M 42).</figcaption></figure>
+    </div>
+    <h3 class="ba-h" data-i18n="ba_h">Astro: from trailed stars to round stars</h3>
+    <div class="ba">
+      <figure><img src="assets/shots/ba_before.png" alt="Stars before alignment"><figcaption data-i18n="ba1">Before — frames not aligned: stars smeared and doubled.</figcaption></figure>
+      <span class="arrow">→</span>
+      <figure><img src="assets/shots/ba_after.png" alt="Stars after alignment"><figcaption data-i18n="ba2">After — auto‑aligned: clean, round stars.</figcaption></figure>
     </div>
   </div>
 </section>
@@ -286,9 +323,9 @@
     <p class="section-lead"><span data-i18n="dl_lead">Always the latest version, straight from GitHub.</span>
       <span class="verline"><span data-i18n="dl_latest">Latest:</span> <b data-version>checking…</b></span></p>
     <div class="dl">
-      <div class="card"><div class="os">🍎</div><h4>Mac</h4><p data-i18n="dl_mac">Download the <b>.zip</b>, unzip, open the app.</p><a class="btn primary" data-os="mac" href="https://github.com/samuelvoltarius/ForgePix/releases/latest" target="_blank" rel="noopener" data-i18n="dl_btn">Download</a></div>
-      <div class="card"><div class="os">🐧</div><h4>Linux</h4><p data-i18n="dl_linux">Download the <b>.tar.gz</b>, extract, run.</p><a class="btn primary" data-os="linux" href="https://github.com/samuelvoltarius/ForgePix/releases/latest" target="_blank" rel="noopener" data-i18n="dl_btn">Download</a></div>
-      <div class="card"><div class="os">🪟</div><h4>Windows</h4><p data-i18n="dl_win">No installer yet — run from source (steps below).</p><a class="btn primary" data-os="win" href="#source" data-i18n="dl_src_btn">From source ↓</a></div>
+      <div class="card"><div class="os">🍎</div><h4>Mac</h4><p data-i18n="dl_mac">Download the ZIP, unzip, open <code>ForgePix.app</code>.</p><a class="btn primary" data-os="mac" href="https://github.com/samuelvoltarius/ForgePix/releases/latest" target="_blank" rel="noopener" data-i18n="dl_btn">Download</a></div>
+      <div class="card"><div class="os">🐧</div><h4>Linux</h4><p data-i18n="dl_linux">Download the TAR.GZ, extract, run <code>ForgePix</code>.</p><a class="btn primary" data-os="linux" href="https://github.com/samuelvoltarius/ForgePix/releases/latest" target="_blank" rel="noopener" data-i18n="dl_btn">Download</a></div>
+      <div class="card"><div class="os">🪟</div><h4>Windows</h4><p data-i18n="dl_win">Download the ZIP, unzip, run <code>ForgePix.exe</code>.</p><a class="btn primary" data-os="win" href="https://github.com/samuelvoltarius/ForgePix/releases/latest" target="_blank" rel="noopener" data-i18n="dl_btn">Download</a></div>
     </div>
     <div class="codeblock" id="source"><span class="c" data-i18n="code_comment"># prefer the command line? install from source:</span><br>
       git clone https://github.com/samuelvoltarius/ForgePix.git &amp;&amp; cd ForgePix<br>
@@ -321,13 +358,14 @@
 var I18N = {
  en:{}, /* English is the default text already in the HTML */
  de:{
-  nav_what:"Was es macht", nav_how:"So funktioniert's", nav_tools:"Werkzeuge", nav_download:"Download",
+  nav_what:"Was es macht", nav_how:"So funktioniert's", nav_tools:"Werkzeuge", nav_results:"Ergebnisse", nav_download:"Download",
   hero_pill:"Kostenlos &amp; Open Source",
-  hero_h1:"Viele Fotos rein.<br>Ein <span class=\"g\">perfektes Foto</span> raus.",
-  hero_lead:"ForgePix nimmt viele Fotos vom selben Motiv und macht daraus automatisch <b>ein gestochen scharfes Bild</b>.",
-  hero_sub:"Kein Technik‑Wissen nötig. Fotos reinziehen, einen Knopf drücken, fertiges Bild bekommen. Kostenlos, ohne Konto, funktioniert ohne Internet.",
+  hero_h1:"Viele Fotos rein.<br>Ein <span class=\"g\">scharfes Ergebnis</span> raus.",
+  hero_lead:"ForgePix macht aus einer Fokusreihe automatisch ein sauberes, scharfes <b>Makro‑Foto</b> — von allein, auf deinem eigenen Computer, ohne Konto.",
+  hero_sub:"Fotos reinziehen, einen Knopf drücken: schlechte Aufnahmen raus, der Rest ausgerichtet, ein scharfes Bild fertig. Kostenlos und Open Source.",
+  hero_also:"Mit dabei: Werkzeuge für <b>Astro‑Stacking</b>, <b>Mond‑Mosaike</b> und <b>Langzeit</b>‑Effekte.",
   hero_dl:"Gratis laden", hero_github:"Auf GitHub ansehen",
-  meta1:"Windows · Mac · Linux", meta2:"Kein Konto, kein Internet nötig", meta3:"Für immer kostenlos",
+  meta1:"Windows · Mac · Linux", meta2:"Kein Konto, kein Internet nötig", meta3:"Open Source (MIT)",
   what_eyebrow:"Was ForgePix für dich macht", what_h2:"Es übernimmt die schwierigen Teile automatisch",
   what_lead:"Du machst die Fotos — ForgePix macht daraus ein sauberes, scharfes Ergebnis. Einfach gesagt:",
   w1t:"Macht alles scharf", w1p:"Viele Fotos, die jeweils nur stellenweise scharf sind, werden zu einem Foto, das überall scharf ist.",
@@ -350,9 +388,12 @@ var I18N = {
   m4t:"Langzeitbelichtung", m4p:"Seidiges Wasser, weiche Wolken oder Lichtspuren — aus einer normalen Fotoserie. Keine Stativ‑Tricks, kein Spezialfilter nötig.",
   in_eyebrow:"Ein Blick hinein", in_h2:"Für alle gemacht, nicht nur für Profis",
   in_lead:"Klare Knöpfe, ein Hilfe‑„?“ bei jeder Option, ein einfacher Anfänger‑Modus und ein eingebauter Foto‑Editor.",
-  g1:"Fotos reinziehen und einen Knopf drücken.", g2:"Eingebauter Editor — Helligkeit, Farbe, Zuschnitt.",
-  g3:"Sternenhimmel‑Werkzeug mit einfachen Einstellungen.", g4:"Sieh, welches Foto wo scharf ist.",
-  g5:"Langzeit — Regler für mehr oder weniger Effekt.", g6:"Startbildschirm — wähl, was du tun willst.",
+  g1:"Startbildschirm — wähl ein Modul.", g2:"Makro — ein scharfes Ergebnis.",
+  g3:"Astro — Deep‑Sky‑Stacking.", g4:"Hybrid — Mond, Sonne &amp; Panoramen.",
+  g5:"Langzeit — virtuelle Belichtungszeit.", g6:"Fokus‑Karte — welches Foto wo scharf ist.",
+  res_eyebrow:"Echte Ergebnisse", res_h2:"Gemacht mit ForgePix", res_lead:"Echte Fotos, in ForgePix gestackt — direkt aus der App.",
+  res1:"Makro — Fliegen in Bernstein, durchgehend scharf.", res2:"Astro — Kokonnebel (IC 5146).", res3:"Astro — Orionnebel (M 42).",
+  ba_h:"Astro: von Strichspuren zu runden Sternen", ba1:"Vorher — Bilder nicht ausgerichtet: Sterne verschmiert/doppelt.", ba2:"Nachher — automatisch ausgerichtet: saubere, runde Sterne.",
   hl_eyebrow:"Was du bekommst", hl_h2:"Alles ist dabei",
   li1:"<b>Ein‑Knopf‑Automatik</b> — oder ein Profi‑Modus mit voller Kontrolle.",
   li2:"<b>Öffnet die Fotos deiner Kamera</b>, auch RAW — Farben bleiben echt.",
@@ -368,7 +409,7 @@ var I18N = {
   ai_quote:"„Die App erklärt, <b>warum</b> sie sich so entschieden hat.“",
   dl_eyebrow:"Hol es dir", dl_h2:"Download — kostenlos, kein Konto",
   dl_lead:"Immer die neueste Version, direkt von GitHub.", dl_latest:"Neueste:",
-  dl_mac:"Die <b>.zip</b> laden, entpacken, App öffnen.", dl_linux:"Die <b>.tar.gz</b> laden, entpacken, starten.", dl_win:"Noch kein Installer — aus dem Quellcode starten (siehe unten).",
+  dl_mac:"ZIP laden, entpacken, <code>ForgePix.app</code> öffnen.", dl_linux:"TAR.GZ laden, entpacken, <code>ForgePix</code> starten.", dl_win:"ZIP laden, entpacken, <code>ForgePix.exe</code> starten.",
   dl_btn:"Laden", dl_src_btn:"Aus Quellcode ↓", code_comment:"# lieber per Kommandozeile? Aus dem Quellcode:",
   bug_line:"🐞 Fehler gefunden oder eine Frage?", bug_report:"Auf GitHub melden →", bug_discuss:"In Discussions fragen",
   foot_tagline:"Kostenlose Foto‑Stacking‑App · MIT‑Lizenz", foot_issues:"Fehler melden", foot_discuss2:"Diskussionen",
@@ -414,10 +455,7 @@ var I18N = {
           var n=(a.name||"").toLowerCase(), u=a.browser_download_url; if(!u) return;
           if(n.indexOf("mac")>-1 || n.indexOf("dmg")>-1){ var b=document.querySelector('[data-os="mac"]'); if(b) b.href=u; }
           else if(n.indexOf("linux")>-1 || n.indexOf("appimage")>-1){ var b=document.querySelector('[data-os="linux"]'); if(b) b.href=u; }
-          else if(n.indexOf("win")>-1 || n.indexOf(".exe")>-1 || n.indexOf(".msi")>-1){
-            var w=document.querySelector('[data-os="win"]');
-            if(w){ w.href=u; w.removeAttribute("data-i18n"); w.target="_blank"; w.rel="noopener"; w.textContent="Download"; }
-          }
+          else if(n.indexOf("win")>-1 || n.indexOf(".exe")>-1 || n.indexOf(".msi")>-1){ var b=document.querySelector('[data-os="win"]'); if(b) b.href=u; }
         });
       }).catch(function(){});
   }catch(e){}
