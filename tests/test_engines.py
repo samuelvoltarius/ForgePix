@@ -574,6 +574,35 @@ class TestAstroColorAndStretch(unittest.TestCase):
         self.assertEqual(out.shape, f.shape)
 
 
+class TestLayeredTiffSurvivesExif(TmpCase):
+    """Regression: EXIF-Übernahme (eingebaut) darf Photoshop-Ebenen im TIFF NICHT plattmachen."""
+    def test_layers_preserved(self):
+        try:
+            import numpy as np
+            import tifffile
+            import stacker
+            import focus_cull_stack as F
+        except Exception:
+            self.skipTest("Abhängigkeit fehlt")
+        import shutil
+        res = (np.zeros((30, 40, 3)) + 100).astype("uint8")
+        ltif = os.path.join(self.d, "ebenen.tif")
+        stacker.write_layered_tiff(ltif, [("Ergebnis", res), ("F1", res)], flat_bgr=res)
+        with tifffile.TiffFile(ltif) as t:
+            self.assertTrue(any(tg.code == 37724 for tg in t.pages[0].tags))  # Ebenen da
+        src = os.path.join(self.d, "src.jpg")
+        import cv2
+        cv2.imwrite(src, res)
+        orig = shutil.which
+        F.shutil.which = lambda n: None if n == "exiftool" else orig(n)
+        try:
+            F.copy_exif(src, [ltif])
+        finally:
+            F.shutil.which = orig
+        with tifffile.TiffFile(ltif) as t:
+            self.assertTrue(any(tg.code == 37724 for tg in t.pages[0].tags))  # Ebenen NOCH da
+
+
 class TestStreamedGhost(unittest.TestCase):
     def test_streamed_disagreement_map(self):
         import glob

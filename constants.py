@@ -4,7 +4,7 @@ constants.py — gemeinsame Konstanten für ForgePix (eine zentrale Definition,
 damit Module nicht auseinanderlaufen).
 """
 
-VERSION = "1.16.1"
+VERSION = "1.16.2"
 
 # Kamera-RAW-Formate, die rawpy entwickeln kann
 RAW_EXTS = {".arw", ".cr2", ".cr3", ".nef", ".raf", ".rw2", ".dng", ".orf", ".pef", ".srw"}

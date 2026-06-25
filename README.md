@@ -66,7 +66,8 @@ A soft focus series becomes one fully sharp image — and you see *what* happens
   silky water/clouds, light trails, remove movers — with AI effect suggestion and a
   **virtual exposure time** slider (continuous partial averaging)).
 - **Own engine** (OpenCV/NumPy) — no external stacking software required.
-- **RAW** (ARW/NEF/CR2/DNG …) developed faithfully to 16‑bit before stacking; **EXIF kept**.
+- **RAW** (ARW/NEF/CR2/DNG …) faithfully developed to 16‑bit; **EXIF/provenance is preserved where
+  possible**: JPEG with EXIF, TIFF with core provenance, full TIFF metadata optionally via exiftool.
 - **Built‑in Camera‑Raw editor:** exposure/contrast/white balance, **tone curve**,
   **per‑color HSL**, clarity, **crop/rotate**, histogram.
 - **Retouch editor:** brush sharp areas from single frames over halos/**ghosting**, with eraser.
@@ -160,7 +161,7 @@ language menu automatically.
 ./run_tests.sh        # or: python3 -m unittest discover -s tests
 ```
 
-47 engine tests (standard library, no pytest needed) cover focus analysis, long exposure, astro,
+48 engine tests (standard library, no pytest needed) cover focus analysis, long exposure, astro,
 stacker, mosaic, export, parallel helper, module guessing, AI context, i18n completeness and a GUI
 smoke test.
 

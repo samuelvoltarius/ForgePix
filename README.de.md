@@ -67,7 +67,8 @@ Aus einer unscharfen Fokusreihe wird ein durchgehend scharfes Bild — und du si
   **ohne ND‑Filter**: seidiges Wasser/Wolken, Lichtspuren, Störer entfernen — mit KI‑Effektvorschlag
   und **virtueller Belichtungszeit** (stufenloses Teil‑Mitteln)).
 - **Eigene Engine** (OpenCV/NumPy) — keine externe Stacking‑Software nötig.
-- **RAW** (ARW/NEF/CR2/DNG …) treu in 16‑bit entwickelt, **EXIF bleibt erhalten**.
+- **RAW** (ARW/NEF/CR2/DNG …) treu in 16‑bit entwickelt; **EXIF/Provenienz wird eingebaut
+  übernommen**: JPEG mit EXIF, TIFF mit Kern‑Provenienz, vollständige TIFF‑Metadaten optional via exiftool.
 - **Eingebauter Camera‑Raw‑Editor:** Belichtung/Kontrast/Weißabgleich, **Tonwertkurve**,
   **HSL pro Farbe**, Klarheit, **Zuschneiden/Drehen**, Histogramm.
 - **Retusche‑Editor:** scharfe Stellen aus Einzelfotos über Halos/**Ghosting** pinseln, mit Radierer.
@@ -164,7 +165,7 @@ automatisch in der Sprachauswahl.
 ./run_tests.sh        # oder: python3 -m unittest discover -s tests
 ```
 
-47 Engine‑Tests (Standardbibliothek, kein pytest nötig) decken Fokus‑Analyse, Langzeit, Astro,
+48 Engine‑Tests (Standardbibliothek, kein pytest nötig) decken Fokus‑Analyse, Langzeit, Astro,
 Stacker, Mosaik, Export, Parallel‑Helfer, Modul‑Erkennung, KI‑Kontext, i18n‑Vollständigkeit und
 einen GUI‑Smoke‑Test ab.
 

@@ -545,6 +545,13 @@ def _embed_tiff_meta(src, tiffs):
     done = 0
     for t in tiffs:
         try:
+            # Ebenen-TIFFs (Photoshop ImageSourceData, Tag 37724) NICHT neu schreiben — das würde
+            # die Ebenen plattmachen. Solche Dateien beim eingebauten EXIF-Weg überspringen.
+            with tifffile.TiffFile(t) as tf:
+                if any(tg.code == 37724 for tg in tf.pages[0].tags):
+                    print(f"  EXIF (eingebaut): Ebenen-TIFF {os.path.basename(t)} übersprungen "
+                          f"(Ebenen bleiben erhalten; volle EXIF via exiftool)")
+                    continue
             # tifffile zum Lesen UND Schreiben -> kein BGR/RGB-Swap, Pixel bleiben bit-identisch
             data = tifffile.imread(t)
             # metadata=None -> tifffile belegt ImageDescription (270) nicht selbst, Platz für unsere
