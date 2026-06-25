@@ -4,6 +4,16 @@ Alle nennenswerten Änderungen an ForgePix. Format orientiert an
 [Keep a Changelog](https://keepachangelog.com/de/), Versionierung nach
 [SemVer](https://semver.org/lang/de/).
 
+## [1.16.4] – 2026-06-26
+### Behoben (Astro-Qualität — beim Verifikations-Lauf gefunden)
+- **Standard-Ausrichtung war `shift` (nur Translation):** Bei realen Datensätzen mit Feldrotation
+  führte das zu **länglichen, farbig getrennten Sternen** und einem flachen Bild (am IC 5146 / ASI294
+  nachgewiesen). Standard ist jetzt **`rotate` (Translation + Feldrotation)** — korrigiert auch
+  gedrehte Felder, funktioniert ebenso bei reiner Nachführung. Sterne werden rund.
+- **Hot-/Cold-Pixel-Korrektur standardmäßig an:** entfernt die farbigen Einzelpixel-Punkte
+  (Bayer-/Sensor-Hotpixel), die vorher als Farbsprenkel sichtbar waren.
+- Astro-Screenshot = realer IC 5146 (Kokonnebel) mit runden Sternen.
+
 ## [1.16.3] – 2026-06-26
 ### Behoben (CI)
 - **tests.yml:** `psdtags` fehlte unter den CI-Abhängigkeiten → der neue Ebenen-TIFF-Regressionstest

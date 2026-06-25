@@ -341,7 +341,10 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         self.astro_align = QComboBox()
         self.astro_align.addItem(tr("Translation (Nachführung)"), "shift")
         self.astro_align.addItem(tr("Translation + Feldrotation (Alt-Az)"), "rotate")
+        self.astro_align.setCurrentIndex(1)   # Standard: rotate — korrigiert auch Feldrotation
+        # (verschmierte/längliche Sterne); funktioniert auch bei reiner Nachführung. Sicherer Default.
         self.astro_cosmetic = QCheckBox(tr("Hot-/Cold-Pixel entfernen"))
+        self.astro_cosmetic.setChecked(True)  # Standard an: entfernt farbige Hot-Pixel-Punkte
         self.astro_drizzle = QComboBox()
         self.astro_drizzle.addItem(tr("Aus"), 1)
         self.astro_drizzle.addItem(tr("2× (feineres Sampling)"), 2)
