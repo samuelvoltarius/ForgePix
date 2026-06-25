@@ -339,6 +339,43 @@ class TestGuessModule(TmpCase):
         self.assertEqual(guess_module(self.d)[0], "makro")
 
 
+class TestAIContext(unittest.TestCase):
+    def test_wish_is_passed_through(self):
+        import focus_cull_stack as F
+
+        class A:
+            wish = "seidiges Wasser, Personen scharf"
+        ctx = F.build_ai_context([], A())  # ohne Bilder: nur der Wunsch
+        self.assertEqual(ctx.get("wish"), "seidiges Wasser, Personen scharf")
+
+    def test_empty_wish_gives_no_key(self):
+        import focus_cull_stack as F
+
+        class A:
+            wish = "  "
+        self.assertNotIn("wish", F.build_ai_context([], A()))
+
+    def test_context_injected_into_prompt(self):
+        import glob
+        import focus_cull_stack as F
+        imgs = sorted(glob.glob("testdata/amber-flies/*.jpg"))
+        if not imgs:
+            self.skipTest("keine Beispielbilder")
+        captured = {}
+        orig = F._vlm_chat
+        F._vlm_chat = lambda e, m, msg, **k: (captured.__setitem__("m", msg)
+                                              or '{"subject":"x","rationale":"y"}')
+        try:
+            frames = [F.Frame(path=p, name=os.path.basename(p), peak_sharp=10.0) for p in imgs]
+            F.suggest_settings(frames, "http://x/v1", "m",
+                               context={"exif": "105mm, f/8", "wish": "Personen scharf"})
+        finally:
+            F._vlm_chat = orig
+        text = captured["m"][0]["content"][0]["text"]
+        self.assertIn("105mm, f/8", text)
+        self.assertIn("Personen scharf", text)
+
+
 class TestParallel(unittest.TestCase):
     def test_pmap_preserves_order(self):
         from parallel import pmap

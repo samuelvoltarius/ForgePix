@@ -119,6 +119,23 @@ Oben rechts umschaltbar.
   Einstellungen und erklärt im Log, **warum**.
 - **🛠️ Profi:** voller Schritt-für-Schritt-Wizard, alle Parameter manuell, KI abschaltbar.
 
+### Wer kann was — und wann lohnt es sich?
+
+| Thema | 🌱 Anfänger | 🛠️ Profi |
+|---|---|---|
+| **Bedienung** | Ordner aufs Fenster ziehen → **fertig** (Null-Klick) | Schritt-für-Schritt-Wizard mit allen Reglern |
+| **Modul** | wird **automatisch erraten** (umschaltbar) | bewusst gewählt + feinjustiert |
+| **Einstellungen** | Software entscheidet (Heuristik), erklärt **warum** | du setzt dip/abs/Transform/Detector/Schärfen/… selbst |
+| **Aussortieren** | automatisch (verwackelt/strukturlos raus) | Schwellen selbst justierbar, Frames manuell behalten |
+| **Bearbeiten** | Camera-Raw-Editor verfügbar | + Retusche, Ghost-Map, Ebenen-Export, 16-bit |
+| **KI (optional)** | aus; Automatik läuft rein lokal | KI-Vorschlag + **Freitext-Wunsch** + Per-Frame-QC |
+| **Astro/Hybrid-Feindetails** | sinnvolle Standardwerte | Kalibrierung, Feldrotation, Sigma/Drizzle, Sub-Bewertung |
+| **Wann sinnvoll?** | Schnell, viele Serien, „einfach ein gutes Bild" | Schwierige Motive, maximale Kontrolle, Reproduzierbarkeit |
+
+**Faustregel:** Im Zweifel **Anfänger** — die Automatik ist bewusst konservativ und erklärt ihre
+Entscheidungen. Zum **Profi** wechseln, sobald du ein konkretes Problem gezielt lösen willst
+(z. B. Ghosting wegretuschieren, Astro-Subs nach FWHM filtern, eine Wunsch-Anmutung erzwingen).
+
 ---
 
 ## Bearbeiten, Vorschau & Export

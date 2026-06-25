@@ -285,9 +285,12 @@ def _encode_jpeg_dataurl(path, max_side=768):
     return "data:image/jpeg;base64," + base64.b64encode(buf.tobytes()).decode()
 
 
-def suggest_settings(frames, endpoint, model, api_key=None):
+def suggest_settings(frames, endpoint, model, api_key=None, context=None):
     """KI beurteilt repraesentative Frames + Schaerfeprofil und schlaegt
-    Pipeline-Settings vor. Gibt dict zurueck (Defaults bei Fehlern)."""
+    Pipeline-Settings vor. Gibt dict zurueck (Defaults bei Fehlern).
+
+    context (optional, alles datensparsam): {exif, coverage, quality, wish,
+    focusmap_path}. Texte gehen in den Prompt, focusmap_path als zusaetzliches Bild."""
     n = len(frames)
     peaks = [f.peak_sharp for f in frames]
     # repraesentative Frames: schaerfster, weichster, erster, letzter, Mitte
@@ -312,15 +315,35 @@ def suggest_settings(frames, endpoint, model, api_key=None):
         "- detector: 'ORB' (schnell, Standard) oder 'SIFT' (robuster bei wenig Textur, langsamer).\n"
         "- sharpen (0-50): leichtes Nachschaerfen des Ergebnisses in %, 0=aus. Makro oft 10-25.\n"
         "- reverse (bool): true, wenn der Sweep hinten->vorne fotografiert wurde.\n"
+        "Wenn die Fokus-Abdeckung Luecken hat oder mehr Aufnahmen sinnvoll waeren, sage es in der "
+        "Begruendung. Beachte einen etwaigen Nutzer-Wunsch woertlich. "
         "Antworte AUSSCHLIESSLICH als JSON: "
         '{"dip_ratio":0.4,"abs_min":15,"dedup":false,"vlm_qc":false,'
         '"transform":"rigid","detector":"ORB","sharpen":0,"reverse":false,'
         '"subject":"...","rationale":"kurze Begruendung auf Deutsch"}'
     )
+    # Zusatz-Kontext (alles optional, datensparsam): EXIF / Abdeckung / Metriken / Nutzer-Wunsch
+    ctx = context or {}
+    extra = []
+    if ctx.get("exif"):
+        extra.append("Kamera/Objektiv (EXIF): " + str(ctx["exif"]))
+    if ctx.get("coverage"):
+        extra.append("Fokus-Abdeckung: " + str(ctx["coverage"]))
+    if ctx.get("quality"):
+        extra.append("Qualitaets-Metriken: " + str(ctx["quality"]))
+    if ctx.get("wish"):
+        extra.append("Nutzer-Wunsch (woertlich beachten): " + str(ctx["wish"]))
+    if extra:
+        prompt += "\n\nZusaetzlicher Kontext:\n- " + "\n- ".join(extra)
+
     content = [{"type": "text", "text": prompt}]
     for i in sel:
         content.append({"type": "text", "text": f"Frame #{i + 1} (Schaerfe {frames[i].peak_sharp:.0f}):"})
         content.append({"type": "image_url", "image_url": {"url": _encode_jpeg_dataurl(frames[i].path)}})
+    fmp = ctx.get("focusmap_path")
+    if fmp and os.path.exists(fmp):
+        content.append({"type": "text", "text": "Fokus-Herkunfts-Karte (welcher Frame liefert wo Schaerfe):"})
+        content.append({"type": "image_url", "image_url": {"url": _encode_jpeg_dataurl(fmp)}})
     txt = _vlm_chat(endpoint, model, [{"role": "user", "content": content}],
                     max_tokens=500, api_key=api_key)
     s = txt.find("{"); e = txt.rfind("}")
@@ -334,6 +357,50 @@ def suggest_settings(frames, endpoint, model, api_key=None):
             out["rationale"] = f"JSON-Parse-Fehler: {ex}; roh: {txt[:200]}"
     out["n_frames"] = n
     return out
+
+
+def build_ai_context(paths, args, focusmap=True):
+    """Datensparsamen Zusatz-Kontext für die KI-Settings-Anfrage zusammenstellen (alles optional).
+    EXIF (Brennweite/Blende/Belichtung/ISO/Objektiv) + Nutzer-Wunsch + optional Fokus-Map-Bild."""
+    ctx = {}
+    wish = getattr(args, "wish", None)
+    if wish and str(wish).strip():
+        ctx["wish"] = str(wish).strip()
+    if not paths:
+        return ctx
+    try:
+        from focus_analysis import read_exif_optics, _exif_expo_iso
+        opt = read_exif_optics(paths[0]) or {}
+        expo, iso = _exif_expo_iso(paths[:1])
+        bits = []
+        if opt.get("focal_mm"):
+            bits.append(f"{opt['focal_mm']:.0f}mm")
+        if opt.get("f_number"):
+            bits.append(f"f/{opt['f_number']:.1f}")
+        if expo is not None:
+            bits.append(f"{expo:g}s")
+        if iso is not None:
+            bits.append(f"ISO {int(iso)}")
+        if opt.get("lens"):
+            bits.append(str(opt["lens"]))
+        elif opt.get("model"):
+            bits.append(str(opt["model"]))
+        if bits:
+            ctx["exif"] = ", ".join(bits)
+    except Exception:
+        pass
+    if focusmap and len(paths) >= 3:
+        try:
+            import tempfile
+            from focus_analysis import focus_map
+            fm = focus_map(paths)
+            if fm is not None:
+                p = os.path.join(tempfile.gettempdir(), "forgepix_ai_focusmap.png")
+                cv2.imwrite(p, fm)
+                ctx["focusmap_path"] = p
+        except Exception:
+            pass
+    return ctx
 
 
 def heuristic_settings(frames):
@@ -724,6 +791,8 @@ def main():
     ap.add_argument("--no-stack", action="store_true", help="nur cullen, nicht stacken")
     ap.add_argument("--suggest", action="store_true",
                     help="vLLM schlaegt Settings vor; gibt NUR JSON auf stdout aus")
+    ap.add_argument("--wish", default=None,
+                    help="Freitext-Wunsch an die KI (z.B. 'seidiges Wasser, Personen scharf')")
     ap.add_argument("--batch", action="store_true",
                     help="Jeder Unterordner des Eingabe-Ordners = eigener Stack")
     ap.add_argument("--watch", action="store_true",
@@ -742,7 +811,9 @@ def main():
         print(f"Analysiere {len(paths)} Bilder + frage vLLM …", file=sys.stderr)
         frames, _ = analyze(paths, args.max_side)
         try:
-            sug = suggest_settings(frames, args.vlm_endpoint, args.vlm_model, getattr(args,'vlm_key',None))
+            ctx = build_ai_context(paths, args)
+            sug = suggest_settings(frames, args.vlm_endpoint, args.vlm_model,
+                                   getattr(args, 'vlm_key', None), context=ctx)
         except Exception as e:
             print(json.dumps({"error": str(e)})); sys.exit(1)
         print(json.dumps(sug, ensure_ascii=False))  # nur JSON auf stdout
@@ -1086,7 +1157,9 @@ def process(args, input_dir, work_dir):
         if args.vlm_endpoint:
             print("== Automatik: KI bestimmt Einstellungen ==")
             try:
-                sug = suggest_settings(frames, args.vlm_endpoint, args.vlm_model, getattr(args,'vlm_key',None))
+                ctx = build_ai_context([f.path for f in frames], args)
+                sug = suggest_settings(frames, args.vlm_endpoint, args.vlm_model,
+                                       getattr(args, 'vlm_key', None), context=ctx)
             except Exception as e:
                 print(f"  KI nicht erreichbar ({e}) — nutze Heuristik", file=sys.stderr)
         if sug is None:

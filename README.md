@@ -85,7 +85,9 @@ Automatic works **completely without AI** (settings derived from the measured sh
 profile). **No Ollama, no server, no model download.** Optionally connect an OpenAI‑compatible
 server (llama.cpp / LM Studio / vLLM) **or a provider with API key** (OpenAI / OpenRouter).
 The AI only **advises & checks** — it never touches pixels. *“The software explains why it
-chose these settings.”*
+chose these settings.”* You can add a **free‑text wish** (e.g. “silky water, people sharp”) and the
+suggestion also gets **EXIF basics** + the **focus map**. Setup states exactly what is sent — a few
+preview frames, the sharpness profile, EXIF basics and your wish; no original files, no location data.
 
 Pros can optionally **connect Siril** (if installed) as an alternative astro engine, and
 hand off to **GraXpert / StarNet++** — none of it is required.
@@ -147,8 +149,9 @@ language menu automatically.
 ./run_tests.sh        # or: python3 -m unittest discover -s tests
 ```
 
-32 engine tests (standard library, no pytest needed) cover focus analysis, long exposure, astro,
-stacker, mosaic, export, parallel helper, module guessing, i18n completeness and a GUI smoke test.
+35 engine tests (standard library, no pytest needed) cover focus analysis, long exposure, astro,
+stacker, mosaic, export, parallel helper, module guessing, AI context, i18n completeness and a GUI
+smoke test.
 
 ## License
 

@@ -118,6 +118,23 @@ Toggle at the top right.
   settings and explains **why** in the log.
 - **🛠️ Pro:** full step-by-step wizard, all parameters manual, AI can be turned off.
 
+### Who can do what — and when is it worth it?
+
+| Topic | 🌱 Beginner | 🛠️ Pro |
+|---|---|---|
+| **Operation** | drop a folder on the window → **done** (zero‑click) | step‑by‑step wizard with every control |
+| **Module** | **auto‑guessed** (switchable) | chosen deliberately + fine‑tuned |
+| **Settings** | software decides (heuristic), explains **why** | you set dip/abs/transform/detector/sharpen/… |
+| **Culling** | automatic (shaky/structureless dropped) | thresholds adjustable, keep frames manually |
+| **Editing** | Camera‑Raw editor available | + retouch, ghost map, layered export, 16‑bit |
+| **AI (optional)** | off; automatic runs fully local | AI suggestion + **free‑text wish** + per‑frame QC |
+| **Astro/Hybrid details** | sensible defaults | calibration, field rotation, sigma/drizzle, sub‑grading |
+| **When useful?** | fast, many series, “just a good image” | tricky subjects, full control, reproducibility |
+
+**Rule of thumb:** when in doubt, **Beginner** — the automatic is deliberately conservative and
+explains its choices. Switch to **Pro** the moment you want to solve a specific problem (retouch
+ghosting, filter astro subs by FWHM, force a desired look).
+
 ---
 
 ## Edit, preview & export

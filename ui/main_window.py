@@ -643,6 +643,15 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         vg.addLayout(_row("API-Schlüssel", self.vlm_key,
                           "Geheimer Schlüssel des Anbieters. Bleibt lokal gespeichert. "
                           "Hinweis: das ChatGPT-Abo ist KEIN API-Schlüssel."))
+        self.vlm_wish = QLineEdit()
+        self.vlm_wish.setPlaceholderText(tr("z. B. „seidiges Wasser, Personen scharf"))
+        vg.addLayout(_row(tr("Wunsch (optional)"), self.vlm_wish,
+                          tr("Freitext an die KI. Wird beim KI-Vorschlag wörtlich berücksichtigt.")))
+        # Transparenz: was geht an die KI?
+        _note = QLabel(tr("An die KI gehen nur: einige Vorschau-Frames, das Schärfeprofil, "
+                          "EXIF-Eckdaten und dein Wunsch. Keine Originaldateien, keine Standortdaten."))
+        _note.setWordWrap(True); _note.setStyleSheet("color:#9aa09a;font-size:11px;")
+        vg.addWidget(_note)
         self.suggest_btn = QPushButton(tr("🤖  KI schlägt Settings vor"))
         self.suggest_btn.setToolTip("Analysiert eine Auswahl der Frames + das Schärfeprofil "
                                     "und schlägt Einstellungen vor (braucht KI-Server).")
@@ -1121,6 +1130,8 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
                      "--vlm-model", self.vlm_model.text().strip() or "gpt-4o-mini"]
             if self.vlm_key.text().strip():
                 args += ["--vlm-key", self.vlm_key.text().strip()]
+            if self.vlm_wish.text().strip():
+                args += ["--wish", self.vlm_wish.text().strip()]
         chosen = [k for k, cb in self.exp_targets.items() if cb.isChecked()]
         if chosen:
             args += ["--export", ",".join(chosen)]
@@ -1281,6 +1292,8 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
                 "--max-side", str(self.maxside.value())]
         if self.vlm_key.text().strip():
             args += ["--vlm-key", self.vlm_key.text().strip()]
+        if self.vlm_wish.text().strip():
+            args += ["--wish", self.vlm_wish.text().strip()]
         self._append("\n🤖 Hole KI-Vorschlag …\n")
         self.suggest_btn.setEnabled(False); self.run_btn.setEnabled(False); self.auto_btn.setEnabled(False)
         self.sug_proc = QProcess(self)

@@ -86,7 +86,10 @@ Die Automatik funktioniert **komplett ohne KI** (Einstellungen aus dem gemessene
 **Kein Ollama, kein Server, kein Modell‑Download.** Optional ein OpenAI‑kompatibler Server
 (llama.cpp / LM Studio / vLLM) **oder ein Anbieter mit API‑Schlüssel** (OpenAI / OpenRouter).
 Die KI **berät & prüft** nur — sie bearbeitet nie Pixel. *„Die Software erklärt, warum sie
-diese Einstellungen gewählt hat.“*
+diese Einstellungen gewählt hat.“* Du kannst einen **Freitext-Wunsch** angeben (z. B. „seidiges
+Wasser, Personen scharf"); der Vorschlag bekommt zusätzlich **EXIF-Eckdaten** + die **Fokus-Map**.
+Das Setup zeigt genau, was gesendet wird — einige Vorschau-Frames, das Schärfeprofil, EXIF-Eckdaten
+und dein Wunsch; keine Originaldateien, keine Standortdaten.
 
 Profis können optional **Siril verbinden** (falls installiert) als alternative Astro‑Engine und
 an **GraXpert / StarNet++** weitergeben — nichts davon ist Pflicht.
@@ -150,9 +153,9 @@ automatisch in der Sprachauswahl.
 ./run_tests.sh        # oder: python3 -m unittest discover -s tests
 ```
 
-32 Engine‑Tests (Standardbibliothek, kein pytest nötig) decken Fokus‑Analyse, Langzeit, Astro,
-Stacker, Mosaik, Export, Parallel‑Helfer, Modul‑Erkennung, i18n‑Vollständigkeit und einen
-GUI‑Smoke‑Test ab.
+35 Engine‑Tests (Standardbibliothek, kein pytest nötig) decken Fokus‑Analyse, Langzeit, Astro,
+Stacker, Mosaik, Export, Parallel‑Helfer, Modul‑Erkennung, KI‑Kontext, i18n‑Vollständigkeit und
+einen GUI‑Smoke‑Test ab.
 
 ## Lizenz
 
