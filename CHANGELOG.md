@@ -4,6 +4,13 @@ Alle nennenswerten Änderungen an ForgePix. Format orientiert an
 [Keep a Changelog](https://keepachangelog.com/de/), Versionierung nach
 [SemVer](https://semver.org/lang/de/).
 
+## [1.16.11] – 2026-06-26
+### Geändert (Dual-Band: sauberere Linien-Trennung)
+- **HOO trennt Hα und OIII jetzt sauber in zwei Signale:** Hα aus dem **Rot**-Kanal, OIII aus dem
+  **Blau**-Kanal (statt `max(G,B)` — Grün ist beim OSC am stärksten Hα-kontaminiert). Zusätzlich
+  Hintergrund pro Kanal abziehen + **leichte lineare Entmischung** (Hα −= k·OIII, OIII −= k·Hα)
+  gegen Restkreuztalk. Ergebnis: reineres Rot/Teal, neutraler Hintergrund — klar zwei Töne.
+
 ## [1.16.10] – 2026-06-26
 ### Hinzugefügt (Dual-Band-Farbe — HOO)
 - **Dual-Band wird jetzt als HOO verarbeitet:** Bei Dual-Band/Schmalband (Ha+OIII) werden die

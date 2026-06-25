@@ -278,24 +278,34 @@ def background_extract(f, strength=0.12):
     return np.clip(out, 0, 1)
 
 
-def dualband_hoo(bgr):
-    """Dual-Band-OSC (Hα+OIII) sauber trennen und als HOO-Palette neu kombinieren.
-    Hα (rot, ~656 nm) liegt im Rot-Kanal, OIII (teal, ~500 nm) in Grün/Blau. Beide werden
-    extrahiert und GETRENNT normalisiert (damit das oft schwächere OIII sichtbar wird), dann:
-    Rot = Hα, Grün+Blau = OIII → rote Hα-Nebel UND tealfarbene OIII-Bereiche statt alles rot.
+def dualband_hoo(bgr, unmix=0.20):
+    """Dual-Band-OSC (Hα+OIII) SAUBER in zwei Signale trennen und als HOO neu kombinieren.
+
+    Übersprechen beim OSC-Sensor: Hα (656 nm) trifft v. a. Rot, leckt etwas in Grün; OIII (500 nm)
+    trifft Grün+Blau, leckt etwas in Rot. Darum:
+      - Hα  = Rot-Kanal (sieht fast nur Hα),
+      - OIII = Blau-Kanal (sauberstes OIII; Grün ist am stärksten Hα-kontaminiert → nicht nehmen),
+      - Hintergrund pro Kanal abziehen (sauberes Signal über 0),
+      - leichte lineare ENTMISCHUNG (Hα := Hα − k·OIII, OIII := OIII − k·Hα) gegen Restkreuztalk,
+      - beide einzeln normalisieren, dann Rot=Hα, Grün+Blau=OIII → klar zwei Töne (rot + teal).
     Treu: nur Kanal-Trennung/-Skalierung, nichts erfunden."""
     if bgr is None or bgr.ndim != 3 or bgr.shape[2] != 3:
         return bgr
     f = bgr.astype(np.float32)
-    b, g, r = f[..., 0], f[..., 1], f[..., 2]
-    ha = r
-    oiii = np.maximum(g, b)                    # OIII verteilt sich auf Grün und Blau
+    b, _, r = f[..., 0], f[..., 1], f[..., 2]
+
+    def _sub_bg(x):
+        return np.clip(x - float(np.quantile(x, 0.30)), 0, None)   # Himmelshintergrund weg
+
+    ha, oiii = _sub_bg(r), _sub_bg(b)
+    ha2 = np.clip(ha - unmix * oiii, 0, None)     # Restkreuztalk rausrechnen
+    oiii2 = np.clip(oiii - unmix * ha, 0, None)
 
     def _norm(x):
-        lo = float(np.quantile(x, 0.30)); hi = float(np.quantile(x, 0.999))
-        return np.clip((x - lo) / max(hi - lo, 1e-6), 0, 1)
+        hi = float(np.quantile(x, 0.999))
+        return np.clip(x / max(hi, 1e-6), 0, 1)
 
-    ha_n, oiii_n = _norm(ha), _norm(oiii)
+    ha_n, oiii_n = _norm(ha2), _norm(oiii2)
     out = np.zeros_like(f)
     out[..., 2] = ha_n                          # R = Hα (rot)
     out[..., 1] = oiii_n                        # G = OIII
