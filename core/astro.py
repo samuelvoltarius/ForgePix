@@ -137,6 +137,45 @@ def cosmetic_correct(f, strength=3.0):
     return out
 
 
+def _star_centroids(g, max_stars=150):
+    """Sternzentren (sub-pixel) als Punktwolke: Hintergrund abziehen, Otsu-Schwelle, kleine helle
+    Blobs als Sterne, nach Helligkeit sortiert. Robuster fürs Ausrichten als allgemeine Features."""
+    a = (np.clip(g, 0, 1) * 255).astype(np.uint8)
+    bg = cv2.medianBlur(a, 31)
+    sub = cv2.subtract(a, bg)
+    _, th = cv2.threshold(sub, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    n, _lbl, stats, cent = cv2.connectedComponentsWithStats(th, connectivity=8)
+    stars = [(cent[i][0], cent[i][1], int(stats[i, cv2.CC_STAT_AREA]))
+             for i in range(1, n) if 2 <= stats[i, cv2.CC_STAT_AREA] <= 600]
+    stars.sort(key=lambda s: -s[2])
+    return np.array([[s[0], s[1]] for s in stars[:max_stars]], np.float32)
+
+
+def _estimate_star_transform(refg, img_g):
+    """Translation + Feldrotation aus tatsächlichen STERNPOSITIONEN schätzen (genauer = rundere
+    Sterne). Grobe Verschiebung per Phasenkorrelation, dann Nearest-Neighbor-Match + RANSAC-Affine.
+    Gibt 2x3-Matrix oder None (dann Fallback ORB/Phasenkorrelation)."""
+    ref_pts, img_pts = _star_centroids(refg), _star_centroids(img_g)
+    if len(ref_pts) < 8 or len(img_pts) < 8:
+        return None
+    win = cv2.createHanningWindow((refg.shape[1], refg.shape[0]), cv2.CV_32F)
+    (dx, dy), _r = cv2.phaseCorrelate(refg * win, img_g * win)   # f um (dx,dy) -> ref
+    shifted = img_pts + np.float32([dx, dy])
+    src, dst = [], []
+    for rp in ref_pts:                                          # ref-Stern -> nächster img-Stern
+        d = np.linalg.norm(shifted - rp, axis=1)
+        j = int(np.argmin(d))
+        if d[j] < 6.0:                                          # Toleranz in px
+            src.append(img_pts[j]); dst.append(rp)
+    if len(src) < 6:
+        return None
+    M, inl = cv2.estimateAffinePartial2D(np.array(src, np.float32), np.array(dst, np.float32),
+                                         method=cv2.RANSAC, ransacReprojThreshold=2.0)
+    if M is None or (inl is not None and int(inl.sum()) < 6):
+        return None
+    return M
+
+
 def _estimate_rotation(refg, img_g, detector="ORB"):
     """Partielle Affine (Translation + Rotation, kein Scherung) per Stern-Merkmalen schätzen.
     Für Alt-Az-Montierungen mit Feldrotation. Gibt 2x3-Matrix oder None (Fallback Translation)."""
@@ -186,7 +225,10 @@ def register_and_cache(paths, out_dir, dark=None, flat=None, do_register=True,
         if do_register:
             M = None
             if align_mode == "rotate":
-                M = _estimate_rotation(refg, _gray(f), detector)
+                fg = _gray(f)
+                M = _estimate_star_transform(refg, fg)   # stern-basiert (genau) zuerst
+                if M is None:
+                    M = _estimate_rotation(refg, fg, detector)   # Fallback: ORB-Merkmale
                 if M is not None and drizzle > 1:
                     M = M.copy(); M[:, 2] *= drizzle  # Translation auf Zielraster skalieren
             if M is None:  # Fallback / 'shift': Phasenkorrelation (Translation)
@@ -310,7 +352,16 @@ def dualband_hoo(bgr, unmix=0.20):
     out[..., 2] = ha_n                          # R = Hα (rot)
     out[..., 1] = oiii_n                        # G = OIII
     out[..., 0] = oiii_n                        # B = OIII  → G+B = teal
-    return out
+    # Stern-Entsättigung: NUR kleine, kontrastreiche Punkte (Sterne = Kontinuum) auf neutral ziehen
+    # → kein rot/teal-Saum (Bayer-R/B-Versatz + chromat. Aberration). Ausgedehnte Nebel bleiben farbig.
+    lum = np.maximum(ha_n, oiii_n).astype(np.float32)
+    smooth = cv2.medianBlur((lum * 255).astype(np.uint8), 9).astype(np.float32) / 255.0
+    detail = np.clip(lum - smooth, 0, 1)                 # hoch an Sternen, ~0 im glatten Nebel
+    star = np.clip(detail * 6.0, 0, 1) * np.clip((lum - 0.4) / 0.3, 0, 1)
+    star = cv2.GaussianBlur(star, (0, 0), 1)[..., None]
+    gray = out.mean(axis=2, keepdims=True)
+    out = out * (1 - 0.85 * star) + gray * (0.85 * star)
+    return np.clip(out, 0, 1)
 
 
 def color_balance(f, strength=1.0):

@@ -4,6 +4,16 @@ Alle nennenswerten Änderungen an ForgePix. Format orientiert an
 [Keep a Changelog](https://keepachangelog.com/de/), Versionierung nach
 [SemVer](https://semver.org/lang/de/).
 
+## [1.16.12] – 2026-06-26
+### Hinzugefügt / Geändert (Astro-Qualität)
+- **Stern-basierte Registrierung:** Bei „Translation + Feldrotation" werden jetzt echte
+  **Sternzentren** erkannt und gematcht (RANSAC-Affine), statt allgemeiner Bildmerkmale (ORB bleibt
+  Fallback) — genauere Ausrichtung.
+- **Stern-Entsättigung in HOO:** kleine, kontrastreiche Punkte (Sterne = Kontinuum) werden neutral
+  gezogen → kein rot/teal-Farbsaum mehr (Bayer-R/B-Versatz + chromatische Aberration); **ausgedehnte
+  Nebel behalten ihre Farbe** (lokale-Kontrast-Maske, nicht nur Helligkeit).
+- Zusammen mit der sauberen Hα/OIII-Trennung: rote Nebel, neutraler Hintergrund, neutrale Sterne.
+
 ## [1.16.11] – 2026-06-26
 ### Geändert (Dual-Band: sauberere Linien-Trennung)
 - **HOO trennt Hα und OIII jetzt sauber in zwei Signale:** Hα aus dem **Rot**-Kanal, OIII aus dem
