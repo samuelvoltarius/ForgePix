@@ -969,6 +969,8 @@ def main():
                     help="Astro-Farbsättigung 1.0–1.6 (-1 = Auto/KI)")
     ap.add_argument("--astro-color", type=float, default=-1.0,
                     help="Astro-Farbkalibrierung 0.0–1.0 (-1 = Auto/KI). 0 = aus, 1 = voll neutralisieren")
+    ap.add_argument("--dualband", action="store_true",
+                    help="Dual-Band/Schmalband-Filter (Ha+OIII): KEINE Grün-Entfernung — OIII (teal) bleibt erhalten")
     ap.add_argument("--bg-extract", action="store_true",
                     help="Astro: Hintergrund/Gradient entfernen (Lichtverschmutzung)")
     ap.add_argument("--fits-out", action="store_true",
@@ -1247,11 +1249,14 @@ def _astro_write(result, work_dir, paths, args, astro):
                       f"{p.get('rationale', '')}")
             except Exception as e:
                 print(f"  (KI-Aufbereitung übersprungen: {e})", file=sys.stderr)
-        # Grünstich entfernen (SCNR) VOR dem Strecken — Grün ist in Deep-Sky praktisch nie echt
-        base_view = astro.remove_green_cast(astro.color_balance(result, color_s))
+        # Grünstich-Entfernung (SCNR): bei Breitband/OSC sinnvoll, ABER bei Dual-Band/Schmalband
+        # (Ha+OIII) ist Grün echtes OIII-Signal -> dann NICHT entfernen, sonst bleibt nur Rot.
+        cb = astro.color_balance(result, color_s)
+        base_view = cb if getattr(args, "dualband", False) else astro.remove_green_cast(cb)
         view = astro.autostretch(base_view, strength=strength, saturation=sat, protect_core=protect)
     else:
-        view = astro.remove_green_cast(astro.color_balance(result, color_s))
+        cb = astro.color_balance(result, color_s)
+        view = cb if getattr(args, "dualband", False) else astro.remove_green_cast(cb)
     out_view = os.path.join(stack_dir, f"{args.prefix}{base}_astro.jpg")
     cv2.imwrite(out_view, np.clip(view * 255, 0, 255).astype(np.uint8),
                 [int(cv2.IMWRITE_JPEG_QUALITY), 95])

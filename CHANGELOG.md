@@ -4,6 +4,16 @@ Alle nennenswerten Änderungen an ForgePix. Format orientiert an
 [Keep a Changelog](https://keepachangelog.com/de/), Versionierung nach
 [SemVer](https://semver.org/lang/de/).
 
+## [1.16.6] – 2026-06-26
+### Behoben/Hinzugefügt (Dual-Band-Korrektheit)
+- **Grün-Entfernung nicht mehr erzwungen — neue Option „Dual-Band/Schmalband-Filter (Ha+OIII)":**
+  Mit Dual-Band-Filter ist Grün echtes **OIII-Signal** (landet beim OSC-Sensor teils im Grün-Kanal);
+  die automatische SCNR-Grün-Entfernung hätte es zerstört (→ „nur rot"). Ist der Schalter an, wird
+  KEINE Grün-Entfernung gemacht, OIII (Teal) bleibt erhalten. Ohne Filter/Breitband bleibt SCNR aktiv
+  (entfernt Grünstich + grüne Hotpixel). CLI: `--dualband`. Persistiert, +i18n.
+  Hinweis: Für ernsthafte Dual-Band-/Narrowband-Bearbeitung (HOO/SHO-Palette) ist der **lineare
+  32-bit/FITS-Export → PixInsight/Siril/GraXpert** der richtige Weg — der bleibt unangetastet.
+
 ## [1.16.5] – 2026-06-26
 ### Behoben (Astro-Farbe)
 - **Grünstich entfernt (SCNR):** Astro-Vorschau begrenzt Grün auf den Schnitt von Rot/Blau — in
