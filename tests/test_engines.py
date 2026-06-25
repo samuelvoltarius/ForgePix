@@ -565,6 +565,16 @@ class TestAstroColorAndStretch(unittest.TestCase):
         self.assertLessEqual(p["saturation"], 1.6)
         self.assertLessEqual(p["color"], 1.0)   # Farbkalibrierung 0..1 geklemmt
 
+    def test_remove_green_cast(self):
+        import numpy as np
+        import astro
+        f = np.zeros((10, 30, 3), "float32")
+        f[:, 0:10] = (0, 1, 0)      # BGR: reines Grün -> sollte stark reduziert werden
+        f[:, 10:20] = (0, 0, 1)     # reines Rot -> unverändert
+        out = astro.remove_green_cast(f)
+        self.assertLess(out[:, 0:10, 1].mean(), 0.1)            # Grün runter (auf (R+B)/2=0)
+        self.assertAlmostEqual(float(out[:, 10:20, 2].mean()), 1.0)  # Rot unangetastet
+
     def test_color_balance_strength_blend(self):
         import numpy as np
         import astro

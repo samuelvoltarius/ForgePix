@@ -1247,10 +1247,11 @@ def _astro_write(result, work_dir, paths, args, astro):
                       f"{p.get('rationale', '')}")
             except Exception as e:
                 print(f"  (KI-Aufbereitung übersprungen: {e})", file=sys.stderr)
-        view = astro.autostretch(astro.color_balance(result, color_s), strength=strength,
-                                 saturation=sat, protect_core=protect)
+        # Grünstich entfernen (SCNR) VOR dem Strecken — Grün ist in Deep-Sky praktisch nie echt
+        base_view = astro.remove_green_cast(astro.color_balance(result, color_s))
+        view = astro.autostretch(base_view, strength=strength, saturation=sat, protect_core=protect)
     else:
-        view = astro.color_balance(result, color_s)
+        view = astro.remove_green_cast(astro.color_balance(result, color_s))
     out_view = os.path.join(stack_dir, f"{args.prefix}{base}_astro.jpg")
     cv2.imwrite(out_view, np.clip(view * 255, 0, 255).astype(np.uint8),
                 [int(cv2.IMWRITE_JPEG_QUALITY), 95])

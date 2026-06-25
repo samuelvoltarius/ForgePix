@@ -297,6 +297,20 @@ def color_balance(f, strength=1.0):
     return out if s >= 1.0 else np.clip(src * (1 - s) + out * s, 0, None)
 
 
+def remove_green_cast(f, amount=1.0):
+    """SCNR-artige Grün-Entfernung (Average Neutral): Grün wird auf den Schnitt von Rot/Blau
+    begrenzt. In der Deep-Sky-Fotografie ist Grün praktisch nie echtes Signal (Nebel sind rot/blau),
+    ein Grünstich kommt von OSC-Bayer/Lichtverschmutzung. Subtraktiv/treu — fügt nichts hinzu.
+    Entfernt zugleich grüne Hot-Pixel-/Stern-Sprenkel. amount 0..1."""
+    if f is None or f.ndim != 3 or f.shape[2] != 3 or amount <= 0:
+        return f
+    out = f.astype(np.float32).copy()
+    b, g, r = out[..., 0], out[..., 1], out[..., 2]      # BGR
+    neutral = np.minimum(g, (b + r) * 0.5)
+    out[..., 1] = g * (1 - amount) + neutral * amount
+    return out
+
+
 def autostretch(f, black_clip=0.0008, strength=14.0, protect_core=True, saturation=1.25):
     """asinh-Auto-Stretch fürs Anzeigen des (linearen, dunklen) Astro-Ergebnisses.
 
