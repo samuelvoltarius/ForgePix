@@ -7,7 +7,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QPixmap
 
 from i18n import tr
-from ui.appinfo import _cache_path
+from ui.appinfo import _cache_path, IMG_EXTS
 
 try:
     import cv2

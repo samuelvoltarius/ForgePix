@@ -305,6 +305,31 @@ class TestI18n(unittest.TestCase):
         self.assertEqual(missing, [], f"Ohne EN-Übersetzung: {missing[:5]}")
 
 
+class TestGuiShowResult(unittest.TestCase):
+    """Regression: _show_result/_find_result darf nicht crashen (IMG_EXTS-Import-Bug v1.10.1–1.15.0)."""
+    def test_show_result_loads_without_crash(self):
+        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        try:
+            from PySide6.QtWidgets import QApplication
+            import numpy as np
+            import cv2
+            import focus_stack_gui as g
+        except Exception as e:  # pragma: no cover
+            self.skipTest(f"Qt/cv2 nicht verfügbar: {e}")
+        import tempfile
+        app = QApplication.instance() or QApplication([])
+        app.setStyleSheet(g.THEME)
+        w = g.MainWindow()
+        work = tempfile.mkdtemp()
+        stack = os.path.join(work, "stack")
+        os.makedirs(stack)
+        cv2.imwrite(os.path.join(stack, "result.jpg"), (np.zeros((30, 40, 3)) + 80).astype("uint8"))
+        w.work_edit.setText(work)
+        w._show_result()                       # darf NICHT werfen (NameError IMG_EXTS)
+        self.assertTrue(w.result_path and w.result_path.endswith("result.jpg"))
+        w.close()
+
+
 class TestGuiSmoke(unittest.TestCase):
     def test_mainwindow_builds(self):
         os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")

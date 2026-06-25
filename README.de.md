@@ -157,7 +157,7 @@ automatisch in der Sprachauswahl.
 ./run_tests.sh        # oder: python3 -m unittest discover -s tests
 ```
 
-42 Engine‑Tests (Standardbibliothek, kein pytest nötig) decken Fokus‑Analyse, Langzeit, Astro,
+43 Engine‑Tests (Standardbibliothek, kein pytest nötig) decken Fokus‑Analyse, Langzeit, Astro,
 Stacker, Mosaik, Export, Parallel‑Helfer, Modul‑Erkennung, KI‑Kontext, i18n‑Vollständigkeit und
 einen GUI‑Smoke‑Test ab.
 
