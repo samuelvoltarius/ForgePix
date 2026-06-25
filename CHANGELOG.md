@@ -4,6 +4,20 @@ Alle nennenswerten Änderungen an ForgePix. Format orientiert an
 [Keep a Changelog](https://keepachangelog.com/de/), Versionierung nach
 [SemVer](https://semver.org/lang/de/).
 
+## [1.14.1] – 2026-06-26
+### Geändert (Ehrlichkeit/Claim-Check + Beta)
+- **Claim-Check der Doku:** Abhängigkeiten klar markiert — **EXIF-Übernahme/„Aus Foto lesen"
+  brauchen `exiftool`** (sonst übersprungen), **FITS** braucht `astropy` (optional, im Installer
+  enthalten). Photoshop-Ebenen-TIFF und FITS wurden real verifiziert (geschrieben + zurückgelesen).
+  GraXpert/StarNet++/Siril bleiben klar als optional + Auto-Erkennung + Datei-Fallback beschrieben.
+- **Datenschutz-Hinweis** zur KI jetzt einheitlich: in **Setup** (schon da), **README** und **beiden
+  Guides** — es gehen nur Vorschau-Frames, Schärfeprofil, EXIF-Eckdaten, optional Fokus-/Geister-Karte
+  und der Wunsch an die KI; **keine** Originaldateien, **keine** Standortdaten. Lokaler Server = nichts
+  verlässt den Rechner.
+- **Beta-Kennzeichnung:** README-Lead + „Beta" im „Über"-Dialog. Positionierung: „automatisches
+  Fokus-Stacking und Computational Photography für Makro, Astro und Langzeitserien — lokal nutzbar,
+  KI optional".
+
 ## [1.14.0] – 2026-06-26
 ### Hinzugefügt (KI-Hinweise, optional)
 - **Geister-Karte an die KI:** Nach dem Stacken bekommt die Post-Stack-KI (Feinschliff) optional

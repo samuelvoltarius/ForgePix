@@ -162,7 +162,7 @@ class WelcomeMixin:
             from constants import VERSION as _v
         except Exception:
             _v = ""
-        web = QLabel(f"<a href='https://forgepix.app' style='color:#7bd36a'>forgepix.app</a>  ·  v{_v}")
+        web = QLabel(f"<a href='https://forgepix.app' style='color:#7bd36a'>forgepix.app</a>  ·  v{_v} · Beta")
         web.setOpenExternalLinks(True); web.setAlignment(Qt.AlignCenter)
         lay.addWidget(web)
         b = QPushButton(tr("Schließen")); b.clicked.connect(dlg.accept); lay.addWidget(b)

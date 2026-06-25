@@ -57,8 +57,9 @@ Great for products, coins, insects, food.
   sharpest details come from (blue = early, red = late) — shows gaps at a glance.
 - **📐 DOF calculator / focus-bracketing assistant** — enter sensor, focal length, aperture and
   magnification (e.g. 1:1) or distance → depth of field per frame, recommended **step size** and
-  **number of frames**. **📷 Read from photo (EXIF):** pick a photo → focal length, aperture,
-  sensor and (if present) focus distance are filled in automatically. Perfect for A7V + 105mm macro.
+  **number of frames**. **📷 Read from photo (EXIF)** *(needs `exiftool`)*: pick a photo → focal
+  length, aperture, sensor and (if present) focus distance are filled in automatically. Perfect for
+  A7V + 105mm macro.
 - **Stack confidence** — after each stack a score (0–100) with **real metrics**: focus range
   complete?, halos, ghosting, sharpness — not AI marketing, but measurements.
 
@@ -161,7 +162,9 @@ After each run, in the result bar on the right:
 - **Batch:** one stack per subfolder. **Watch folder:** stack automatically once new photos
   finish copying. (Macro, Astro, Long exposure)
 
-EXIF (camera/lens/date) is carried over to all outputs.
+EXIF (camera/lens/date) is carried over to all outputs — **if `exiftool` is installed**
+(`brew install exiftool`). Without exiftool, EXIF copy (and “📷 Read from photo”) is simply
+skipped; everything else works normally.
 
 ---
 
@@ -187,6 +190,11 @@ None of this is required — ForgePix is self-contained.
   an API key** (OpenAI / OpenRouter) — in the Setup menu.
 - The AI only **advises and checks** (setting suggestions, quality control). It **never touches
   pixels** and invents nothing (faithful/non-generative).
+- **Privacy — what is sent to the AI:** only a few downscaled **preview frames**, the measured
+  **sharpness profile**, **EXIF basics** (focal length/aperture/exposure/ISO/lens), optionally the
+  **focus/ghost map** and your **free‑text wish**. **No** original files, **no** GPS/location data.
+  With a local server (llama.cpp / LM Studio / vLLM) **nothing** leaves your machine. The Setup
+  menu shows this note as well.
 - *Note:* a ChatGPT subscription is **not** an API key — that needs a separate (paid) API key.
 
 ---
