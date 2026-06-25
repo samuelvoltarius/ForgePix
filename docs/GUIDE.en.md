@@ -122,6 +122,12 @@ Toggle at the top right.
 
 ## Edit, preview & export
 
+**Decision panel (right):** after each run you see the **stack-confidence score**, “**X of Y**
+frames used”, the **findings** and — for the automatic — **“Why these settings?”** (subject &
+rationale). Findings are **clickable** and jump straight to the matching view: *ghosting* → ghost
+map, *halos* → retouch, *focus gaps* → focus map. Below are **quick-export chips**
+(📷 Instagram · 🌐 Web · 🖨 Print) for one-click export.
+
 After each run, in the result bar on the right:
 
 - **Preview** + **before/after slider** (all modules).
@@ -132,7 +138,9 @@ After each run, in the result bar on the right:
 - **👻 Ghost map** — shows motion artefacts in focus stacking.
 - **📦 Export** (or ⌘E) — a dialog where you choose **what** to export — targets (Web JPG /
   Instagram / WhatsApp / Web / 4K / Print as 16-bit TIFF), **output sharpening**, **JPG quality**,
-  **Photoshop layered file** and lossless **16-bit TIFF**.
+  **Photoshop layered file** and lossless **16-bit TIFF**. For a single format, a **quick-export
+  chip** in the panel does it without the dialog.
+- **↩ Resume** — on the start screen, one click reopens your last used folder and module.
 - **Batch:** one stack per subfolder. **Watch folder:** stack automatically once new photos
   finish copying. (Macro, Astro, Long exposure)
 

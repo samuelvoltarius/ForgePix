@@ -123,6 +123,12 @@ Oben rechts umschaltbar.
 
 ## Bearbeiten, Vorschau & Export
 
+**Entscheidungs-Panel (rechts):** nach jedem Lauf siehst du den **Stack-Konfidenz-Score**,
+„**X von Y** Fotos verwendet", die **Befunde** und — bei der Automatik — **„Warum diese
+Einstellungen?"** (Motiv & Begründung). Die Befunde sind **anklickbar** und springen direkt zur
+passenden Stelle: *Ghosting* → Geister-Karte, *Halos* → Retusche, *Fokus-Lücken* → Fokus-Map.
+Darunter **Schnell-Export-Chips** (📷 Instagram · 🌐 Web · 🖨 Druck) für Ein-Klick-Export.
+
 Nach jedem Lauf rechts in der Ergebnis-Leiste:
 
 - **Vorschau** + **Vorher/Nachher-Schieberegler** (alle Module).
@@ -133,7 +139,10 @@ Nach jedem Lauf rechts in der Ergebnis-Leiste:
 - **👻 Geister-Karte** — zeigt Bewegungsartefakte beim Fokus-Stacking.
 - **📦 Export** (oder ⌘E) — Dialog: du wählst **was** exportiert wird — Ziele (Web-JPG /
   Instagram / WhatsApp / Web / 4K / Druck als 16-bit-TIFF), **Ausgabe-Schärfung**, **JPG-Qualität**,
-  **Photoshop-Ebenen-Datei** und verlustfreies **16-bit-TIFF**.
+  **Photoshop-Ebenen-Datei** und verlustfreies **16-bit-TIFF**. Für ein einzelnes Format genügt
+  ein **Schnell-Export-Chip** im Panel (ohne Dialog).
+- **↩ Weiter wo du warst** — auf dem Startbildschirm lädt ein Klick den zuletzt verwendeten Ordner
+  samt Modul wieder.
 - **Batch:** je Unterordner ein eigener Stack. **Watch-Ordner:** automatisch stacken, sobald
   neue Fotos fertig kopiert sind. (Makro, Astro, Langzeit)
 
