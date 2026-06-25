@@ -130,6 +130,13 @@ python3 focus_stack_gui.py
 > Sinnvolle Bildanzahl pro Modul steht direkt in der jeweiligen Gruppe — Details in der
 > [Anleitung](docs/GUIDE.de.md).
 
+## Beispieldaten zum Ausprobieren
+
+Kuratierte Test‑Datensätze (gute **und** absichtlich schlechte Aufnahmen) als
+[**Sample‑Download**](https://github.com/samuelvoltarius/ForgePix/releases/tag/samples-v1):
+Astro‑Subs (M 42 / IC 5146, Bayer‑FITS), ein Landschafts‑RAW und eine Makro‑Fokusreihe — einfach
+den jeweiligen Ordner aufs Fenster ziehen.
+
 ## Externe Tools (optional)
 
 Im **Setup‑Menü (⚙) → „Externe Tools"** trägst du Pfade zu **GraXpert**, **StarNet++** und

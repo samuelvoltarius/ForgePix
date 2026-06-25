@@ -127,6 +127,13 @@ python3 focus_stack_gui.py
 > Every setting has a **?** with a plain‑language explanation. The recommended frame count per
 > module is shown right in its group — details in the [guide](docs/GUIDE.en.md).
 
+## Sample data to try
+
+Curated test datasets (good **and** deliberately bad frames) are a
+[**sample download**](https://github.com/samuelvoltarius/ForgePix/releases/tag/samples-v1):
+astro subs (M 42 / IC 5146, Bayer FITS), a landscape RAW and a macro focus series — just drop the
+folder onto the window.
+
 ## External tools (optional)
 
 In the **Setup menu (⚙) → "External tools"** you set paths to **GraXpert**, **StarNet++** and
