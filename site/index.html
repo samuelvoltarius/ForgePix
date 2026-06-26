@@ -330,9 +330,7 @@
     <p class="eyebrow" data-i18n="dl_eyebrow">Get it</p>
     <h2 data-i18n="dl_h2">Download — free, no account</h2>
     <p class="section-lead"><span data-i18n="dl_lead">Always the latest version, straight from GitHub.</span>
-      <span class="verline"><span data-i18n="dl_latest">Latest:</span> <b data-version>checking…</b>
-        · ⬇ <b data-downloads>…</b> <span data-i18n="dl_downloads">downloads</span>
-        · 👁 <b data-views>…</b> <span data-i18n="dl_views">page views</span></span></p>
+      <span class="verline"><span data-i18n="dl_latest">Latest:</span> <b data-version>checking…</b></span></p>
     <div class="dl">
       <div class="card"><div class="os">🍎</div><h4>Mac</h4><p data-i18n="dl_mac">Download the ZIP, unzip, open <code>ForgePix.app</code>.</p><a class="btn primary" data-os="mac" href="https://github.com/samuelvoltarius/ForgePix/releases/latest" target="_blank" rel="noopener" data-i18n="dl_btn">Download</a></div>
       <div class="card"><div class="os">🐧</div><h4>Linux</h4><p data-i18n="dl_linux">Download the TAR.GZ, extract, run <code>ForgePix</code>.</p><a class="btn primary" data-os="linux" href="https://github.com/samuelvoltarius/ForgePix/releases/latest" target="_blank" rel="noopener" data-i18n="dl_btn">Download</a></div>
@@ -482,28 +480,6 @@ var I18N = {
       }).catch(function(){});
   }catch(e){}
 
-  /* ---- Visitor + download counter (self-hosted, cookieless) ---- */
-  try{
-    var setStat = function(sel, n){ document.querySelectorAll(sel).forEach(function(el){ el.textContent = Number(n).toLocaleString(); }); };
-    fetch("/api/count", {cache:"no-store"})
-      .then(function(r){ return r.ok ? r.json() : null; })
-      .then(function(d){
-        if(!d) return;
-        if(typeof d.views === "number") setStat("[data-views]", d.views);
-        if(typeof d.downloads === "number") setStat("[data-downloads]", d.downloads);
-      }).catch(function(){});
-    /* Count a click on any download button immediately (keepalive survives navigation). */
-    document.querySelectorAll('[data-os]').forEach(function(btn){
-      btn.addEventListener("click", function(){
-        try{
-          fetch("/api/count?dl=1", {cache:"no-store", keepalive:true})
-            .then(function(r){ return r.ok ? r.json() : null; })
-            .then(function(d){ if(d && typeof d.downloads === "number") setStat("[data-downloads]", d.downloads); })
-            .catch(function(){});
-        }catch(e){}
-      });
-    });
-  }catch(e){}
 })();
 </script>
 
