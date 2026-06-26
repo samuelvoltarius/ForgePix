@@ -818,8 +818,10 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         self.ghost_btn = _act(tr("👻  Geister-Karte"), self.open_ghostmap)
         self.retouch_btn = _act(tr("✏️  Retusche"), self.open_retouch)
         self._astro_menu_sep = menu.addSeparator()
-        self.graxpert_btn = _act(tr("🌌  GraXpert (Gradient)"), lambda: self._run_external_tool("graxpert"))
-        self.starnet_btn = _act(tr("⭐  StarNet (starless)"), lambda: self._run_external_tool("starnet"))
+        self.starless_btn = _act(tr("⭐  Starless-Workflow (Sterne raus → Nebel → zurück)"),
+                                 lambda: self._run_starless_workflow())
+        self.graxpert_btn = _act(tr("🌌  GraXpert (nur Gradient)"), lambda: self._run_external_tool("graxpert"))
+        self.starnet_btn = _act(tr("⭐  StarNet (nur Sterne entfernen)"), lambda: self._run_external_tool("starnet"))
         self.reimport_btn = _act(tr("📥  Bearbeitetes reimportieren"), self.reimport_result)
         self.send_btn = _act(tr("📤  Im Dateimanager zeigen"), self.send_to_tool)
         self.tools_btn.setMenu(menu)
@@ -1716,8 +1718,9 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
                      .format(d=os.path.basename(d.rstrip("/")), n=n))
 
     def enhance_result(self):
-        """One-Click „Veredeln": GraXpert (Gradient + Entrauschen) auf das lineare Astro-Ergebnis,
-        dann automatisch reimportieren. Ohne GraXpert: freundlicher Hinweis (kein Fehler)."""
+        """One-Click „Veredeln". **Anfänger** (+ StarNet installiert): voller Starless-Workflow
+        automatisch (Sterne raus → Nebel verstärken → zurück). **Profi** oder ohne StarNet: nur
+        GraXpert (Gradient + Entrauschen). Den vollen Workflow gibt's für Profis im Werkzeuge-Menü."""
         try:
             import tools_engine
         except Exception as e:
@@ -1726,11 +1729,21 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         if not f or not os.path.isfile(f):
             QMessageBox.information(self, tr("Veredeln"), tr("Erst ein Astro-Ergebnis erzeugen."))
             return
+        beginner = self.mode_box.currentIndex() == 0
+        sn = (self.starnet_path.text().strip() or None)
+        if beginner and tools_engine.find_starnet(sn):
+            self._append(tr("\nℹ️ Anfänger-Modus: voller Starless-Workflow (Sterne werden getrennt, "
+                            "der Nebel verstärkt und die Sterne sauber zurückgesetzt).\n"))
+            self._run_starless_workflow(f)
+            return
         cfg = self.graxpert_path.text().strip() or None
         if not tools_engine.find_graxpert(cfg):
             self._tool_missing_hint("graxpert", f)
             return
-        self._append("\n⏳ Veredeln mit GraXpert (Gradient + Entrauschen) … (kann 1–2 min dauern)\n")
+        self._append(tr("\n⏳ Veredeln mit GraXpert (Gradient + Entrauschen) … (kann 1–2 min dauern)\n"))
+        if not beginner and tools_engine.find_starnet(sn):
+            self._append(tr("   Tipp: Für den vollen Starless-Workflow → Werkzeuge → "
+                            "Starless-Workflow.\n"))
         QApplication.processEvents()
         try:
             out = tools_engine.run_graxpert_enhance(f, path=cfg, denoise=True, log=self._append)
@@ -1742,6 +1755,40 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         self.cmp_btn.setEnabled(True); self.adjust_btn.setEnabled(True)
         self.open_btn.setEnabled(True); self.openfolder_btn.setEnabled(True)
         self._append(f"\n✅ Veredelt & reimportiert: {os.path.basename(out)}\n")
+
+    def _run_starless_workflow(self, linear=None):
+        """Voller Starless-Workflow (GraXpert-Gradient → Palette/Strecken → StarNet → Nebel
+        verstärken → Sterne per Screen zurück). Erklärt jeden Schritt im Log."""
+        try:
+            import tools_engine
+            import starless
+        except Exception as e:
+            QMessageBox.warning(self, tr("Starless-Workflow"), f"{e}"); return
+        f = linear or self._best_export_file(bits=32)
+        if not f or not os.path.isfile(f):
+            QMessageBox.information(self, tr("Starless-Workflow"), tr("Erst ein Astro-Ergebnis erzeugen."))
+            return
+        sn = self.starnet_path.text().strip() or None
+        if not tools_engine.find_starnet(sn):
+            self._tool_missing_hint("starnet", f)
+            return
+        dual = self.astro_filter.currentData() == "dual"
+        palette = self.astro_palette.currentData() if dual else None
+        work = os.path.join(os.path.dirname(f), "starless")
+        self._append(tr("\n⭐ Starless-Workflow startet … (StarNet rechnet ~½–1 min)\n"))
+        QApplication.processEvents()
+        try:
+            out = starless.run(f, palette, work, broadband=not dual,
+                               graxpert_path=self.graxpert_path.text().strip() or None,
+                               starnet_path=sn, log=self._append)
+        except Exception as e:
+            QMessageBox.warning(self, tr("Starless-Workflow"), f"{e}")
+            self._append(f"\n⚠️ Starless-Workflow fehlgeschlagen: {e}\n"); return
+        self.result_path = out; self.before_path = f
+        self._set_preview(out)
+        self.cmp_btn.setEnabled(True); self.adjust_btn.setEnabled(True)
+        self.open_btn.setEnabled(True); self.openfolder_btn.setEnabled(True)
+        self._append(f"\n✅ Starless-Workflow fertig: {os.path.basename(out)}\n")
 
     def _run_external_tool(self, which):
         """GraXpert/StarNet++ headless auf das lineare Ergebnis anwenden und automatisch

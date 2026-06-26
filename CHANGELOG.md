@@ -4,6 +4,19 @@ Alle nennenswerten Änderungen an ForgePix. Format orientiert an
 [Keep a Changelog](https://keepachangelog.com/de/), Versionierung nach
 [SemVer](https://semver.org/lang/de/).
 
+## [1.18.5] – 2026-07-06
+### Neu — ⭐ Starless-Workflow (StarNet++ Anbindung)
+Voll automatisierter „Profi-Weg" für Astro: **Sterne trennen → Nebel verstärken (lokaler Kontrast +
+dezente Sättigung) → Sterne per Screen-Blend sauber zurück** (`1−(1−Nebel)·(1−Sterne)`). Davor läuft
+GraXpert (Gradient) auf dem Linearbild, danach unsere Palette/Streckung. Holt deutlich mehr
+Nebelstruktur raus, ohne Sterne aufzublähen. (`core/starless.py`.)
+- **Modus-abhängig, immer erklärt:** Im **Anfänger-Modus** macht „✨ Veredeln" den vollen Workflow
+  automatisch (wenn StarNet da ist). Im **Profi-Modus** bleibt „Veredeln" schlank (nur GraXpert) und
+  der volle Workflow liegt unter **Werkzeuge → Starless-Workflow**; einzelne Schritte (nur StarNet /
+  nur GraXpert) ebenfalls dort. Jeder Schritt wird im Log erklärt.
+- **StarNet++ Auto-Erkennung** schon in v1.18.4 erweitert. **macOS-Hinweis** (Guide + bei fehlendem
+  Tool): unsignierte StarNet-Binärdatei einmal mit `xattr -dr com.apple.quarantine <ordner>` entsperren.
+
 ## [1.18.4] – 2026-07-05
 ### Astro: Feinschliff nach Feedback
 - **Weicherer Auto-Stretch:** Schwarzpunkt von Median+0.5·MAD auf **0.25·MAD** gesenkt und Kern-Schutz

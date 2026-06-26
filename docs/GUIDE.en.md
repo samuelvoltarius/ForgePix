@@ -83,6 +83,14 @@ are dropped automatically (with reasons).
   + AI denoising) and reimports it automatically — the usual post-stack step, without switching tools.
   GraXpert is free (graxpert.com); if it isn't installed, ForgePix tells you where to get it and shows
   the finished linear file to open by hand. Paths under **Setup → External tools** (or auto-detected).
+- **⭐ Starless workflow (with StarNet++):** the fully-automatic "pro path" — **separate the stars →
+  boost the nebula (local contrast, gentle saturation) → add the stars cleanly back via screen blend**.
+  Pulls out much more nebula structure without bloating stars. In **Beginner mode**, "✨ Enhance"
+  does this automatically (if StarNet is present); in **Pro mode** via **Tools → Starless workflow**.
+  StarNet++ is free (starnetastro.com).
+  > **macOS note:** StarNet++ is usually *unsigned* — Gatekeeper blocks the first launch. Unblock it
+  > once in Terminal: `xattr -dr com.apple.quarantine <StarNet-folder>` and `chmod +x <…>/starnet++`
+  > (or System Settings → Privacy & Security → "Allow Anyway").
 
 > **Dual-band / narrowband filter (Hα+OIII):** Set **Filter** to *Dual-band* (e.g. SVBony SV220,
 > Optolong L-eXtreme) — or it's auto-detected from the FITS `FILTER` header. Hα and OIII are then

@@ -846,6 +846,29 @@ class TestBinningAndCalib(unittest.TestCase):
             self.assertIsNone(flat)
 
 
+class TestStarless(unittest.TestCase):
+    def test_palette_view_liefert_bild(self):
+        import numpy as np
+        import starless
+        img = np.zeros((6, 8, 3), np.float32); img[:, :4] = (0, 0, 0.8)  # etwas Hα
+        for pal in (None, "hoo", "bicolor"):
+            out = starless._palette_view(img, pal)
+            self.assertEqual(out.shape, img.shape)
+
+    def test_boost_nebula_bleibt_im_bereich(self):
+        import numpy as np
+        import starless
+        neb = np.random.rand(20, 20, 3).astype(np.float32)
+        out = starless._boost_nebula(neb)
+        self.assertEqual(out.shape, neb.shape)
+        self.assertGreaterEqual(float(out.min()), 0.0)
+        self.assertLessEqual(float(out.max()), 1.0)
+
+    def test_available_ist_bool(self):
+        import starless
+        self.assertIn(starless.available("/nonexistent"), (True, False))
+
+
 class TestToolsEngine(unittest.TestCase):
     def test_tool_info_vorhanden(self):
         import tools_engine

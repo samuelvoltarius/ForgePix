@@ -125,7 +125,7 @@ class ResultMixin:
         # GraXpert/StarNet nur bei Himmels-Modulen sinnvoll (Astro/Langzeit/Hybrid), nicht Makro
         sky = (getattr(self, "is_astro", False) or getattr(self, "is_longexp", False)
                or getattr(self, "is_hybrid", False))
-        for b in (self.graxpert_btn, self.starnet_btn):
+        for b in (self.starless_btn, self.graxpert_btn, self.starnet_btn):
             b.setVisible(sky); b.setEnabled(sky)
         self.enhance_btn.setVisible(sky); self.enhance_btn.setEnabled(sky)   # One-Click „Veredeln"
         # Retusche nur wo es Sinn macht (Fokus-Stacking): Makro + Hybrid Fokus+Astro

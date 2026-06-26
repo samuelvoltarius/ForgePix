@@ -59,7 +59,7 @@ jobs:
             --hidden-import focus_cull_stack --hidden-import focus_analysis \
             --hidden-import stacker --hidden-import astro --hidden-import astro_quality \
             --hidden-import longexp --hidden-import mosaic --hidden-import siril_engine \
-            --hidden-import tools_engine --hidden-import constants --hidden-import i18n \
+            --hidden-import tools_engine --hidden-import starless --hidden-import constants --hidden-import i18n \
             --hidden-import parallel --hidden-import exifread --hidden-import piexif \
             --hidden-import ui.main_window --hidden-import ui.components \
             --hidden-import ui.welcome --hidden-import ui.settings_io --hidden-import ui.export \

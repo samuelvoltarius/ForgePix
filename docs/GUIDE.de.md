@@ -100,6 +100,14 @@ Viele Aufnahmen desselben Himmelsausschnitts werden ausgerichtet und **gemittelt
   Tool-Wechsel. GraXpert ist kostenlos (graxpert.com); ist es nicht installiert, sagt ForgePix dir,
   wo du es bekommst, und zeigt das fertige Linearbild zum manuellen Öffnen. Pfade unter **Setup →
   Externe Tools** (oder Auto-Erkennung).
+- **⭐ Starless-Workflow (mit StarNet++):** der „Profi-Weg", voll automatisch — **Sterne trennen →
+  Nebel verstärken (lokaler Kontrast, dezente Sättigung) → Sterne sauber per Screen-Blend zurück**.
+  Holt deutlich mehr Nebelstruktur raus, ohne die Sterne aufzublähen. Im **Anfänger-Modus** macht
+  „✨ Veredeln" das automatisch (wenn StarNet da ist); im **Profi-Modus** über **Werkzeuge →
+  Starless-Workflow**. StarNet++ ist kostenlos (starnetastro.com).
+  > **macOS-Hinweis:** StarNet++ ist meist *nicht signiert* — beim ersten Start blockt Gatekeeper.
+  > Einmalig im Terminal entsperren: `xattr -dr com.apple.quarantine <StarNet-Ordner>` und
+  > `chmod +x <…>/starnet++` (oder Systemeinstellungen → Datenschutz & Sicherheit → „Trotzdem erlauben").
 
 ### 🌗 Hybrid
 Zwei Spezialfälle in einem Modul (Untermodus oben in der Gruppe wählbar):
