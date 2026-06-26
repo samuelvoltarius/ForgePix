@@ -55,6 +55,45 @@ def merge_exposures(images, align=True, log=print):
     return out
 
 
+def apply_look(bgr, preset="natural"):
+    """Treuer Tonlook für HDR/Exposure-Fusion (die von Natur aus flach wirkt). Kein Erfinden von
+    Inhalten — nur klassische Tonwert-/Kontrastbearbeitung im LAB-Raum:
+      • Schwarzpunkt anheben (Tiefe)  • Kontrast-S-Kurve (Sigmoid, pinnt 0/1)
+      • Clarity (lokaler Kontrast via großem Unsharp auf L)  • Sättigung
+      • „dramatisch" zusätzlich CLAHE (adaptiver lokaler Kontrast).
+    presets: neutral (aus), natural (Standard, dezent), vivid (kräftig), dramatic (stark)."""
+    P = {
+        "neutral":  dict(black=0.00, contrast=0.0, clarity=0.00, sat=1.00, clahe=0.0),
+        "natural":  dict(black=0.015, contrast=3.0, clarity=0.18, sat=1.08, clahe=0.0),
+        "vivid":    dict(black=0.030, contrast=4.5, clarity=0.32, sat=1.20, clahe=0.0),
+        "dramatic": dict(black=0.045, contrast=5.5, clarity=0.45, sat=1.28, clahe=2.0),
+    }
+    p = P.get(preset, P["natural"])
+    if preset == "neutral":
+        return bgr
+    lab = cv2.cvtColor(bgr, cv2.COLOR_BGR2LAB).astype(np.float32)
+    L = lab[..., 0] / 255.0
+    if p["black"] > 0:                                   # Schwarzpunkt → etwas Tiefe
+        L = np.clip((L - p["black"]) / (1.0 - p["black"]), 0, 1)
+    k = p["contrast"]
+    if k > 0:                                            # Sigmoid-S-Kurve, pinnt 0 und 1
+        s = lambda x: 1.0 / (1.0 + np.exp(-k * (x - 0.5)))
+        s0, s1 = s(0.0), s(1.0)
+        L = (s(L) - s0) / (s1 - s0)
+    if p["clarity"] > 0:                                 # lokaler Kontrast (großer Radius = Halo-arm)
+        sigma = max(3.0, min(L.shape[:2]) / 50.0)
+        blur = cv2.GaussianBlur(L, (0, 0), sigma)
+        L = np.clip(L + p["clarity"] * (L - blur), 0, 1)
+    Lb = np.clip(L * 255.0, 0, 255).astype(np.uint8)
+    if p["clahe"] > 0:
+        Lb = cv2.createCLAHE(clipLimit=p["clahe"], tileGridSize=(8, 8)).apply(Lb)
+    lab[..., 0] = Lb.astype(np.float32)
+    if p["sat"] != 1.0:                                  # Sättigung über a/b-Kanäle
+        lab[..., 1] = np.clip(128 + (lab[..., 1] - 128) * p["sat"], 0, 255)
+        lab[..., 2] = np.clip(128 + (lab[..., 2] - 128) * p["sat"], 0, 255)
+    return cv2.cvtColor(np.clip(lab, 0, 255).astype(np.uint8), cv2.COLOR_LAB2BGR)
+
+
 def _exposure_time(path):
     """Belichtungszeit (Sekunden) aus EXIF, oder None."""
     try:

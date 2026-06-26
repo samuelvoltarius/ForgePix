@@ -574,11 +574,21 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         hg.addWidget(help_btn("Wie viele Belichtungen eine Reihe bilden (z. B. 3 für −1/0/+1 EV). "
                               "0 = automatisch erkennen. Mehrere Reihen im Ordner werden einzeln zu "
                               "je einem HDR verrechnet."), 0, 2)
+        self.hdr_look = QComboBox()
+        self.hdr_look.addItem(tr("Natürlich (dezenter Pop)"), "natural")
+        self.hdr_look.addItem(tr("Neutral (flach, treu)"), "neutral")
+        self.hdr_look.addItem(tr("Kräftig"), "vivid")
+        self.hdr_look.addItem(tr("Dramatisch (lokaler Kontrast)"), "dramatic")
+        hg.addWidget(QLabel(tr("Look")), 1, 0); hg.addWidget(self.hdr_look, 1, 1)
+        hg.addWidget(help_btn("Tonlook fürs Ergebnis. Exposure Fusion ist von Natur aus flach — "
+                              "Natürlich gibt dezenten Kontrast/Pop (Standard), Kräftig mehr, "
+                              "Dramatisch starken lokalen Kontrast (Wolken/Struktur), Neutral lässt "
+                              "es flach. Treu — nur Tonwerte, keine erfundenen Inhalte."), 1, 2)
         hdr_info = QLabel(tr("Verrechnet Belichtungsreihen (Lichter + Schatten durchgezeichnet, "
                              "Exposure Fusion). Das ist NICHT Fokus-Stacking. Freihand wird "
                              "automatisch ausgerichtet."))
         hdr_info.setWordWrap(True); hdr_info.setStyleSheet("color:#9aa09a;font-size:11px;")
-        hg.addWidget(hdr_info, 1, 0, 1, 3)
+        hg.addWidget(hdr_info, 2, 0, 1, 3)
         p1.addWidget(g_hdr)
 
         # Selektion
@@ -1331,7 +1341,8 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
                      "--longexp-align", self.longexp_align.currentData(),
                      "--longexp-strength", str(self.longexp_strength.value())]
         if getattr(self, "is_hdr", False):
-            args += ["--hdr", "--hdr-bracket", str(self.hdr_bracket.value())]
+            args += ["--hdr", "--hdr-bracket", str(self.hdr_bracket.value()),
+                     "--hdr-look", self.hdr_look.currentData()]
         return args
 
     def _build_args(self, auto):

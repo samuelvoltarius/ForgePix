@@ -4,6 +4,15 @@ Alle nennenswerten Änderungen an ForgePix. Format orientiert an
 [Keep a Changelog](https://keepachangelog.com/de/), Versionierung nach
 [SemVer](https://semver.org/lang/de/).
 
+## [1.19.1] – 2026-07-11
+### HDR-Looks (Presets gegen den flachen Fusion-Look)
+- Exposure Fusion (Mertens) wirkt von Natur aus **flach** — neue **Tonlook-Presets** geben Pop, treu
+  (nur Tonwerte, keine erfundenen Inhalte): `--hdr-look {neutral,natural,vivid,dramatic}` bzw.
+  GUI-Auswahl „Look" im HDR-Modus. **Standard = `natural`** (dezenter Kontrast/Pop), damit HDRs nicht
+  mehr flach rauskommen. `vivid` kräftiger, `dramatic` mit starkem lokalem Kontrast (CLAHE, Wolken/
+  Struktur), `neutral` lässt das reine Fusion-Ergebnis. Umgesetzt im LAB-Raum: Schwarzpunkt,
+  Kontrast-S-Kurve (Sigmoid), Clarity (lokaler Kontrast), Sättigung. (`hdr.apply_look`)
+
 ## [1.19.0] – 2026-07-10
 ### Neu — 📸 HDR-Modul (Exposure Fusion) + robustere Fokus-Ausrichtung
 - **HDR aus Belichtungsreihen (`core/hdr.py`, Modus „📸 HDR"/`--hdr`):** Verrechnet AEB-Reihen

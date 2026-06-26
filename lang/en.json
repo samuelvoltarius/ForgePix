@@ -476,5 +476,11 @@
   "HDR (Belichtungsreihe)": "HDR (exposure bracket)",
   "Bilder pro Reihe": "Photos per bracket",
   "Wie viele Belichtungen eine Reihe bilden (z. B. 3 für −1/0/+1 EV). 0 = automatisch erkennen. Mehrere Reihen im Ordner werden einzeln zu je einem HDR verrechnet.": "How many exposures make up one bracket (e.g. 3 for −1/0/+1 EV). 0 = detect automatically. Multiple brackets in a folder are each merged into their own HDR.",
-  "Verrechnet Belichtungsreihen (Lichter + Schatten durchgezeichnet, Exposure Fusion). Das ist NICHT Fokus-Stacking. Freihand wird automatisch ausgerichtet.": "Merges exposure brackets (highlights + shadows recovered, exposure fusion). This is NOT focus stacking. Handheld series are aligned automatically."
+  "Verrechnet Belichtungsreihen (Lichter + Schatten durchgezeichnet, Exposure Fusion). Das ist NICHT Fokus-Stacking. Freihand wird automatisch ausgerichtet.": "Merges exposure brackets (highlights + shadows recovered, exposure fusion). This is NOT focus stacking. Handheld series are aligned automatically.",
+  "Look": "Look",
+  "Natürlich (dezenter Pop)": "Natural (subtle pop)",
+  "Neutral (flach, treu)": "Neutral (flat, faithful)",
+  "Kräftig": "Vivid",
+  "Dramatisch (lokaler Kontrast)": "Dramatic (local contrast)",
+  "Tonlook fürs Ergebnis. Exposure Fusion ist von Natur aus flach — Natürlich gibt dezenten Kontrast/Pop (Standard), Kräftig mehr, Dramatisch starken lokalen Kontrast (Wolken/Struktur), Neutral lässt es flach. Treu — nur Tonwerte, keine erfundenen Inhalte.": "Tone look for the result. Exposure fusion is flat by nature — Natural adds subtle contrast/pop (default), Vivid more, Dramatic strong local contrast (clouds/structure), Neutral leaves it flat. Faithful — tones only, no invented content."
 }

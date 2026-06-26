@@ -307,6 +307,21 @@ class TestStacker(TmpCase):
         self.assertLess((g > 250).mean(), (cv2.cvtColor(bright, cv2.COLOR_BGR2GRAY) > 250).mean() + 1e-6)
         self.assertLess((g < 5).mean(), (cv2.cvtColor(dark, cv2.COLOR_BGR2GRAY) < 5).mean() + 1e-6)
 
+    def test_hdr_apply_look(self):
+        import hdr
+        flat = (np.full((80, 100, 3), 128, np.uint8))
+        flat[:, :50] = 120; flat[:, 50:] = 136          # leicht flaches Bild
+        neutral = hdr.apply_look(flat, "neutral")
+        self.assertTrue(np.array_equal(neutral, flat))   # neutral = unverändert
+        for pr in ("natural", "vivid", "dramatic"):
+            out = hdr.apply_look(flat, pr)
+            self.assertEqual(out.shape, flat.shape)
+            self.assertEqual(out.dtype, np.uint8)
+        # mehr Kontrast als flach: Std-Abw der Luminanz steigt
+        g0 = cv2.cvtColor(flat, cv2.COLOR_BGR2GRAY).std()
+        gv = cv2.cvtColor(hdr.apply_look(flat, "vivid"), cv2.COLOR_BGR2GRAY).std()
+        self.assertGreater(gv, g0)
+
     def test_hdr_split_brackets_fixed(self):
         import hdr
         paths = [f"f{i}.arw" for i in range(9)]

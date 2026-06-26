@@ -988,6 +988,10 @@ def main():
                          "durchgezeichnete Lichter + Schatten. NICHT Fokus-Stacking!")
     ap.add_argument("--hdr-bracket", type=int, default=0,
                     help="Feste Gruppengröße der Belichtungsreihe (z. B. 3); 0 = automatisch erkennen")
+    ap.add_argument("--hdr-look", choices=["neutral", "natural", "vivid", "dramatic"],
+                    default="natural",
+                    help="Tonlook fürs HDR (Exposure Fusion ist flach): neutral=aus, "
+                         "natural=dezenter Pop (Standard), vivid=kräftig, dramatic=starker lokaler Kontrast")
     ap.add_argument("--longexp", action="store_true",
                     help="Langzeitbelichtung aus einer Serie (Wasser/Wolken/Lichtspuren) ohne ND-Filter")
     ap.add_argument("--longexp-mode", choices=["smooth", "trails", "declutter", "bright"],
@@ -1597,6 +1601,7 @@ def run_hdr(input_dir, work_dir, args):
             print("    (übersprungen — zu wenige lesbare Bilder)")
             continue
         result = hdr.merge_exposures(imgs, align=not getattr(args, "no_align", False))
+        result = hdr.apply_look(result, getattr(args, "hdr_look", "natural"))
         base = os.path.splitext(os.path.basename(grp[len(grp) // 2]))[0]
         out_jpg = os.path.join(stack_dir, f"{args.prefix}{base}_hdr.jpg")
         cv2.imwrite(out_jpg, result, [int(cv2.IMWRITE_JPEG_QUALITY), 95])
