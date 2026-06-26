@@ -330,7 +330,9 @@
     <p class="eyebrow" data-i18n="dl_eyebrow">Get it</p>
     <h2 data-i18n="dl_h2">Download — free, no account</h2>
     <p class="section-lead"><span data-i18n="dl_lead">Always the latest version, straight from GitHub.</span>
-      <span class="verline"><span data-i18n="dl_latest">Latest:</span> <b data-version>checking…</b></span></p>
+      <span class="verline"><span data-i18n="dl_latest">Latest:</span> <b data-version>checking…</b>
+        · ⬇ <b data-downloads>…</b> <span data-i18n="dl_downloads">downloads</span>
+        · 👁 <b data-views>…</b> <span data-i18n="dl_views">page views</span></span></p>
     <div class="dl">
       <div class="card"><div class="os">🍎</div><h4>Mac</h4><p data-i18n="dl_mac">Download the ZIP, unzip, open <code>ForgePix.app</code>.</p><a class="btn primary" data-os="mac" href="https://github.com/samuelvoltarius/ForgePix/releases/latest" target="_blank" rel="noopener" data-i18n="dl_btn">Download</a></div>
       <div class="card"><div class="os">🐧</div><h4>Linux</h4><p data-i18n="dl_linux">Download the TAR.GZ, extract, run <code>ForgePix</code>.</p><a class="btn primary" data-os="linux" href="https://github.com/samuelvoltarius/ForgePix/releases/latest" target="_blank" rel="noopener" data-i18n="dl_btn">Download</a></div>
@@ -426,7 +428,7 @@ var I18N = {
   ai_p2:"Wenn du willst, kannst du später eine KI verbinden — aber nur für <b>Tipps und Prüfungen</b>. Sie fasst deine Fotos nie an.",
   ai_quote:"„Die App erklärt, <b>warum</b> sie sich so entschieden hat.“",
   dl_eyebrow:"Hol es dir", dl_h2:"Download — kostenlos, kein Konto",
-  dl_lead:"Immer die neueste Version, direkt von GitHub.", dl_latest:"Neueste:",
+  dl_lead:"Immer die neueste Version, direkt von GitHub.", dl_latest:"Neueste:", dl_downloads:"Downloads", dl_views:"Aufrufe",
   dl_mac:"ZIP laden, entpacken, <code>ForgePix.app</code> öffnen.", dl_linux:"TAR.GZ laden, entpacken, <code>ForgePix</code> starten.", dl_win:"ZIP laden, entpacken, <code>ForgePix.exe</code> starten.",
   dl_btn:"Laden", dl_src_btn:"Aus Quellcode ↓", code_comment:"# lieber per Kommandozeile? Aus dem Quellcode:",
   bug_line:"🐞 Fehler gefunden oder eine Frage?", bug_report:"Auf GitHub melden →", bug_discuss:"In Discussions fragen",
@@ -477,6 +479,28 @@ var I18N = {
           else if(n.indexOf("linux")>-1 || n.indexOf("appimage")>-1){ var b=document.querySelector('[data-os="linux"]'); if(b) b.href=u; }
           else if(n.indexOf("win")>-1 || n.indexOf(".exe")>-1 || n.indexOf(".msi")>-1){ var b=document.querySelector('[data-os="win"]'); if(b) b.href=u; }
         });
+      }).catch(function(){});
+  }catch(e){}
+
+  /* ---- Total downloads across all releases (GitHub) ---- */
+  try{
+    fetch("https://api.github.com/repos/samuelvoltarius/ForgePix/releases?per_page=100", {headers:{"Accept":"application/vnd.github+json"}})
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(rs){
+        if(!Array.isArray(rs)) return;
+        var total=0;
+        rs.forEach(function(r){ (r.assets||[]).forEach(function(a){ total += (a.download_count||0); }); });
+        document.querySelectorAll("[data-downloads]").forEach(function(el){ el.textContent = total.toLocaleString(); });
+      }).catch(function(){});
+  }catch(e){}
+
+  /* ---- Page-view counter (self-hosted on our server, cookieless) ---- */
+  try{
+    fetch("/api/count", {cache:"no-store"})
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(d){
+        if(d && typeof d.views === "number")
+          document.querySelectorAll("[data-views]").forEach(function(el){ el.textContent = d.views.toLocaleString(); });
       }).catch(function(){});
   }catch(e){}
 })();
