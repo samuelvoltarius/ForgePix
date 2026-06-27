@@ -1288,7 +1288,7 @@ def mtf_stretch(f, target_bg=0.25, shadow=-2.8, saturation=1.05, denoise_chroma=
 
 
 def ghs_stretch(f, D=2.5, b=-0.5, SP=0.18, black_clip=None, saturation=1.08,
-                denoise_chroma=True, samples=4096):
+                denoise_chroma=True, samples=4096, auto_sp=True):
     """Generalised-Hyperbolic-Stretch (GHS-Familie) — frei steuerbarer High-Dynamic-Stretch,
     der schwaches Nebel-Signal kräftig anhebt, ohne den hellen Kern/Sterne auszubrennen.
     Ergänzt MTF (fester Schwarzpunkt) und asinh um eine voll parametrische Kurve.
@@ -1312,7 +1312,16 @@ def ghs_stretch(f, D=2.5, b=-0.5, SP=0.18, black_clip=None, saturation=1.08,
     # Schwarzpunkt setzen UND das Signal in den aktiven Bereich der Kurve normieren (wie asinh):
     # ohne diese Normierung liegt schwaches (lineares) Nebel-Signal nahe 0 und die Kurve hebt es nicht.
     sub = np.clip(f - bg, 0, None)
-    norm = float(np.quantile(_gray(sub), 0.9997)) + 1e-6
+    # Das schwache Nebel-Signal so normieren, dass der Sky-Anker (75. Perzentil knapp über dem Himmel)
+    # genau auf den Pivot SP fällt — dort streckt die Kurve am stärksten (sonst liegt das Signal weit
+    # unter SP und bleibt schwarz). Gleichzeitig nie über den Daten-Max hinaus normieren, damit helle
+    # Werte den Weißpunkt erreichen ([0..1]→[0..1] bleibt erhalten; bei Astro klippen die Sterne auf 1).
+    if auto_sp:
+        anchor = float(np.quantile(_gray(sub), 0.75)) + 1e-9
+        datamax = float(np.quantile(_gray(sub), 0.9997)) + 1e-9
+        norm = min(anchor / max(float(SP), 0.02), datamax) + 1e-6
+    else:
+        norm = float(np.quantile(_gray(sub), 0.9997)) + 1e-6
     x0 = np.clip(sub / norm, 0, 1)
 
     xs = np.linspace(0.0, 1.0, samples, dtype=np.float64)
@@ -1358,7 +1367,13 @@ def autostretch(f, black_clip=None, strength=6.0, protect_core=True, saturation=
         bg = med + 0.25 * mad                                  # Schwarzpunkt knapp über dem Himmel
         #  (weicher als 0.5·MAD: zeigt schwache Nebel-Außenbereiche, Hintergrund bleibt dunkel)
     x = np.clip(f - bg, 0, None)
-    norm = np.quantile(_gray(x), 0.9997) + 1e-6
+    # Normierung NICHT auf die hellen Sterne (quantile 0.9997) — das quetscht schwachen Nebel auf
+    # ~schwarz. Stattdessen einen Sky-Anker (75. Perzentil knapp über dem Himmel) so skalieren, dass
+    # er im Display auf ~0.12 (dunkles Grau) landet — datenunabhängig (geschlossene asinh-Umkehrung),
+    # an echten OSC-Daten verifiziert (vorher Median 4 → jetzt ~26, wie MTF).
+    anchor = float(np.quantile(_gray(x), 0.75)) + 1e-9
+    T = 0.12
+    norm = anchor * strength / np.sinh(T * np.arcsinh(strength)) + 1e-6
     x = x / norm
     out = np.clip(np.arcsinh(x * strength) / np.arcsinh(strength), 0, 1)
     if protect_core:
