@@ -428,6 +428,8 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         self.astro_deconv_iter.setValue(15)
         self.astro_denoise = QDoubleSpinBox(); self.astro_denoise.setRange(0.0, 2.0)
         self.astro_denoise.setSingleStep(0.25); self.astro_denoise.setValue(0.0)
+        self.astro_weight = QCheckBox(tr("SNR-Gewichtung (1/σ² je Frame)"))
+        self.astro_starless = QCheckBox(tr("Sternloses Nebelbild (klassisch)"))
         self.astro_ghs_d = QDoubleSpinBox(); self.astro_ghs_d.setRange(0.1, 10.0)
         self.astro_ghs_d.setSingleStep(0.5); self.astro_ghs_d.setValue(2.5)
         self.astro_ghs_b = QDoubleSpinBox(); self.astro_ghs_b.setRange(-2.0, 0.0)
@@ -585,6 +587,12 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         ag.addWidget(help_btn("Multi-Skalen-Wavelet-Rauschreduktion auf den LINEAREN Daten (vor dem "
                               "Strecken) — sonst zieht der Stretch das Hintergrundrauschen hoch. "
                               "0 = aus, 0.5–1.5 sinnvoll."), 18, 3)
+        ag.addWidget(self.astro_weight, 19, 0, 1, 2)
+        ag.addWidget(help_btn("Frames bei der Integration nach SNR gewichten (1/σ_bg²) — dünne/verrauschte "
+                              "Subs zählen weniger. Bessere Gesamt-SNR bei gemischter Transparenz."), 19, 2)
+        ag.addWidget(self.astro_starless, 20, 0, 1, 2)
+        ag.addWidget(help_btn("Zusätzlich ein klassisch sternloses Nebelbild erzeugen (morphologisch, ohne "
+                              "StarNet) — für getrennte Nebel-Bearbeitung. Kleine/mittlere Sterne ok."), 20, 2)
         ar.addWidget(adv, 22, 0, 1, 4)
         # Vorschau-Aufbereitung: Auto (KI/Standard) oder manuelle Regler
         ar.addWidget(self.astro_auto, 14, 0, 1, 3)
@@ -646,6 +654,7 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         self.longexp_mode.addItem(tr("Komet — Spur mit hellem Kopf, verblassendem Schweif"), "comet")
         self.longexp_mode.addItem(tr("Störer entfernen — Passanten/Autos (Median)"), "declutter")
         self.longexp_mode.addItem(tr("Aufhellen — dunkle Nacht (additiv)"), "bright")
+        self.longexp_mode.addItem(tr("Punkt-Sterne — Sterne stacken (Feldrotation, Sequator-Stil)"), "stars")
         lg.addWidget(QLabel(tr("Effekt")), 0, 0); lg.addWidget(self.longexp_mode, 0, 1, 1, 2)
         lg.addWidget(help_btn("Glatt = seidiges Wasser/weiche Wolken (klassischer ND-Look). "
                               "Lichtspuren = helle Bewegungen sammeln (Autolichter, Startrails, "
@@ -730,6 +739,10 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         hg.addWidget(help_btn("Entfernt Bewegungsgeister (wackelnde Blätter, Personen, Autos): in "
                               "Bewegungszonen wird nur das best-belichtete Bild genommen statt der "
                               "Fusion. Auto = dezent, Stark = empfindlicher."), 2, 2)
+        self.hdr_deghost_flow = QCheckBox(tr("Optical-Flow-Deghosting (Belichtungen warpen)"))
+        hg.addWidget(self.hdr_deghost_flow, 7, 0, 1, 2)
+        hg.addWidget(help_btn("Richtet bewegte Belichtungen per optischem Fluss aufeinander aus (statt sie "
+                              "nur zu maskieren) — der HDR-Vorteil bleibt auch in Bewegungszonen erhalten."), 7, 2)
         self.hdr_method = QComboBox()
         self.hdr_method.addItem(tr("Exposure Fusion (Standard, halo-frei)"), "fusion")
         self.hdr_method.addItem(tr("Radiance-Map + Tonemapping (dramatisch)"), "radiance")
@@ -737,7 +750,7 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         hg.addWidget(help_btn("Fusion = Mertens (Standard, robust, halo-frei). Radiance = echte "
                               "Radiance-Map (Debevec) + Tonemapping → dramatischer lokaler Kontrast."), 4, 2)
         self.hdr_tonemap = QComboBox()
-        self.hdr_tonemap.addItems(["reinhard", "mantiuk", "drago"])
+        self.hdr_tonemap.addItems(["reinhard", "mantiuk", "drago", "local"])
         hg.addWidget(QLabel(tr("Tonemapping")), 5, 0); hg.addWidget(self.hdr_tonemap, 5, 1)
         hg.addWidget(help_btn("Tonemapping-Operator für die Radiance-Methode."), 5, 2)
         hdr_info = QLabel(tr("Verrechnet Belichtungsreihen (Lichter + Schatten durchgezeichnet, "
@@ -878,7 +891,8 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         kg.addWidget(self.nostack, 9, 0, 1, 2)
         kg.addWidget(help_btn("Nur Fotos auswählen, noch nicht verrechnen — zum Prüfen der Auswahl."), 9, 2)
         self.focus_method = QComboBox()
-        self.focus_method.addItems(["pyramid", "depthmap", "average", "halofix", "wavelet"])
+        self.focus_method.addItems(["pyramid", "depthmap", "average", "halofix",
+                                    "pyramid-consistent", "wavelet"])
         kg.addWidget(QLabel(tr("Verschmelzungs-Methode")), 10, 0); kg.addWidget(self.focus_method, 10, 1)
         kg.addWidget(help_btn("Wie die scharfen Bereiche verschmolzen werden. „pyramid“ = Laplace-"
                               "Pyramide (Standard): sehr scharf, ideal für feine/weiche Strukturen wie "
@@ -896,6 +910,15 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
                               "Schärfemaßes (größer = ruhiger, weniger Feindetail). Smoothing = Weichheit "
                               "der Übergänge zwischen Quellbildern (Feathering gegen harte Nähte). "
                               "-1 = Standard/aus."), 12, 3)
+        self.focus_breathing = QCheckBox(tr("Focus-Breathing korrigieren"))
+        self.focus_regularize = QCheckBox(tr("Tiefenkarte regularisieren (depthmap)"))
+        kg.addWidget(self.focus_breathing, 13, 0, 1, 2)
+        kg.addWidget(help_btn("Focus-Breathing: gleicht die Vergrößerungsdrift über den Stack aus "
+                              "(geglätteter Scale-Verlauf) — gegen weiche Doppelkanten bei tiefen "
+                              "High-Mag-Makro-Stacks."), 13, 2)
+        kg.addWidget(self.focus_regularize, 14, 0, 1, 2)
+        kg.addWidget(help_btn("Nur depthmap: glättet die „welches Foto ist scharf“-Karte kantenerhaltend "
+                              "(gegen fleckige Frame-Wahl / Mottling)."), 14, 2)
         self.merge_tree = QCheckBox(tr("Baum-Merge (paarweise, gutmütiger bei vielen Fotos)"))
         kg.addWidget(self.merge_tree, 11, 0, 1, 2)
         kg.addWidget(help_btn("Verschmilzt hierarchisch je zwei Fotos (1+2, 3+4, …) und dann die "
@@ -1510,6 +1533,10 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
                 args += ["--astro-deconv", "--astro-deconv-iter", str(self.astro_deconv_iter.value())]
             if self.astro_denoise.value() > 0:
                 args += ["--astro-denoise", str(self.astro_denoise.value())]
+            if self.astro_weight.isChecked():
+                args += ["--astro-weight"]
+            if self.astro_starless.isChecked():
+                args += ["--astro-starless-classic"]
             if self.astro_fits.isChecked():
                 args += ["--fits-out"]
             args += ["--astro-align", self.astro_align.currentData()]
@@ -1562,6 +1589,8 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
                      "--hdr-deghost", self.hdr_deghost.currentData(),
                      "--hdr-method", self.hdr_method.currentData(),
                      "--hdr-tonemap", self.hdr_tonemap.currentText()]
+            if self.hdr_deghost_flow.isChecked():
+                args += ["--hdr-deghost-flow"]
         return args
 
     def _build_args(self, auto):
@@ -1574,6 +1603,10 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
             args += ["--focus-radius", str(self.focus_radius.value())]
         if self.focus_smoothing.value() >= 0:
             args += ["--focus-smoothing", str(self.focus_smoothing.value())]
+        if self.focus_breathing.isChecked():
+            args += ["--focus-breathing"]
+        if self.focus_regularize.isChecked():
+            args += ["--focus-regularize"]
         if self.moving_subject.isChecked():
             args += ["--moving-subject"]
         if self.align_sequential.isChecked():

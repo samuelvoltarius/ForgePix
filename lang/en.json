@@ -570,5 +570,16 @@
   "Schärfung & Rauschen": "Sharpening & noise",
   "Multi-Skalen-Wavelet-Rauschreduktion auf den LINEAREN Daten (vor dem Strecken) — sonst zieht der Stretch das Hintergrundrauschen hoch. 0 = aus, 0.5–1.5 sinnvoll.": "Multi-scale wavelet noise reduction on the LINEAR data (before stretching) — otherwise the stretch pulls up the background noise. 0 = off, 0.5–1.5 sensible.",
   "Dunst entfernen": "Dehaze",
-  "Capture-Schärfung": "Capture sharpening"
+  "Capture-Schärfung": "Capture sharpening",
+  "Tiefenkarte regularisieren (depthmap)": "Regularize depth map (depthmap)",
+  "Focus-Breathing: gleicht die Vergrößerungsdrift über den Stack aus (geglätteter Scale-Verlauf) — gegen weiche Doppelkanten bei tiefen High-Mag-Makro-Stacks.": "Focus-Breathing: gleicht die Vergrößerungsdrift über den Stack aus (geglätteter Scale-Verlauf) — gegen weiche Doppelkanten bei tiefen High-Mag-Makro-Stacks.",
+  "Optical-Flow-Deghosting (Belichtungen warpen)": "Optical-flow deghosting (warp exposures)",
+  "Nur depthmap: glättet die „welches Foto ist scharf“-Karte kantenerhaltend (gegen fleckige Frame-Wahl / Mottling).": "Nur depthmap: glättet die „welches Foto ist scharf“-Karte kantenerhaltend (gegen fleckige Frame-Wahl / Mottling).",
+  "Richtet bewegte Belichtungen per optischem Fluss aufeinander aus (statt sie nur zu maskieren) — der HDR-Vorteil bleibt auch in Bewegungszonen erhalten.": "Richtet bewegte Belichtungen per optischem Fluss aufeinander aus (statt sie nur zu maskieren) — der HDR-Vorteil bleibt auch in Bewegungszonen erhalten.",
+  "Sternloses Nebelbild (klassisch)": "Starless nebula image (classic)",
+  "Punkt-Sterne — Sterne stacken (Feldrotation, Sequator-Stil)": "Point stars — stack stars (field rotation, Sequator-style)",
+  "Zusätzlich ein klassisch sternloses Nebelbild erzeugen (morphologisch, ohne StarNet) — für getrennte Nebel-Bearbeitung. Kleine/mittlere Sterne ok.": "Zusätzlich ein klassisch sternloses Nebelbild erzeugen (morphologisch, ohne StarNet) — für getrennte Nebel-Bearbeitung. Kleine/mittlere Sterne ok.",
+  "Focus-Breathing korrigieren": "Correct focus breathing",
+  "SNR-Gewichtung (1/σ² je Frame)": "SNR weighting (1/σ² per frame)",
+  "Frames bei der Integration nach SNR gewichten (1/σ_bg²) — dünne/verrauschte Subs zählen weniger. Bessere Gesamt-SNR bei gemischter Transparenz.": "Frames bei der Integration nach SNR gewichten (1/σ_bg²) — dünne/verrauschte Subs zählen weniger. Bessere Gesamt-SNR bei gemischter Transparenz."
 }
