@@ -89,6 +89,36 @@ class TestHDRLongexpGaps(unittest.TestCase):
 
     # --- H4: Auto-Sky-Maske mit räumlichem Constraint ---
 
+
+    def test_radiance_exif_zeiten_und_chroma_sauber(self):
+        import hdr
+        r = _rng(); H, W = 80, 110
+        base = np.full((H, W, 3), 90, np.float32)          # gleichmäßiger Hintergrund (wie dunkler Himmel)
+        # 3 Belichtungen + Chroma-Rauschen in den Schatten (grün/magenta Flecken)
+        imgs = []
+        for f in (0.4, 1.0, 2.2):
+            im = base * f
+            im[..., 0] += r.normal(0, 16, (H, W))          # Blau-Rauschen
+            im[..., 1] += r.normal(0, 16, (H, W))          # Grün-Rauschen -> grün/magenta Chroma
+            imgs.append(np.clip(im, 0, 255).astype(np.uint8))
+        def chroma(x):
+            lab = cv2.cvtColor(x, cv2.COLOR_BGR2LAB).astype(np.float32)
+            return float(lab[..., 1].std()) + float(lab[..., 2].std())
+        out = hdr.merge_radiance(imgs, times=np.float32([0.4, 1.0, 2.2]), tonemap="reinhard", log=lambda *a: None)
+        _orig = hdr._denoise_chroma
+        hdr._denoise_chroma = lambda x, **k: x          # Denoise aus -> Referenz
+        try:
+            raw = hdr.merge_radiance(imgs, times=np.float32([0.4, 1.0, 2.2]), tonemap="reinhard", log=lambda *a: None)
+        finally:
+            hdr._denoise_chroma = _orig
+        self.assertEqual(out.shape, (H, W, 3))
+        self.assertLess(chroma(out), chroma(raw) * 0.9)    # Chroma-Denoise senkt Farbrauschen messbar
+
+    def test_read_exposure_times_none_ohne_exif(self):
+        import hdr
+        p = os.path.join(self.d, "x.png"); cv2.imwrite(p, np.zeros((4, 4, 3), np.uint8))
+        self.assertIsNone(hdr.read_exposure_times([p]))   # PNG ohne EXIF -> None (schätzen)
+
     def test_suggest_mode_erkennt_kamerabewegung(self):
         import longexp
         r = _rng(); H, W = 150, 220

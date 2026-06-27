@@ -1956,7 +1956,8 @@ def run_hdr(input_dir, work_dir, args):
                                          flow=getattr(args, "hdr_deghost_flow", False))
             result = hdr.tonemap_local(result, strength=1.0)
         elif getattr(args, "hdr_method", "fusion") == "radiance":
-            result = hdr.merge_radiance(imgs, tonemap=_tm)
+            times = hdr.read_exposure_times(grp)        # echte EXIF-Zeiten → korrekte CRF-Kalibrierung
+            result = hdr.merge_radiance(imgs, times=times, tonemap=_tm)
         else:
             result = hdr.merge_exposures(imgs, align=not getattr(args, "no_align", False),
                                          deghost=getattr(args, "hdr_deghost", "off"),

@@ -24,6 +24,46 @@ def _to8(img):
     return img
 
 
+def read_exposure_times(paths):
+    """Echte Belichtungszeiten (Sekunden) aus dem EXIF lesen. Gibt ein float32-Array zurück, wenn
+    für JEDES Bild eine Zeit gefunden wurde, sonst None (dann muss geschätzt werden). Korrekte
+    Belichtungsverhältnisse sind für die Debevec-CRF-Kalibrierung entscheidend — geratene Zeiten
+    lassen die Response-Kurven pro Farbkanal divergieren → Farbflecken in dunklen Bereichen."""
+    if not paths:
+        return None
+    try:
+        from PIL import Image
+        from PIL.ExifTags import TAGS
+    except Exception:
+        return None
+    times = []
+    for p in paths:
+        try:
+            ex = Image.open(p)._getexif() or {}
+            d = {TAGS.get(k, k): v for k, v in ex.items()}
+            t = d.get("ExposureTime")
+            if t is None:
+                return None
+            times.append(float(t))
+        except Exception:
+            return None
+    if len(times) != len(paths) or any(t <= 0 for t in times):
+        return None
+    return np.asarray(times, np.float32)
+
+
+def _denoise_chroma(bgr, strength=7):
+    """Farbrauschen (grün-magenta Flecken) entfernen, Luminanz/Detail erhalten: nur die a/b-Kanäle
+    im Lab-Raum glätten, der L-Kanal bleibt scharf. Genau das Mittel gegen die Chroma-Blobs, die
+    Debevec+Tonemapping in verrauschten Nacht-Schatten erzeugt."""
+    img = _to8(bgr)
+    lab = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
+    L, a, b = cv2.split(lab)
+    a = cv2.bilateralFilter(a, 0, strength, 9)
+    b = cv2.bilateralFilter(b, 0, strength, 9)
+    return cv2.cvtColor(cv2.merge([L, a, b]), cv2.COLOR_LAB2BGR)
+
+
 def merge_exposures(images, align=True, deghost="off", flow=False, log=print):
     """Eine Belichtungsreihe (Liste BGR-Bilder mit unterschiedlicher Belichtung) zu einem
     durchgezeichneten 8-bit-Bild verschmelzen (Mertens Exposure Fusion).
@@ -83,6 +123,9 @@ def merge_radiance(images, times=None, tonemap="reinhard", log=print):
         meds = [float(np.median(cv2.cvtColor(im, cv2.COLOR_BGR2GRAY))) + 1.0 for im in imgs]
         base = float(np.median(meds))
         times = np.array([m / base for m in meds], np.float32)
+        src = " (Belichtungszeiten geschätzt — ohne EXIF)"
+    else:
+        src = " (echte EXIF-Belichtungszeiten)"
     times = np.clip(np.asarray(times, np.float32), 1e-3, None)
     try:
         resp = cv2.createCalibrateDebevec().process(imgs, times)
@@ -92,14 +135,17 @@ def merge_radiance(images, times=None, tonemap="reinhard", log=print):
     if tonemap == "local":
         # Durand-2002 lokal-adaptives Tonemapping direkt auf der linearen Radiance-Map.
         out = tonemap_local(rad, strength=1.0, log=log)
-        log("    HDR: Radiance-Map + lokales Tonemapping (Durand)")
+        out = _denoise_chroma(out)
+        log(f"    HDR: Radiance-Map + lokales Tonemapping (Durand){src}")
         return out
     tm = {"mantiuk": cv2.createTonemapMantiuk(2.2, 0.85, 1.2),
           "drago": cv2.createTonemapDrago(1.0, 0.7),
           }.get(tonemap, cv2.createTonemapReinhard(1.5, 0, 0, 0))
     ldr = tm.process(rad)
-    log(f"    HDR: Radiance-Map + Tonemapping ({tonemap})")
-    return np.clip(np.nan_to_num(ldr) * 255.0, 0, 255).astype(np.uint8)
+    out = np.clip(np.nan_to_num(ldr) * 255.0, 0, 255).astype(np.uint8)
+    out = _denoise_chroma(out)                          # grün-magenta Chroma-Flecken killen
+    log(f"    HDR: Radiance-Map + Tonemapping ({tonemap}){src}")
+    return out
 
 
 def tonemap_local(hdr_or_bgr, strength=1.0, base_contrast=3.5, log=print):
