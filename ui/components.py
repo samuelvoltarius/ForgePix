@@ -136,10 +136,16 @@ def adjust_image(img, p):
             if dl:
                 hsv[..., 2] = np.clip(hsv[..., 2] * (1 + (dl / 100.0) * mask), 0, 1)
         f = np.clip(cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR), 0, 1)
-    if p.get("clarity"):  # Mikrokontrast über großen Radius
-        r = max(3.0, min(f.shape[0], f.shape[1]) / 90.0)
-        blur = cv2.GaussianBlur(f, (0, 0), r)
-        f = np.clip(f + (p["clarity"] / 100.0) * (f - blur), 0, 1)
+    if p.get("clarity"):  # lokaler Kontrast-Equalizer (multiskalig, halo-arm) — darktable/RT-Stil
+        try:
+            import sys as _sys, os as _os
+            _sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.dirname(__file__)), "core"))
+            import develop as _dev
+            f = np.clip(_dev.local_contrast(f.astype(np.float32), amount=p["clarity"] / 100.0), 0, 1)
+        except Exception:                                # Fallback: einfaches Großradius-Unsharp
+            r = max(3.0, min(f.shape[0], f.shape[1]) / 90.0)
+            blur = cv2.GaussianBlur(f, (0, 0), r)
+            f = np.clip(f + (p["clarity"] / 100.0) * (f - blur), 0, 1)
     if p.get("vibrance") or p.get("saturation"):
         hsv = cv2.cvtColor(f, cv2.COLOR_BGR2HSV)
         s = hsv[..., 1]

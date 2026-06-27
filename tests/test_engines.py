@@ -1284,6 +1284,19 @@ class TestProToolGaps(TmpCase):
         self.assertEqual(out.shape[:2], (100, 120))
         self.assertEqual(out.dtype, np.uint8)
 
+
+    def test_local_contrast_hebt_mikrokontrast(self):
+        import develop
+        img = (_rng().rand(120, 160, 3) * 180 + 30).astype(np.uint8)
+        img = cv2.GaussianBlur(img, (0, 0), 3)
+        out = develop.local_contrast(img, amount=0.6, scales=4)
+        def lc(x):
+            g = cv2.cvtColor(x, cv2.COLOR_BGR2GRAY).astype(np.float32)
+            return float((g - cv2.GaussianBlur(g, (0, 0), 8)).std())
+        self.assertGreater(lc(out), lc(img))
+        self.assertLessEqual(int(out.max()), 255)
+        self.assertEqual(out.dtype, np.uint8)
+
     def test_lens_correct_noop_und_vignette(self):
         import develop
         img = np.full((120, 120, 3), 80, np.uint8)

@@ -97,6 +97,47 @@ def fast_denoise(img, luma=7.0, chroma=10.0):
     return (out * maxv).astype(dtype) if dtype != np.float32 else out
 
 
+def local_contrast(img, amount=0.5, scales=4, protect=0.2):
+    """Lokaler Kontrast-Equalizer (darktable/RawTherapee-Stil): hebt den Kontrast je Detailgröße
+    getrennt an — über mehrere Skalen (Laplace-Pyramide auf der Luminanz). Anders als globaler
+    Kontrast oder ein einzelnes Unsharp arbeitet das gleichmäßig über grobe UND feine Strukturen
+    und bleibt dabei halo-arm (große Radien werden sanfter angehoben).
+
+      amount  = Stärke (0..~1.5)
+      scales  = Anzahl Detailskalen (mehr = auch gröbere Strukturen)
+      protect = Schutz von Lichtern/Tiefen 0..0.5 (gegen Clipping/Verstärkung von Rauschen im Dunkeln)
+
+    Treu/nicht-generativ — nur Tonwert/lokaler Kontrast, keine erfundenen Inhalte."""
+    f, dtype, maxv = _as_float(img)
+    if f.ndim == 3:
+        lab = cv2.cvtColor(np.clip(f, 0, 1).astype(np.float32), cv2.COLOR_BGR2LAB)
+        L = lab[..., 0] / 100.0
+    else:
+        L = np.clip(f, 0, 1).astype(np.float32)
+    base = L.copy()
+    out = L.copy()
+    sigma = 2.0
+    for s in range(int(max(1, scales))):                 # Detailbänder via Difference-of-Gaussians
+        blur = cv2.GaussianBlur(base, (0, 0), sigma)
+        detail = base - blur                              # Detail dieser Skala
+        gain = amount * (0.6 ** s)                        # gröbere Skalen sanfter (halo-arm)
+        out = out + gain * detail
+        base = blur
+        sigma *= 2.0
+    if protect and protect > 0:                           # Lichter/Tiefen schützen (Glocken-Gewicht um 0.5)
+        wmid = 1.0 - np.abs(L - 0.5) * 2.0
+        wmid = np.clip(wmid, protect, 1.0)
+        out = L + (out - L) * wmid
+    out = np.clip(out, 0, 1)
+    if f.ndim == 3:
+        lab[..., 0] = out * 100.0
+        res = cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
+    else:
+        res = out
+    res = np.clip(res, 0, 1)
+    return (res * maxv).astype(dtype) if dtype != np.float32 else res
+
+
 def _smoothstep(e0, e1, x):
     t = np.clip((x - e0) / (e1 - e0 + 1e-12), 0, 1)
     return t * t * (3 - 2 * t)
