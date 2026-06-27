@@ -6,6 +6,22 @@ All notable changes to ForgePix. Format based on
 [Keep a Changelog](https://keepachangelog.com/), versioning per
 [SemVer](https://semver.org/).
 
+## [1.26.0] – 2026-06-27
+### Pro AI-tool chain (StarNet → GraXpert → Cosmic Clarity), correct order, robustness
+External AI tools fully wired as optional backends (ForgePix stays MIT — tools are called, not bundled).
+Core rule: **enhancement filters NEVER touch the stars.**
+- **Starless workflow reordered:** stretch → **StarNet** (remove stars → untouched star layer) →
+  **GraXpert** (background + AI denoise) → **Cosmic Clarity** (AI sharpening, free BlurXTerminator
+  alternative, MIT) — all three on the STARLESS nebula only — → nebula boost → untouched stars back.
+  Background pulled color-neutral (no blue/green cast). VLLM on real IC5146: **grade 1–2**.
+- **GraXpert** now runs on GPU (CoreML/CUDA) and does background extraction **+** denoising by default;
+  selectable astro backend (`--astro-bg-backend graxpert`).
+- **Cosmic Clarity** newly integrated (`core/cosmicclarity_engine.py`, AppleSilicon CLI/MPS) + GUI path.
+- **Siril** engine now also uses `subsky` (background) + `rmgreen` (SCNR), not just stacking.
+- **Panorama:** `--no-autocrop` now applies here too (mosaic always cropped before).
+- **Robustness:** 10 runs per module with varied settings — focus/panorama/HDR/long-exposure/astro 10/10,
+  RAW 9/10 — no crashes, no black/miscolored results.
+
 ## [1.25.1] – 2026-06-27
 ### Verified on REAL footage (own captures) + objectively graded by a vision model — default-path bugs fixed
 Every module tested on real own captures and the result graded by a vision model (instead of "by eye");

@@ -6,6 +6,23 @@ Alle nennenswerten Änderungen an ForgePix. Format orientiert an
 [Keep a Changelog](https://keepachangelog.com/de/), Versionierung nach
 [SemVer](https://semver.org/lang/de/).
 
+## [1.26.0] – 2026-06-27
+### Profi-KI-Tool-Kette (StarNet → GraXpert → Cosmic Clarity), korrekte Reihenfolge, Robustheit
+Externe KI-Tools als optionale Backends voll eingebunden (ForgePix bleibt MIT — Tools werden nur
+aufgerufen, nicht gebündelt). Kern-Regel: **Bearbeitungs-Filter wirken NIE auf die Sterne.**
+- **Starless-Workflow neu geordnet:** Strecken → **StarNet** (Sterne raus, unbearbeitete Sternebene) →
+  **GraXpert** (Hintergrund + KI-Entrauschen) → **Cosmic Clarity** (KI-Schärfung, freie BlurXTerminator-
+  Alternative, MIT) — alle drei NUR auf dem sternenlosen Nebel — → Nebel-Boost → Sterne unbearbeitet
+  zurück. Hintergrund wird farbneutral gezogen (kein Blau-/Grünstich). VLLM am echten IC5146: **Note 1–2**.
+- **GraXpert** läuft jetzt mit GPU (CoreML/CUDA) und macht standardmäßig Background-Extraction **+**
+  Denoising; als Astro-Backend wählbar (`--astro-bg-backend graxpert`).
+- **Cosmic Clarity** neu integriert (`core/cosmicclarity_engine.py`, AppleSilicon-CLI/MPS) +
+  GUI-Tool-Pfad.
+- **Siril**-Engine nutzt jetzt zusätzlich `subsky` (Background) + `rmgreen` (SCNR), nicht nur Stack.
+- **Panorama:** `--no-autocrop` wirkt jetzt auch hier (Mosaik cropte vorher immer).
+- **Robustheit:** je 10 Läufe pro Modul mit variierenden Einstellungen — Fokus/Panorama/HDR/Langzeit/
+  Astro 10/10, RAW 9/10 — keine Abstürze, keine schwarzen/verfärbten Ergebnisse.
+
 ## [1.25.1] – 2026-06-27
 ### An ECHTEM Material verifiziert (eigene Aufnahmen) + objektiv per VLLM bewertet — Default-Bugs gefixt
 Jedes Modul mit echten eigenen Aufnahmen getestet und das Ergebnis von einem Vision-Modell (statt „per
