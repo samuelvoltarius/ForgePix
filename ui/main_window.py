@@ -301,7 +301,11 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         self.raw_bps = QComboBox(); self.raw_bps.addItems(["16", "8"])
         self.raw_auto_bright = QCheckBox(tr("Auto-Helligkeit (sonst treu)"))
         self.raw_half = QCheckBox(tr("Halbe Auflösung (schneller)"))
-        for w in (self.raw_wb, self.raw_bps, self.raw_auto_bright, self.raw_half):
+        self.raw_demosaic = QComboBox()
+        self.raw_demosaic.addItems(["auto", "dht", "dcb", "vng", "ahd"])
+        self.raw_highlights = QCheckBox(tr("Ausgebrannte Lichter rekonstruieren"))
+        for w in (self.raw_wb, self.raw_bps, self.raw_auto_bright, self.raw_half,
+                  self.raw_demosaic, self.raw_highlights):
             self.raw_dev.toggled.connect(w.setEnabled)
         rg.addWidget(self.raw_dev, 0, 0, 1, 2)
         rg.addWidget(help_btn("RAW-Dateien (ARW/NEF/CR2/DNG …) werden zuerst schonend in ein "
@@ -315,6 +319,12 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
                               "zum Bearbeiten (empfohlen), 8 = kleiner, weniger Spielraum."), 2, 2)
         rg.addWidget(self.raw_auto_bright, 3, 0, 1, 2)
         rg.addWidget(help_btn("Hellt das Bild automatisch auf. Aus = originalgetreu (empfohlen)."), 3, 2)
+        rg.addWidget(QLabel(tr("Demosaic")), 4, 0); rg.addWidget(self.raw_demosaic, 4, 1)
+        rg.addWidget(help_btn("Verfahren, das aus dem Sensor-Mosaik das Farbbild rechnet. „auto/ahd“ "
+                              "Standard, „dht“ hohe Qualität, „dcb“ wenig Falschfarbe, „vng“ weich."), 4, 2)
+        rg.addWidget(self.raw_highlights, 5, 0, 1, 2)
+        rg.addWidget(help_btn("Holt Zeichnung in ausgebrannte Lichter zurück (Kanal-Verhältnis) und "
+                              "verhindert magenta Lichter (Entsättigen zu Weiß)."), 5, 2)
         rg.addWidget(self.raw_half, 4, 0, 1, 2)
         rg.addWidget(help_btn("Entwickelt RAW in halber Größe — schneller, weniger Details. "
                               "Gut zum schnellen Ausprobieren."), 4, 2)
@@ -333,6 +343,10 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         self.astro_register = QCheckBox(tr("Sterne ausrichten")); self.astro_register.setChecked(True)
         self.astro_qc = QCheckBox(tr("Schlechte Subs automatisch aussortieren")); self.astro_qc.setChecked(True)
         self.astro_stretch = QCheckBox(tr("Vorschau strecken (asinh)")); self.astro_stretch.setChecked(True)
+        self.astro_stretch_mode = QComboBox()
+        self.astro_stretch_mode.addItem(tr("asinh (Standard)"), "asinh")
+        self.astro_stretch_mode.addItem(tr("MTF / Histogramm (reversibel)"), "mtf")
+        self.astro_local_norm = QCheckBox(tr("Lokale Normalisierung (gegen Gradienten/Mehrfach-Sessions)"))
         self.astro_bg = QCheckBox(tr("Hintergrund/Gradient entfernen"))
         self.astro_fits = QCheckBox(tr("Auch als FITS speichern"))
         self.astro_align = QComboBox()
@@ -415,7 +429,12 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         ar.addWidget(help_btn("Bewertet jede Aufnahme (Sternzahl/FWHM/Elongation/Wolken/Spuren) "
                               "und lässt schlechte Subs weg — mit Begründung im Log. Aus = alle "
                               "Aufnahmen verwenden."), 3, 3)
-        ar.addWidget(self.astro_stretch, 4, 0, 1, 3)
+        ar.addWidget(self.astro_stretch, 4, 0, 1, 2)
+        ar.addWidget(self.astro_stretch_mode, 4, 2)
+        ar.addWidget(self.astro_local_norm, 6, 0, 1, 3)
+        ar.addWidget(help_btn("Gleicht den Hintergrund jedes Frames ÖRTLICH an (statt nur global) vor "
+                              "der Ausreißer-Verwerfung — macht das Stacken bei Gradienten und beim "
+                              "Kombinieren mehrerer Nächte korrekt."), 6, 3)
         ar.addWidget(self.astro_bg, 5, 0, 1, 3)
         ar.addWidget(help_btn("Entfernt weiche Helligkeits-Gradienten (Lichtverschmutzung/Vignette). "
                               "Für stärkere Tools: das 32-bit-Linear-TIFF in GraXpert/StarNet++/"
@@ -525,6 +544,7 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         self.longexp_mode = QComboBox()
         self.longexp_mode.addItem(tr("Glatt — Wasser/Wolken (Mitteln)"), "smooth")
         self.longexp_mode.addItem(tr("Lichtspuren — Autos/Sterne (Aufhellen)"), "trails")
+        self.longexp_mode.addItem(tr("Komet — Spur mit hellem Kopf, verblassendem Schweif"), "comet")
         self.longexp_mode.addItem(tr("Störer entfernen — Passanten/Autos (Median)"), "declutter")
         self.longexp_mode.addItem(tr("Aufhellen — dunkle Nacht (additiv)"), "bright")
         lg.addWidget(QLabel(tr("Effekt")), 0, 0); lg.addWidget(self.longexp_mode, 0, 1, 1, 2)
@@ -539,6 +559,11 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         lg.addWidget(QLabel(tr("Ausrichten")), 1, 0); lg.addWidget(self.longexp_align, 1, 1, 1, 2)
         lg.addWidget(help_btn("Vom Stativ: „nicht ausrichten“. Bei leichtem Verwackeln „Versatz“ "
                               "(verschiebt), aus der Hand „Merkmale“ (richtet voll aus)."), 1, 3)
+        self.longexp_gapfill = QCheckBox(tr("Spuren-Lücken füllen"))
+        lg.addWidget(self.longexp_gapfill, 5, 0, 1, 2)
+        lg.addWidget(help_btn("Überbrückt Lücken in Strichspuren (durch Schreibpausen zwischen den "
+                              "Aufnahmen) — aus gestrichelten werden durchgehende Spuren. Für "
+                              "Lichtspuren/Komet."), 5, 3)
         # Virtuelle Belichtungszeit (gewichtetes Teil-Mitteln)
         self.longexp_strength = QSlider(Qt.Horizontal)
         self.longexp_strength.setRange(0, 100); self.longexp_strength.setValue(100)
@@ -584,11 +609,19 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
                               "Natürlich gibt dezenten Kontrast/Pop (Standard), Kräftig mehr, "
                               "Dramatisch starken lokalen Kontrast (Wolken/Struktur), Neutral lässt "
                               "es flach. Treu — nur Tonwerte, keine erfundenen Inhalte."), 1, 2)
+        self.hdr_deghost = QComboBox()
+        self.hdr_deghost.addItem(tr("Aus"), "off")
+        self.hdr_deghost.addItem(tr("Auto"), "auto")
+        self.hdr_deghost.addItem(tr("Stark"), "aggressive")
+        hg.addWidget(QLabel(tr("Deghosting")), 2, 0); hg.addWidget(self.hdr_deghost, 2, 1)
+        hg.addWidget(help_btn("Entfernt Bewegungsgeister (wackelnde Blätter, Personen, Autos): in "
+                              "Bewegungszonen wird nur das best-belichtete Bild genommen statt der "
+                              "Fusion. Auto = dezent, Stark = empfindlicher."), 2, 2)
         hdr_info = QLabel(tr("Verrechnet Belichtungsreihen (Lichter + Schatten durchgezeichnet, "
                              "Exposure Fusion). Das ist NICHT Fokus-Stacking. Freihand wird "
                              "automatisch ausgerichtet."))
         hdr_info.setWordWrap(True); hdr_info.setStyleSheet("color:#9aa09a;font-size:11px;")
-        hg.addWidget(hdr_info, 2, 0, 1, 3)
+        hg.addWidget(hdr_info, 3, 0, 1, 3)
         p1.addWidget(g_hdr)
 
         # Selektion
@@ -721,7 +754,8 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         kg.addWidget(help_btn("Vorsatz für den Dateinamen des Ergebnisses."), 8, 2)
         kg.addWidget(self.nostack, 9, 0, 1, 2)
         kg.addWidget(help_btn("Nur Fotos auswählen, noch nicht verrechnen — zum Prüfen der Auswahl."), 9, 2)
-        self.focus_method = QComboBox(); self.focus_method.addItems(["pyramid", "depthmap"])
+        self.focus_method = QComboBox()
+        self.focus_method.addItems(["pyramid", "depthmap", "average", "wavelet"])
         kg.addWidget(QLabel(tr("Verschmelzungs-Methode")), 10, 0); kg.addWidget(self.focus_method, 10, 1)
         kg.addWidget(help_btn("Wie die scharfen Bereiche verschmolzen werden. „pyramid“ = Laplace-"
                               "Pyramide (Standard): sehr scharf, ideal für feine/weiche Strukturen wie "
@@ -1267,11 +1301,14 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         if self.work_edit.text().strip():
             args += ["--work", os.path.abspath(self.work_edit.text().strip())]
         if self.raw_dev.isChecked():
-            args += ["--raw-wb", self.raw_wb.currentText(), "--raw-bps", self.raw_bps.currentText()]
+            args += ["--raw-wb", self.raw_wb.currentText(), "--raw-bps", self.raw_bps.currentText(),
+                     "--raw-demosaic", self.raw_demosaic.currentText()]
             if self.raw_auto_bright.isChecked():
                 args += ["--raw-auto-bright"]
             if self.raw_half.isChecked():
                 args += ["--raw-half"]
+            if self.raw_highlights.isChecked():
+                args += ["--raw-highlights"]
         else:
             args += ["--no-raw-develop"]
         if self.batch.isChecked():
@@ -1297,6 +1334,9 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
                 args += ["--no-astro-qc"]
             if self.astro_stretch.isChecked():
                 args += ["--astro-stretch"]
+            args += ["--astro-stretch-mode", self.astro_stretch_mode.currentData()]
+            if self.astro_local_norm.isChecked():
+                args += ["--astro-local-norm"]
             if self.astro_filter.currentData() == "dual":
                 args += ["--dualband", "--palette", self.astro_palette.currentData()]
             if not self.astro_auto.isChecked():   # manuelle Aufbereitung statt Auto/KI
@@ -1341,17 +1381,20 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
                      "--longexp-mode", self.longexp_mode.currentData(),
                      "--longexp-align", self.longexp_align.currentData(),
                      "--longexp-strength", str(self.longexp_strength.value())]
+            if self.longexp_gapfill.isChecked():
+                args += ["--longexp-gapfill"]
         if getattr(self, "is_hdr", False):
             args += ["--hdr", "--hdr-bracket", str(self.hdr_bracket.value()),
-                     "--hdr-look", self.hdr_look.currentData()]
+                     "--hdr-look", self.hdr_look.currentData(),
+                     "--hdr-deghost", self.hdr_deghost.currentData()]
         return args
 
     def _build_args(self, auto):
         inp = self.in_edit.text().strip()
         args = self._common_args(inp)
         # Verschmelzungs-Methode, Motiv-/Paar-Ausrichtung & Merge gelten in Auto- wie Handbetrieb
-        if self.focus_method.currentText() == "depthmap":
-            args += ["--focus-method", "depthmap"]
+        if self.focus_method.currentText() != "pyramid":
+            args += ["--focus-method", self.focus_method.currentText()]
         if self.moving_subject.isChecked():
             args += ["--moving-subject"]
         if self.align_sequential.isChecked():

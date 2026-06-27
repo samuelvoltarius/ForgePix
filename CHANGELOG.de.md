@@ -6,6 +6,30 @@ Alle nennenswerten Änderungen an ForgePix. Format orientiert an
 [Keep a Changelog](https://keepachangelog.com/de/), Versionierung nach
 [SemVer](https://semver.org/lang/de/).
 
+## [1.20.0] – 2026-07-13
+### Profi-Tool-Welle — jedes Modul aufgewertet (recherchiert gegen Helicon/Zerene, AutoStakkert/PSS, Siril/PixInsight, Photomatix/Sequator/Hugin, RawTherapee/darktable)
+Die modulübergreifende Erkenntnis — **lokale (nicht-rigide) Ausrichtung** — plus die wirkungsvollste
+Technik je Profi-Tool, in reinem OpenCV/NumPy. Siehe `docs/ROADMAP.de.md`.
+- **Fundament lokale Ausrichtung (`core/align_local.py`):** ECC-Subpixel (helligkeitsinvariant) +
+  gedeckelter dichter Optical-Flow — gemeinsamer Baustein.
+- **Lucky Imaging — echtes Multi-Point (MAP):** AP-Raster, pro Region beste Frames + Subpixel-Versatz,
+  nahtloser Hann-Blend (`lucky_stack_map`). Speichert immer auch das schärfste Einzelbild. (Ehrlich:
+  bei strukturarmen/niedrig aufgelösten Scheiben kann das Einzelbild gewinnen; MAP glänzt bei
+  detailreichen Mond-/Planeten-Zielen.)
+- **Wavelet-Schärfung (`core/wavelet.py`):** à-trous Multi-Skalen-Boost + Entrauschen (RegiStax-Stil),
+  farbtreu. Geteilt von Lucky/Astro/Editor.
+- **Astro:** lokale Normalisierung vor der Rejection (`--astro-local-norm`) + MTF-/Histogramm-Stretch
+  (`--astro-stretch-mode mtf`, PixInsight-AutoSTF-Stil, reversibel).
+- **HDR:** Deghosting (`--hdr-deghost`, bewegungsmaskierte Referenz-Fusion).
+- **Langzeit:** Kometen-Modus + Strichspuren-Lückenfüllung (`--longexp-gapfill`).
+- **Panorama:** explizite `cv2.detail`-Pipeline (Projektion, Belichtungsausgleich, GraphCut-Nähte,
+  MultiBand-Blending) statt Black-Box-Stitcher, mit Rückfall.
+- **RAW-Editor (`core/develop.py`):** Lichter-Rekonstruktion (`--raw-highlights`), Demosaic-Wahl
+  (`--raw-demosaic`), Tonwertkurven (PCHIP), NLM-Entrauschen, lokale Anpassungs-Masken.
+- **Fokus-Stacking:** Method A + Wavelet-Merge mit Konsistenz-Vote + Farb-Neuzuweisung
+  (`--focus-method average|wavelet`).
+- Alles in CLI + GUI verdrahtet, zweisprachig, +13 Tests (83 grün).
+
 ## [1.19.3] – 2026-07-12
 ### Fokus-Map liest sich besser (nur scharfe Bereiche färben)
 - Die Fokus-Herkunfts-Karte zeigte in **strukturlosen/unscharfen Flächen** (z. B. Bokeh-Hintergrund)

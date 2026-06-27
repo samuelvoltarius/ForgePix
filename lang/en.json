@@ -488,5 +488,19 @@
   "Bilder": "Images",
   "Fehler": "Error",
   "📷 RAW entwickeln zum Bearbeiten …\n": "📷 Developing RAW for editing …\n",
-  "Camera-Raw: Belichtung, Kontrast, Weißabgleich, Klarheit, Farbe — mit Live-Vorschau und Histogramm. Ohne Ergebnis: öffnet ein beliebiges Bild (auch RAW) zum Bearbeiten.": "Camera Raw: exposure, contrast, white balance, clarity, colour — with live preview and histogram. Without a result: opens any image (incl. RAW) to edit."
+  "Camera-Raw: Belichtung, Kontrast, Weißabgleich, Klarheit, Farbe — mit Live-Vorschau und Histogramm. Ohne Ergebnis: öffnet ein beliebiges Bild (auch RAW) zum Bearbeiten.": "Camera Raw: exposure, contrast, white balance, clarity, colour — with live preview and histogram. Without a result: opens any image (incl. RAW) to edit.",
+  "Ausgebrannte Lichter rekonstruieren": "Reconstruct blown highlights",
+  "Deghosting": "Deghosting",
+  "Demosaic": "Demosaic",
+  "Entfernt Bewegungsgeister (wackelnde Blätter, Personen, Autos): in Bewegungszonen wird nur das best-belichtete Bild genommen statt der Fusion. Auto = dezent, Stark = empfindlicher.": "Removes motion ghosts (swaying leaves, people, cars): in motion zones only the best-exposed frame is used instead of the fusion. Auto = subtle, Strong = more sensitive.",
+  "Gleicht den Hintergrund jedes Frames ÖRTLICH an (statt nur global) vor der Ausreißer-Verwerfung — macht das Stacken bei Gradienten und beim Kombinieren mehrerer Nächte korrekt.": "Matches each frame's background LOCALLY (not just globally) before outlier rejection — makes stacking correct with gradients and when combining multiple nights.",
+  "Holt Zeichnung in ausgebrannte Lichter zurück (Kanal-Verhältnis) und verhindert magenta Lichter (Entsättigen zu Weiß).": "Recovers detail in blown highlights (channel ratio) and prevents magenta highlights (desaturate to white).",
+  "Komet — Spur mit hellem Kopf, verblassendem Schweif": "Comet — trail with bright head, fading tail",
+  "Lokale Normalisierung (gegen Gradienten/Mehrfach-Sessions)": "Local normalization (against gradients / multi-session)",
+  "MTF / Histogramm (reversibel)": "MTF / histogram (reversible)",
+  "Spuren-Lücken füllen": "Fill trail gaps",
+  "Stark": "Strong",
+  "Verfahren, das aus dem Sensor-Mosaik das Farbbild rechnet. „auto/ahd“ Standard, „dht“ hohe Qualität, „dcb“ wenig Falschfarbe, „vng“ weich.": "Method that computes the colour image from the sensor mosaic. \"auto/ahd\" default, \"dht\" high quality, \"dcb\" low false colour, \"vng\" soft.",
+  "asinh (Standard)": "asinh (default)",
+  "Überbrückt Lücken in Strichspuren (durch Schreibpausen zwischen den Aufnahmen) — aus gestrichelten werden durchgehende Spuren. Für Lichtspuren/Komet.": "Bridges gaps in star/light trails (from write pauses between frames) — dashed trails become continuous. For light trails / comet."
 }

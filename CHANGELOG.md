@@ -6,6 +6,30 @@ All notable changes to ForgePix. Format based on
 [Keep a Changelog](https://keepachangelog.com/), versioning per
 [SemVer](https://semver.org/).
 
+## [1.20.0] – 2026-07-13
+### Pro-tool parity wave — every module upgraded (researched against Helicon/Zerene, AutoStakkert/PSS, Siril/PixInsight, Photomatix/Sequator/Hugin, RawTherapee/darktable)
+The recurring cross-cutting insight — **local (non-rigid) alignment** — plus the highest-impact
+technique from each pro tool, implemented in pure OpenCV/NumPy. See `docs/ROADMAP.md`.
+- **Local alignment foundation (`core/align_local.py`):** ECC sub-pixel refine (brightness-invariant)
+  + capped dense optical-flow warp — shared building block.
+- **Lucky imaging — real multi-point (MAP):** alignment-point grid, per-region best-frame selection +
+  sub-pixel local shift, seamless Hann blend (`lucky_stack_map`). Always also saves the sharpest single
+  frame. (Honest: on featureless/low-res discs the single frame can still win; MAP shines on detailed
+  Moon/planet targets.)
+- **Wavelet sharpening (`core/wavelet.py`):** à-trous multi-scale boost + denoise (RegiStax-style),
+  colour-faithful. Shared by lucky/astro/editor.
+- **Astro:** local normalization before rejection (`--astro-local-norm`, against gradients/multi-session)
+  + MTF/histogram stretch (`--astro-stretch-mode mtf`, PixInsight AutoSTF-style, reversible).
+- **HDR:** deghosting (`--hdr-deghost`, motion-masked reference fusion — no more ghosted leaves/people).
+- **Long exposure:** comet mode + star-trail gap-fill (`--longexp-gapfill`).
+- **Panorama:** explicit `cv2.detail` pipeline (projection, exposure compensation, GraphCut seams,
+  MultiBand blending) replacing the black-box stitcher, with fallback.
+- **RAW editor (`core/develop.py`):** highlight reconstruction (`--raw-highlights`), demosaic choice
+  (`--raw-demosaic`), tone curves (PCHIP), NLM denoise, local-adjustment masks.
+- **Focus stacking:** Method A (weighted average) + wavelet merge with consistency vote + colour
+  reassignment (`--focus-method average|wavelet`).
+- All wired into CLI + GUI, bilingual, +13 tests (83 total green).
+
 ## [1.19.3] – 2026-07-12
 ### Focus map reads better (only colour the sharp areas)
 - The focus-origin map used to show colourful **random noise** in **flat/out-of-focus areas**
