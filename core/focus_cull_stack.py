@@ -898,20 +898,17 @@ def run_own_engine(selected_dir, work_dir, args):
             print("  Ausrichten …")
             imgs = stacker.align_images(imgs, mode=align_mode, detector=args.detector)
         _fm = getattr(args, "focus_method", "pyramid")
+        _merge1 = {"depthmap": lambda g: stacker.focus_stack_depthmap(g, log=lambda *a: None),
+                   "average": lambda g: stacker.focus_stack_average(g, log=lambda *a: None),
+                   "wavelet": lambda g: stacker.focus_stack_wavelet(g, log=lambda *a: None)}.get(
+            _fm, lambda g: stacker.focus_stack(g, deghost=getattr(args, "deghost", False),
+                                               log=lambda *a: None))
         if getattr(args, "merge", "flat") == "tree":
             print(f"  Verschmelzen (Baum-Merge, {_fm}) …")
-            if _fm == "depthmap":
-                _mf = lambda g: stacker.focus_stack_depthmap(g, log=lambda *a: None)
-            else:
-                _mf = lambda g: stacker.focus_stack(g, deghost=getattr(args, "deghost", False),
-                                                    log=lambda *a: None)
-            result = stacker.merge_tree(imgs, _mf)
-        elif _fm == "depthmap":
-            print("  Verschmelzen (Depth Map / Tiefenkarte) …")
-            result = stacker.focus_stack_depthmap(imgs)
+            result = stacker.merge_tree(imgs, _merge1)
         else:
-            print("  Verschmelzen (Laplace-Pyramide) …")
-            result = stacker.focus_stack(imgs, deghost=getattr(args, "deghost", False))
+            print(f"  Verschmelzen ({_fm}) …")
+            result = _merge1(imgs)
         if getattr(args, "ghost_map", False) and len(imgs) >= 3:
             gm = stacker.ghost_overlay(result, imgs)
             gm_path = os.path.join(work_dir, "ghostmap.jpg")
@@ -1091,7 +1088,8 @@ def main():
     ap.add_argument("--moving-subject", action="store_true",
                     help="Auf das MOTIV ausrichten statt aufs ganze Bild — gegen Geister bei "
                          "bewegtem Motiv (Wind-Schwanken etc.); verschobene Frames werden verworfen")
-    ap.add_argument("--focus-method", choices=["pyramid", "depthmap"], default="pyramid",
+    ap.add_argument("--focus-method", choices=["pyramid", "depthmap", "average", "wavelet"],
+                    default="pyramid",
                     help="Verschmelzungs-Methode: pyramid=Laplace-Pyramide (Standard, scharf, "
                          "gut für feine/weiche Strukturen wie Blüten); depthmap=Tiefenkarten-Auswahl "
                          "(für harte Tiefenkanten: Insekten, Münzen, Platinen)")

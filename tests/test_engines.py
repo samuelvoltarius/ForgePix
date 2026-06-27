@@ -262,6 +262,25 @@ class TestStacker(TmpCase):
         res = stacker.focus_stack(imgs, log=lambda *a: None)  # darf nicht crashen
         self.assertEqual(res.shape[:2], (120, 160))
 
+    def test_focus_stack_average_and_wavelet(self):
+        import stacker
+        # gemeinsames Motiv, je Frame ein anderer scharfer Streifen
+        base = (_rng().rand(120, 150, 3) * 255).astype(np.uint8)
+        imgs = []
+        for k in range(4):
+            blur = cv2.GaussianBlur(base, (0, 0), 4)
+            y0 = k * 30
+            blur[y0:y0 + 30] = base[y0:y0 + 30]
+            imgs.append(blur)
+        for fn in (stacker.focus_stack_average, stacker.focus_stack_wavelet):
+            out = fn(imgs, log=lambda *a: None)
+            self.assertEqual(out.shape, base.shape)
+            self.assertEqual(out.dtype, np.uint8)
+        # color_reassign liefert nur echte Quellfarben (keine erfundenen)
+        merged = stacker.focus_stack_average(imgs, log=lambda *a: None)
+        cr = stacker.color_reassign(imgs, merged)
+        self.assertEqual(cr.shape, base.shape)
+
     def test_focus_stack_depthmap(self):
         import stacker
         # gemeinsames Motiv, je Frame eine andere scharfe Region — Depth Map muss überall

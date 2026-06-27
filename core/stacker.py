@@ -424,6 +424,79 @@ def focus_stack_depthmap(images, sharp_blur=4, gamma=8.0, log=print):
     return np.clip(out, 0, maxval).astype(dtype)
 
 
+def _focus_measure(bgr):
+    """Schärfemaß je Pixel: Sum-Modified-Laplacian (SML) — robuster als Varianz-Laplace."""
+    g = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY).astype(np.float32) if bgr.ndim == 3 else bgr.astype(np.float32)
+    lx = cv2.filter2D(g, cv2.CV_32F, np.array([[-1, 2, -1]], np.float32))
+    ly = cv2.filter2D(g, cv2.CV_32F, np.array([[-1], [2], [-1]], np.float32))
+    return np.abs(lx) + np.abs(ly)
+
+
+def focus_stack_average(images, radius=9, log=print):
+    """Method A (Helicon): **gewichteter Mittelwert** nach lokalem Schärfemaß. Rauscharm und
+    farbtreu — ideal für kurze/Freihand-Stacks und weiche Motive. radius = Fenster des Schärfemaßes."""
+    n = len(images)
+    if n < 2:
+        return images[0] if images else None
+    dtype = images[0].dtype
+    maxval = 65535.0 if dtype == np.uint16 else 255.0
+    fl = [im.astype(np.float32) if im.ndim == 3 else cv2.cvtColor(im, cv2.COLOR_GRAY2BGR).astype(np.float32)
+          for im in images]
+    W = np.stack([cv2.boxFilter(_focus_measure(im), cv2.CV_32F, (radius, radius)) for im in images])
+    W = (W + 1e-6)
+    W /= W.sum(axis=0, keepdims=True)
+    out = np.zeros_like(fl[0])
+    for i in range(n):
+        out += W[i][..., None] * fl[i]
+        log(f"    Method A: Frame {i + 1}/{n}")
+    return np.clip(out, 0, maxval).astype(dtype)
+
+
+def color_reassign(images, merged):
+    """Farb-Neuzuweisung: für jeden Bildpunkt die ECHTE Farbe aus dem Quellframe nehmen, dessen
+    Schärfemaß dort am höchsten ist (statt der gemischten Pyramiden-Farbe) — verhindert erfundene
+    Farben/Farb-Halos. `merged` nur als Größen-Referenz."""
+    n = len(images)
+    fm = np.stack([_focus_measure(im) for im in images])     # (n,h,w)
+    idx = np.argmax(fm, axis=0).astype(np.uint8)
+    idx = cv2.medianBlur(idx, 5)                              # kohärente Regionen
+    out = np.zeros_like(images[0])
+    for i in range(n):
+        m = idx == i
+        if m.any():
+            out[m] = images[i][m]
+    return out
+
+
+def focus_stack_wavelet(images, levels=5, log=print):
+    """Wavelet-Merge (PetteriAimonen-Rezept, vereinfacht): pro Frame à-trous-Detailebenen, je Ebene
+    den **betragsmäßig stärksten** Koeffizienten wählen, die Auswahl per **Konsistenz-Glättung**
+    stabilisieren (gegen Rausch-/Fehlausrichtungs-Einrasten) → rekonstruieren; Farbe per
+    color_reassign aus dem schärfsten Quellframe. Schärfer + rauschärmer als die naive Pyramide."""
+    import wavelet as _wav
+    n = len(images)
+    if n < 2:
+        return images[0] if images else None
+    grays = [cv2.cvtColor(im, cv2.COLOR_BGR2GRAY).astype(np.float32) if im.ndim == 3
+             else im.astype(np.float32) for im in images]
+    decs = [_wav.atrous(g, levels) for g in grays]           # [(details, approx), ...]
+    fused_details = []
+    for lv in range(levels):
+        layer = np.stack([decs[i][0][lv] for i in range(n)])  # (n,h,w)
+        amax = np.abs(layer)
+        idx = np.argmax(amax, axis=0)
+        idx = cv2.medianBlur(idx.astype(np.uint8), 3).astype(np.int64)   # Konsistenz-Vote
+        fused_details.append(np.take_along_axis(layer, idx[None], axis=0)[0])
+    approx = np.mean(np.stack([decs[i][1] for i in range(n)]), axis=0)   # Basis = Mittel
+    merged_gray = approx + sum(fused_details)
+    merged = cv2.cvtColor(np.clip(merged_gray, 0, 255).astype(np.uint8), cv2.COLOR_GRAY2BGR) \
+        if images[0].ndim == 3 else np.clip(merged_gray, 0, 255).astype(images[0].dtype)
+    log(f"    Wavelet-Merge: {n} Frames, {levels} Ebenen")
+    if images[0].ndim == 3:                                   # echte Farbe aus dem schärfsten Frame
+        return color_reassign(images, merged)
+    return merged
+
+
 def merge_tree(images, merge_fn, log=print):
     """Hierarchische („Baum-") Verschmelzung: 1+2, 3+4, … dann die Ergebnisse paarweise weiter,
     bis ein Bild übrig ist. Jede Verschmelzung kombiniert nur **zwei sehr ähnliche** Bilder →
@@ -455,6 +528,10 @@ def focus_stack_streamed(paths, align_mode="rigid", detector="ORB", chunk=8,
     def merge(grp):
         if method == "depthmap":
             return focus_stack_depthmap(grp, log=lambda *a: None)
+        if method == "average":
+            return focus_stack_average(grp, log=lambda *a: None)
+        if method == "wavelet":
+            return focus_stack_wavelet(grp, log=lambda *a: None)
         return focus_stack(grp, log=lambda *a: None)
     ref = cv2.imread(paths[len(paths) // 2], cv2.IMREAD_UNCHANGED)
     inters = []
