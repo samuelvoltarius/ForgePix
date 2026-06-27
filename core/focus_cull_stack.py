@@ -983,6 +983,13 @@ def main():
                          "dann fokus-stacken (Schärfentiefe)")
     ap.add_argument("--hybrid-group", type=int, default=5,
                     help="Fokus+Astro: Shots je Position, falls keine Unterordner vorhanden")
+    ap.add_argument("--lucky", action="store_true",
+                    help="Lucky-Imaging: Sonne/Mond/Planeten aus einem VIDEO stapeln — die "
+                         "schärfsten Frames auswählen, ausrichten, mitteln, schärfen (AutoStakkert-Prinzip)")
+    ap.add_argument("--lucky-keep", type=float, default=30,
+                    help="Anteil der schärfsten Frames in %% (Standard 30)")
+    ap.add_argument("--lucky-sharpen", type=float, default=60,
+                    help="Nachschärfen des Lucky-Ergebnisses in %% (0 = aus)")
     ap.add_argument("--hdr", action="store_true",
                     help="HDR aus Belichtungsreihen (AEB) per Exposure Fusion (Mertens) — "
                          "durchgezeichnete Lichter + Schatten. NICHT Fokus-Stacking!")
@@ -1140,6 +1147,13 @@ def main():
     work_dir = os.path.abspath(args.work) if args.work else \
         os.path.join(os.path.dirname(input_dir), "stack_work")
     os.makedirs(work_dir, exist_ok=True)
+
+    # Lucky-Imaging: Eingabe ist eine Video-Datei (oder ein Ordner mit Videos), kein Bild-Ordner.
+    if getattr(args, "lucky", False):
+        out = run_lucky(input_dir, work_dir, args)
+        if out:
+            print(f"\nFertig. Ergebnis in: {out}")
+        return
 
     # Automatik erkennt selbst, ob der Ordner mehrere Serien (Unterordner) enthält.
     # NICHT bei Hybrid Fokus+Astro: dort sind Unterordner die Fokus-Positionen (kein Batch!).
@@ -1569,6 +1583,62 @@ def run_mosaic(input_dir, work_dir, args):
     if getattr(args, "export", None):
         export_targets(stack_dir, os.path.join(work_dir, "export"), args.export)
     copy_exif_to_dirs(paths[len(paths) // 2], stack_dir, os.path.join(work_dir, "export"))
+    return stack_dir
+
+
+VIDEO_EXTS = {".mp4", ".avi", ".mov", ".mkv", ".m4v", ".ser"}
+
+
+def run_lucky(input_path, work_dir, args):
+    """Lucky-Imaging-Stack aus Video(s): Sonne/Mond/Planeten — schärfste Frames stapeln.
+    `input_path` darf eine Video-Datei ODER ein Ordner mit Videos sein."""
+    import lucky
+    if os.path.isfile(input_path) and os.path.splitext(input_path)[1].lower() in VIDEO_EXTS:
+        vids = [input_path]
+    elif os.path.isdir(input_path):
+        vids = sorted(os.path.join(input_path, f) for f in os.listdir(input_path)
+                      if os.path.splitext(f)[1].lower() in VIDEO_EXTS)
+    else:
+        vids = []
+    if not vids:
+        print("Keine Video-Datei für Lucky-Imaging gefunden (mp4/avi/mov …).", file=sys.stderr)
+        return None
+    stack_dir = os.path.join(work_dir, "stack")
+    if os.path.isdir(stack_dir):
+        shutil.rmtree(stack_dir)
+    os.makedirs(stack_dir)
+    pv = os.path.join(work_dir, "_live_preview.jpg")
+
+    def _pv(img, k):
+        try:
+            cv2.imwrite(pv, cv2.resize(img, (0, 0), fx=0.6, fy=0.6),
+                        [int(cv2.IMWRITE_JPEG_QUALITY), 80])
+            print(f"PREVIEW:{pv}"); sys.stdout.flush()
+        except Exception:
+            pass
+
+    made = []
+    for v in vids:
+        print(f"== Lucky-Imaging: {os.path.basename(v)} "
+              f"(behalte schärfste {getattr(args, 'lucky_keep', 30):.0f} %) ==")
+        try:
+            res = lucky.lucky_stack(v, keep_pct=getattr(args, "lucky_keep", 30) / 100.0,
+                                    sharpen_amount=getattr(args, "lucky_sharpen", 60),
+                                    align=not getattr(args, "no_align", False), preview_cb=_pv)
+        except Exception as e:
+            print(f"  Fehler: {e}", file=sys.stderr)
+            continue
+        base = os.path.splitext(os.path.basename(v))[0]
+        out_jpg = os.path.join(stack_dir, f"{args.prefix}{base}_lucky.jpg")
+        cv2.imwrite(out_jpg, res, [int(cv2.IMWRITE_JPEG_QUALITY), 95])
+        cv2.imwrite(os.path.join(stack_dir, f"{args.prefix}{base}_lucky.tif"), res,
+                    [int(cv2.IMWRITE_TIFF_COMPRESSION), 1])
+        made.append(out_jpg)
+        print(f"  geschrieben: {out_jpg}")
+    if not made:
+        return None
+    if getattr(args, "web_jpg", False):
+        export_web_jpg(stack_dir, os.path.join(work_dir, "export"))
     return stack_dir
 
 
