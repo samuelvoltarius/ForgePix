@@ -1640,7 +1640,7 @@ def _astro_write(result, work_dir, paths, args, astro):
                 cal = astro.color_balance(res, color_s)
         else:
             cal = astro.color_balance(res, color_s)
-        return astro.remove_green_cast(cal)
+        return astro.neutralize_background(astro.remove_green_cast(cal))
 
     if args.astro_stretch:
         if getattr(args, "vlm_endpoint", None):
@@ -1665,7 +1665,7 @@ def _astro_write(result, work_dir, paths, args, astro):
         def _broadband(res):
             cal = (astro.photometric_balance(res, color_s) if getattr(args, "astro_pcc", False)
                    else astro.color_balance(res, color_s))
-            return astro.remove_green_cast(cal)
+            return astro.neutralize_background(astro.remove_green_cast(cal))
         if dualband:
             base_view = _dualband_view(result, getattr(args, "palette", "hoo"), astro)
         else:
@@ -1679,6 +1679,11 @@ def _astro_write(result, work_dir, paths, args, astro):
                                      SP=getattr(args, "astro_ghs_sp", 0.18), saturation=sat)
         else:
             view = astro.autostretch(base_view, strength=strength, saturation=sat, protect_core=protect)
+        if not dualband:
+            # Farbkorrektur NACH dem Stretch wiederholen: der Stretch bläst jede winzige Rest-
+            # Kanalabweichung im schwachen Signal auf (Blau-/Grünstich in Rauschen, grüne Sterne).
+            # Erst hier ist der Stich sichtbar/messbar und sauber zu entfernen (SCNR + Neutralisierung).
+            view = astro.neutralize_background(astro.remove_green_cast(view))
     else:
         if dualband:
             view = _dualband_view(result, getattr(args, "palette", "hoo"), astro)
