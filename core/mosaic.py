@@ -176,10 +176,12 @@ def _autocrop(img, thresh=8):
     return crop
 
 
-def stitch(paths, mode="panorama", projection="spherical", detail=True, log=print):
+def stitch(paths, mode="panorama", projection="spherical", detail=True, autocrop=True, log=print):
     """Überlappende Kacheln zu einem Mosaik zusammensetzen.
     detail=True: explizite cv2.detail-Pipeline (Projektion/Belichtungsausgleich/MultiBand-Nähte),
-    bei Fehlschlag Rückfall auf den klassischen cv2.Stitcher. Gibt (BGR-uint8, status) zurück."""
+    bei Fehlschlag Rückfall auf den klassischen cv2.Stitcher. Gibt (BGR-uint8, status) zurück.
+    autocrop=True: schwarze Warp-Ränder auf das größte randvolle Rechteck zuschneiden (--no-autocrop = aus)."""
+    _crop = _autocrop if autocrop else (lambda x: x)
     imgs = [_to8(cv2.imread(p, cv2.IMREAD_UNCHANGED)) for p in paths]
     imgs = [im if (im is None or im.ndim == 3) else cv2.cvtColor(im, cv2.COLOR_GRAY2BGR)
             for im in imgs]
@@ -189,7 +191,7 @@ def stitch(paths, mode="panorama", projection="spherical", detail=True, log=prin
     log(f"  {len(imgs)} Kacheln zusammensetzen ({mode}, {projection}) …")
     if detail and mode != "scans":
         try:
-            return _autocrop(stitch_detail(imgs, projection=projection, log=log)), "ok (detail)"
+            return _crop(stitch_detail(imgs, projection=projection, log=log)), "ok (detail)"
         except Exception as e:
             log(f"  detail-Pipeline fehlgeschlagen ({e}) → klassischer Stitcher")
     m = cv2.Stitcher_SCANS if mode == "scans" else cv2.Stitcher_PANORAMA
@@ -201,7 +203,7 @@ def stitch(paths, mode="panorama", projection="spherical", detail=True, log=prin
                 3: "Kamera-Parameter-Anpassung fehlgeschlagen"}
         raise RuntimeError(f"Mosaik fehlgeschlagen ({msgs.get(status, status)}). "
                            f"Tipp: mehr Überlappung (~30 %) zwischen den Kacheln.")
-    return _autocrop(pano), "ok"
+    return _crop(pano), "ok"
 
 
 # ─────────────────────────────────────────────────────────────────────────────

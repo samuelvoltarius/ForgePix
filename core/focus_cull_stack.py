@@ -1872,7 +1872,7 @@ def run_mosaic(input_dir, work_dir, args):
     if len(paths) < 2:
         print("Zu wenige Kacheln fürs Mosaik.", file=sys.stderr); return None
     print(f"== Hybrid: Mosaik aus {len(paths)} Kacheln ({args.mosaic_mode}) ==")
-    pano, _ = mosaic.stitch(paths, mode=args.mosaic_mode)
+    pano, _ = mosaic.stitch(paths, mode=args.mosaic_mode, autocrop=getattr(args, "autocrop", True))
     stack_dir = os.path.join(work_dir, "stack")
     if os.path.isdir(stack_dir):
         shutil.rmtree(stack_dir)
