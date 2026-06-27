@@ -88,6 +88,27 @@ class TestHDRLongexpGaps(unittest.TestCase):
         self.assertLess(float(bg.std()), float(single[:int(H * 0.4)].std()) + 1e-3)
 
     # --- H4: Auto-Sky-Maske mit räumlichem Constraint ---
+
+    def test_suggest_mode_erkennt_kamerabewegung(self):
+        import longexp
+        r = _rng(); H, W = 150, 220
+        base = (r.rand(H, W, 3) * 255).astype(np.uint8)
+        base = cv2.GaussianBlur(base, (0, 0), 1.5)
+        paths = []
+        for i in range(8):                                  # Kamera schwenkt 8 px/Frame -> ~56 px gesamt
+            M = np.float32([[1, 0, -i * 8], [0, 1, 0]])
+            f = cv2.warpAffine(base, M, (W, H), borderMode=cv2.BORDER_REFLECT)
+            pth = os.path.join(self.d, f"p{i:02d}.png"); cv2.imwrite(pth, f); paths.append(pth)
+        sug = longexp.suggest_mode(paths)
+        self.assertNotEqual(sug["align"], "none")           # Bewegung erkannt -> Ausrichtung empfohlen
+        self.assertGreater(sug.get("shift_frac", 0), 0.05)
+        # statische Serie -> KEINE Ausrichtung empfohlen
+        spaths = []
+        for i in range(8):
+            f = np.clip(base + r.normal(0, 3, base.shape), 0, 255).astype(np.uint8)
+            pth = os.path.join(self.d, f"s{i:02d}.png"); cv2.imwrite(pth, f); spaths.append(pth)
+        self.assertEqual(longexp.suggest_mode(spaths)["align"], "none")
+
     def test_auto_sky_mask_raeumlich(self):
         import longexp
         r = _rng()

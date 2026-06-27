@@ -343,7 +343,26 @@ def suggest_mode(paths, max_side=900, sample=8):
     bright_motion = float(cstk.max(axis=0)[moving].mean() - cstk.mean(axis=0)[moving].mean()) \
         if moving.any() else 0.0
 
-    align = "none"  # Annahme Stativ; bei Verwacklung kann der/die Nutzer:in auf „shift“ stellen
+    # GLOBALE Kamerabewegung erkennen (Schwenk/Drift/Verwacklung) statt blind Stativ anzunehmen:
+    # größten Bildmitte-Versatz über die Stichprobe per Phasenkorrelation gegen das erste Frame.
+    W = grays[0].shape[1]
+    gshift = 0.0
+    for g in grays[1:]:
+        try:
+            (dxg, dyg), _ = cv2.phaseCorrelate(grays[0], g)
+            gshift = max(gshift, float(np.hypot(dxg, dyg)))
+        except cv2.error:
+            pass
+    shift_frac = gshift / max(1.0, W)                        # Versatz als Anteil der Bildbreite
+    if shift_frac > 0.10:
+        align, align_note = "feature", (f" Achtung: starke Kamerabewegung erkannt "
+                                        f"(~{gshift:.0f} px Schwenk) → Ausrichtung „Freihand/Merkmale“ "
+                                        f"empfohlen, sonst verschmiert die ganze Szene.")
+    elif shift_frac > 0.01:
+        align, align_note = "shift", (f" Leichtes Verwackeln erkannt (~{gshift:.0f} px) → "
+                                      f"Ausrichtung „Versatz“ empfohlen.")
+    else:
+        align, align_note = "none", ""                       # wirklich ruhig/Stativ
     if mean_bright < 0.28 and bright_motion > 18:
         mode = "trails"
         rationale = ("Dunkle Szene mit hellen, wandernden Lichtern erkannt "
@@ -362,4 +381,5 @@ def suggest_mode(paths, max_side=900, sample=8):
         rationale = (f"Großflächige, gleichmäßige Bewegung ({moving_frac*100:.0f} % der Fläche) "
                      "→ „smooth“ (Mitteln) für seidiges Wasser/weiche Wolken.")
     return {"mode": mode, "align": align, "moving_frac": round(moving_frac, 3),
-            "mean_bright": round(mean_bright, 3), "rationale": rationale}
+            "mean_bright": round(mean_bright, 3), "shift_frac": round(shift_frac, 3),
+            "rationale": rationale + align_note}

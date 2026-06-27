@@ -1763,24 +1763,31 @@ def run_longexp(input_dir, work_dir, args):
         return None
     orig_first = paths[len(paths) // 2]
     mode = args.longexp_mode
-    # KI/Heuristik: Modus vorschlagen (nur Beratung). Im Auto übernehmen, sonst nur anzeigen.
+    # KI/Heuristik: Modus + Ausrichtung vorschlagen (nur Beratung). Im Auto übernehmen, sonst anzeigen.
+    eff_align = args.longexp_align
     try:
         sug = longexp.suggest_mode(paths)
         print(f"  Vorschlag: Modus „{sug['mode']}“ — {sug['rationale']}")
         if getattr(args, "auto", False):
             mode = sug["mode"]
+            eff_align = sug.get("align", eff_align)          # Schwenk/Drift-Ausrichtung mit übernehmen
+        elif args.longexp_align == "none" and sug.get("align", "none") != "none":
+            # User hat „nicht ausrichten“ gelassen, aber die Heuristik sieht Kamerabewegung → übernehmen
+            # (sonst verschmiert die ganze Szene — genau der Stativ-Fehlannahme-Fall).
+            eff_align = sug["align"]
+            print(f"    → Ausrichtung automatisch auf „{eff_align}“ gesetzt (Kamerabewegung erkannt)")
     except Exception as e:
         print(f"  (Modus-Vorschlag übersprungen: {e})", file=sys.stderr)
     strength = max(0, min(100, getattr(args, "longexp_strength", 100))) / 100.0
     print(f"== Langzeitbelichtung: {len(paths)} Aufnahmen, Modus={mode}, "
-          f"Ausrichten={args.longexp_align}, virtuelle Belichtung={int(strength*100)} % ==")
+          f"Ausrichten={eff_align}, virtuelle Belichtung={int(strength*100)} % ==")
     if mode == "stars":
         # H1: Punkt-Stern-Stacking mit Feldrotations-Ausgleich (Sequator-Stil) — Sterne werden NICHT
         # zu Strichspuren, sondern punktförmig gestackt (Rauschgewinn √N).
         result = longexp.stack_stars_point(paths, work_dir=work_dir, align="auto",
                                            sigma_clip=getattr(args, "longexp_sigma", False))
     else:
-        result = longexp.combine(paths, mode=mode, align=args.longexp_align, strength=strength,
+        result = longexp.combine(paths, mode=mode, align=eff_align, strength=strength,
                                  work_dir=work_dir, detector=args.detector, transform=args.transform,
                                  gap_fill=getattr(args, "longexp_gapfill", False),
                                  sigma_clip=getattr(args, "longexp_sigma", False),
