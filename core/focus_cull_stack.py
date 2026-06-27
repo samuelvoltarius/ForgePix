@@ -1097,6 +1097,9 @@ def main():
                     help="Breitband: photometrischer Farbabgleich (PCC-lite) — neutralisiert die "
                          "mittlere Farbe vieler ungesättigter Sterne (robuster als Quantil-Weißpunkt; "
                          "kein Online-Katalog)")
+    ap.add_argument("--astro-tps", action="store_true",
+                    help="TPS-Feinregistrierung: korrigiert nach der globalen Ausrichtung die lokale "
+                         "Restverzeichnung (Feldkrümmung bei Weitwinkel/Refraktor) per Thin-Plate-Spline")
     ap.add_argument("--astro-stretch", action="store_true",
                     help="Astro: Vorschau-JPG asinh-gestreckt (Ergebnis-TIFF bleibt linear)")
     ap.add_argument("--astro-bright", type=float, default=-1.0,
@@ -1182,9 +1185,10 @@ def main():
                     help="RAWs NICHT vorab entwickeln (direkt an ShineStacker geben)")
     ap.add_argument("--raw-wb", choices=["camera", "auto", "daylight"], default="camera",
                     help="Weißabgleich der RAW-Entwicklung (Default camera)")
-    ap.add_argument("--raw-demosaic", choices=["auto", "dht", "dcb", "vng", "ahd"], default="auto",
+    ap.add_argument("--raw-demosaic", choices=["auto", "dht", "dcb", "vng", "ahd", "amaze"],
+                    default="auto",
                     help="Demosaic-Algorithmus: auto/ahd (Standard), dht (hohe Qualität, frei), "
-                         "dcb (wenig Falschfarbe), vng (weich). AMaZE braucht GPL-LibRaw.")
+                         "dcb (wenig Falschfarbe), vng (weich), amaze (braucht GPL-LibRaw, sonst Fallback).")
     ap.add_argument("--raw-highlights", action="store_true",
                     help="Ausgebrannte Lichter rekonstruieren (Kanal-Verhältnis + Entsättigen-zu-Weiß)")
     ap.add_argument("--lens-auto", action="store_true",
