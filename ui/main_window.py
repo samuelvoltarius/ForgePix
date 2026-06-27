@@ -171,10 +171,12 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         try:
             import tools_engine as _te
             import siril_engine as _se
+            import cosmicclarity_engine as _cc
             gx_def, sn_def, si_def = (_te.find_graxpert() or "", _te.find_starnet() or "",
                                       _se.find_siril() or "")
+            cc_def = _cc.find_cli() or ""
         except Exception:
-            gx_def = sn_def = si_def = ""
+            gx_def = sn_def = si_def = cc_def = ""
         g_tools = QGroupBox(tr("Externe Tools (optional)"))
         gt = QGridLayout(g_tools)
         self.graxpert_path = QLineEdit(gx_def)
@@ -183,9 +185,12 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         self.starnet_path.setPlaceholderText(tr("Pfad zu StarNet++ (leer = automatisch suchen)"))
         self.siril_path = QLineEdit(si_def)
         self.siril_path.setPlaceholderText(tr("Pfad zu siril-cli (leer = automatisch suchen)"))
+        self.cosmicclarity_path = QLineEdit(cc_def)
+        self.cosmicclarity_path.setPlaceholderText(tr("Pfad zu Cosmic Clarity (leer = automatisch suchen)"))
         for r, (lab, edit) in enumerate([("GraXpert", self.graxpert_path),
                                          ("StarNet++", self.starnet_path),
-                                         ("Siril", self.siril_path)]):
+                                         ("Siril", self.siril_path),
+                                         ("Cosmic Clarity", self.cosmicclarity_path)]):
             btn = QPushButton("…"); btn.setFixedWidth(36)
             btn.clicked.connect(lambda _=False, e=edit: self._pick_file_into(e))
             gt.addWidget(QLabel(lab), r, 0); gt.addWidget(edit, r, 1); gt.addWidget(btn, r, 2)
@@ -194,10 +199,10 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         self.astrometry_key = QLineEdit()
         self.astrometry_key.setEchoMode(QLineEdit.Password)
         self.astrometry_key.setPlaceholderText(tr("dein Astrometry.net-API-Key (nova.astrometry.net/api)"))
-        gt.addWidget(QLabel("Astrometry.net"), 3, 0); gt.addWidget(self.astrometry_key, 3, 1)
+        gt.addWidget(QLabel("Astrometry.net"), 4, 0); gt.addWidget(self.astrometry_key, 4, 1)
         gt.addWidget(help_btn("Optionaler API-Key von nova.astrometry.net (My Profile) für blindes "
                               "Plate-Solving im echten PCC, wenn kein Siril/lokaler Solver da ist. "
-                              "Dein eigener Key — nur lokal gespeichert, nie geteilt/committet."), 3, 3)
+                              "Dein eigener Key — nur lokal gespeichert, nie geteilt/committet."), 4, 3)
         gt.addWidget(help_btn("Pfade zu deinen installierten Tools. Leer lassen = ForgePix sucht "
                               "selbst (PATH + übliche Orte). GraXpert/StarNet → Ein-Klick in der "
                               "Ergebnis-Leiste; Siril → wählbare Astro-Engine. Alles optional."), 0, 4)
@@ -2117,7 +2122,9 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         try:
             out = starless.run(f, palette, work, broadband=not dual,
                                graxpert_path=self.graxpert_path.text().strip() or None,
-                               starnet_path=sn, log=self._append)
+                               starnet_path=sn,
+                               cosmicclarity_path=self.cosmicclarity_path.text().strip() or None,
+                               log=self._append)
         except Exception as e:
             QMessageBox.warning(self, tr("Starless-Workflow"), f"{e}")
             self._append(f"\n⚠️ Starless-Workflow fehlgeschlagen: {e}\n"); return
