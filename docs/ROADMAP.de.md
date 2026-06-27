@@ -2,6 +2,13 @@
 
 *[🇬🇧 English version](ROADMAP.md)*
 
+> **Status (v1.22):** die Parity-Welle (v1.20) und die Lücken-Welle (v1.21–v1.22) sind **fertig**.
+> Jeder 🟡/❌-Punkt der Scorecard ist gebaut: Fokus Radius/Smoothing + Halo-Retusche; Astro volles **GHS**,
+> **Linear-Fit-Clipping**, **TPS**-Registrierung, **echtes Drizzle**, echtes **PCC/SPCC** (Siril Gaia DR3 /
+> eigener astroquery-Pfad / Lite); HDR **Radiance-Tonemapping**; Langzeit **Sigma-Clip** + **Vordergrund
+> einfrieren**; RAW **Objektivkorrekturen** (lensfun/manuell) + AMaZE. Noch offen: Lucky-Imaging-MAP
+> (braucht ein gutes Mond-/Planeten-Video) und die Panorama-Kontrollpunkt-UI (eigenes großes GUI-Projekt).
+
 Audit jedes ForgePix-Moduls gegen die führenden Profi-Tools, mit konkretem, priorisiertem Nachbau-Plan.
 Recherchiert aus Helicon/Zerene/PetteriAimonen (Fokus), AutoStakkert/PlanetarySystemStacker
 (Lucky-Imaging), Siril/PixInsight/APP/DSS (Astro), Photomatix/Sequator/Hugin (HDR/Spuren/Pano) und

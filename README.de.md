@@ -58,13 +58,20 @@ Aus einer unscharfen Fokusreihe wird ein durchgehend scharfes Bild — und du si
   EXIF‑Auslesen, **Stack‑Konfidenz‑Score** und ein **Entscheidungs‑Panel** mit klickbaren Befunden
   und einer **„Warum diese Einstellungen?"**‑Begründung.
 - **Astro:** automatisch erkannte **Kalibrierung** (Darks/Flats/Bias), Stern‑Ausrichtung (Translation
-  oder Feldrotation), Hot‑/Cold‑Pixel‑Korrektur, **Sigma/Winsor‑Rejection**, Drizzle‑lite, **Binning**,
-  **Multi‑Session**‑Stacking, erklärbare Sub‑Bewertung, **32‑bit‑Linear + FITS**‑Export, **Live‑Vorschau**
-  beim Stacken und **GraXpert/StarNet++ per Ein‑Klick**. Dual‑Band (Hα/OIII) mit
-  **HOO / synthetischem SHO / Foraxx / Bicolor**.
+  oder Feldrotation) plus **TPS‑Feinregistrierung** (Feldkrümmung), Hot‑/Cold‑Pixel‑Korrektur,
+  **Sigma‑/Winsor‑/Linear‑Fit‑Rejection**, **Drizzle‑lite *und* echtes Drizzle** (pixfrac‑Drop),
+  **Binning**, **Multi‑Session**‑Stacking, **asinh‑/MTF‑/GHS**‑Streckung, **echte photometrische
+  Farbkalibrierung (PCC/SPCC)** via Siril (Gaia DR3) oder eigenem astroquery‑Pfad (Lite‑Fallback läuft
+  immer), erklärbare Sub‑Bewertung, **32‑bit‑Linear + FITS**‑Export, **Live‑Vorschau** beim Stacken und
+  **GraXpert/StarNet++ automatisch**. Dual‑Band (Hα/OIII) mit **HOO / synth. SHO / Foraxx / Bicolor**.
+- **Fokus‑Verschmelzung:** Laplace‑**Pyramide**, **Tiefenkarte**, gewichteter **Mittelwert** (Method A),
+  à‑trous‑**Wavelet** und **halofix** (Dual‑Output‑Halo‑Retusche) — mit Helicon‑**Radius/Smoothing**.
+- **HDR & Langzeit:** Exposure Fusion **oder Radiance‑Tonemapping**; Deghosting; Komet/Spuren‑Lückenfüllung;
+  **Sigma‑Clipping** und **Vordergrund einfrieren** (Sequator‑Stil).
 - **Eingebaute Editoren:** Camera‑Raw (Belichtung, **Tonwertkurve**, **HSL pro Farbe**,
-  Zuschneiden/Drehen, Histogramm, Masken‑Pinsel) und ein **Retusche**‑Pinsel über Halos/**Ghosting**.
-- **RAW** treu in 16‑bit entwickelt; EXIF/Provenienz wird soweit möglich übernommen.
+  **Objektivkorrekturen** — lensfun‑Auto oder manuell Vignette/Verzeichnung/CA, Zuschneiden/Drehen,
+  Histogramm, Masken‑Pinsel) und ein **Retusche**‑Pinsel über Halos/**Ghosting**.
+- **RAW** treu in 16‑bit entwickelt (DHT/DCB/VNG/AHD, AMaZE falls verfügbar); EXIF/Provenienz übernommen.
 - **Export & Workflow:** Vorher/Nachher‑Regler, Filmstreifen, **Geister‑Karte/Deghost**, Export‑Presets
   (Instagram/WhatsApp/Web/4K/Druck), **Batch** & **Watch‑Ordner**, Schnell‑Export‑Chips, letzter Ordner.
 - **Komplett per Tastatur bedienbar**, **Deutsch & Englisch**, **KI strikt optional** (lokal oder API).
@@ -80,8 +87,10 @@ Wasser, Personen scharf"); der Vorschlag bekommt zusätzlich **EXIF-Eckdaten** +
 Das Setup zeigt genau, was gesendet wird — einige Vorschau-Frames, das Schärfeprofil, EXIF-Eckdaten
 und dein Wunsch; keine Originaldateien, keine Standortdaten.
 
-Profis können optional **Siril verbinden** (falls installiert) als alternative Astro‑Engine und
-an **GraXpert / StarNet++** weitergeben — nichts davon ist Pflicht.
+Profis können optional **Siril verbinden** (falls installiert) — als alternative Astro‑Engine UND für
+die **echte photometrische Farbkalibrierung** (Plate‑Solve + Gaia‑DR3‑SPCC) — und an
+**GraXpert / StarNet++** weitergeben. Nichts davon ist Pflicht: ohne Siril/Netz fällt PCC auf den
+eingebauten stern‑basierten Abgleich zurück.
 
 ## Download (fertige Pakete)
 

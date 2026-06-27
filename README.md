@@ -58,13 +58,20 @@ A soft focus series becomes one fully sharp image — and you see *what* happens
   read‑out, **stack‑confidence score**, and a **decision panel** with clickable findings and a
   **“why these settings?”** rationale.
 - **Astro:** auto‑detected **calibration** (darks/flats/bias), star alignment (translation or field
-  rotation), hot/cold‑pixel fix, **sigma/winsor rejection**, drizzle‑lite, **binning**,
-  **multi‑session** stacking, explainable sub‑grading, **32‑bit linear + FITS** export, **live
-  preview** while stacking, and **one‑click GraXpert/StarNet++**. Dual‑band (Hα/OIII) with
-  **HOO / synthetic SHO / Foraxx / Bicolor** palettes.
-- **Built‑in editors:** Camera‑Raw (exposure, **tone curve**, per‑color **HSL**, crop/rotate,
-  histogram, mask brush) and a **retouch** brush over halos/**ghosting**.
-- **RAW** faithfully developed to 16‑bit; EXIF/provenance preserved where possible.
+  rotation) plus **TPS local registration** (field‑curvature fix), hot/cold‑pixel fix,
+  **sigma / winsor / linear‑fit rejection**, **drizzle‑lite *and* true drizzle** (pixfrac drop),
+  **binning**, **multi‑session** stacking, **asinh / MTF / GHS** stretch, **real photometric color
+  calibration (PCC/SPCC)** via Siril (Gaia DR3) or an own astroquery path (lite fallback always works),
+  explainable sub‑grading, **32‑bit linear + FITS** export, **live preview** while stacking, and
+  **automatic GraXpert/StarNet++**. Dual‑band (Hα/OIII) with **HOO / synthetic SHO / Foraxx / Bicolor**.
+- **Focus merge methods:** Laplacian **pyramid**, **depth‑map**, weighted **average** (Method A),
+  à‑trous **wavelet**, and **halofix** (dual‑output halo retouch) — with Helicon‑style **Radius/Smoothing**.
+- **HDR & long exposure:** Exposure Fusion **or radiance‑map tonemapping**; deghosting; comet/trail
+  gap‑fill; **sigma‑clipping** and **freeze‑foreground** (Sequator‑style).
+- **Built‑in editors:** Camera‑Raw (exposure, **tone curve**, per‑color **HSL**, **lens corrections**
+  — lensfun auto or manual vignette/distortion/CA, crop/rotate, histogram, mask brush) and a
+  **retouch** brush over halos/**ghosting**.
+- **RAW** faithfully developed to 16‑bit (DHT/DCB/VNG/AHD, AMaZE where available); EXIF/provenance preserved.
 - **Export & workflow:** before/after slider, film strip, **ghost map/deghost**, export presets
   (Instagram/WhatsApp/Web/4K/Print), **batch** & **watch folder**, quick‑export chips, resume last folder.
 - **Fully keyboard‑operable**, **German & English** UI, **AI strictly optional** (local or API).
@@ -79,8 +86,10 @@ chose these settings.”* You can add a **free‑text wish** (e.g. “silky wate
 suggestion also gets **EXIF basics** + the **focus map**. Setup states exactly what is sent — a few
 preview frames, the sharpness profile, EXIF basics and your wish; no original files, no location data.
 
-Pros can optionally **connect Siril** (if installed) as an alternative astro engine, and
-hand off to **GraXpert / StarNet++** — none of it is required.
+Pros can optionally **connect Siril** (if installed) — used both as an alternative astro engine and
+for **real photometric color calibration** (plate‑solve + Gaia DR3 SPCC) — and hand off to
+**GraXpert / StarNet++**. None of it is required: without Siril/network, PCC falls back to the
+built‑in star‑based calibration.
 
 ## Download (prebuilt)
 

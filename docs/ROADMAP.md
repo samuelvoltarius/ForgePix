@@ -2,6 +2,13 @@
 
 *[🇩🇪 Deutsche Version](ROADMAP.de.md)*
 
+> **Status (v1.22):** the parity wave (v1.20) and the gap-closing wave (v1.21–v1.22) are **done**.
+> Every 🟡/❌ from the scorecard is built: focus Radius/Smoothing + halo retouch; astro full **GHS**,
+> **linear-fit clipping**, **TPS** registration, **true drizzle**, real **PCC/SPCC** (Siril Gaia DR3 /
+> own astroquery / lite); HDR **radiance tonemapping**; long-exposure **sigma-clip** + **freeze
+> foreground**; RAW **lens corrections** (lensfun/manual) + AMaZE. Still open: lucky-imaging MAP
+> (needs a good Moon/planet video) and the panorama control-point UI (a separate large GUI project).
+
 Audit of every ForgePix module against the leading professional tools, with a concrete, prioritized
 rebuild plan. Researched from Helicon/Zerene/PetteriAimonen (focus), AutoStakkert/PlanetarySystemStacker
 (lucky imaging), Siril/PixInsight/APP/DSS (astro), Photomatix/Sequator/Hugin (HDR/trails/pano), and

@@ -44,6 +44,10 @@ Mehrere Nahaufnahmen, bei denen der Fokus **von vorne nach hinten** wandert, wer
 - **Empfohlene Bildanzahl:** 10–40 (so viele, bis alles von vorn bis hinten scharf abgedeckt ist).
 - **Aufnahme:** Stativ, gleiche Belichtung, Fokus in kleinen Schritten verschieben.
 - **Vorlagen:** Produkte / Münzen / Food setzen sinnvolle Startwerte.
+- **Verschmelzungs-Methoden:** `pyramid` (Laplace, Standard — scharf, für feine/weiche Motive),
+  `depthmap` (Tiefenkarten-Auswahl — harte Tiefenkanten), `average` (Method A — rauscharm),
+  **`halofix`** (Dual-Output-Halo-Retusche — PMax-Schärfe auf die Pixel-Hülle begrenzt, keine Halos),
+  `wavelet` (à-trous-Detail). Helicon-Regler **Radius/Smoothing** für depthmap/average.
 - **Ergebnis:** scharfes 16-bit-Bild + optional Photoshop-Ebenen-TIFF zum Nachpinseln.
 
 **🔍 Fokus-Werkzeuge** (Profi-Modus, Schritt „Auswahl"):
@@ -88,6 +92,16 @@ Viele Aufnahmen desselben Himmelsausschnitts werden ausgerichtet und **gemittelt
   (Alt-Az-Montierung ohne Rotator).
 - **Extras:** Hot-/Cold-Pixel-Korrektur, Drizzle 2× (feineres Sampling),
   Hintergrund-/Gradienten-Entfernung, Sub-Aussortierung (FWHM/Sternzahl/Guiding/Wolken/Spuren).
+- **Profi-Techniken (Bereich „Erweitert"):**
+  - **Rejection:** `sigma` · `winsor` · **`linearfit`** (PixInsight-artiger Geraden-Fit je Pixel — top bei wenigen Subs).
+  - **Streckung (Vorschau):** `asinh` · `MTF` (AutoSTF) · **`GHS`** (Generalised Hyperbolic, parametrisch D/b/SP).
+  - **TPS-Feinregistrierung** — korrigiert Restverzeichnung (Weitwinkel/Refraktor) nach der globalen Ausrichtung.
+  - **Echtes Drizzle** — Variable-Pixel-Rekonstruktion (pixfrac-Drop) statt nur Hochskalieren; braucht
+    Drizzle 2× und gediterte Subs.
+  - **Photometrische Farbkalibrierung (PCC/SPCC)** — echte Katalog-Farbe: **Siril-SPCC** (Plate-Solve +
+    Gaia DR3) → eigener **astroquery**-Gaia-Pfad → **Lite** (stern-basiert, offline). Backend `auto/siril/gaia/lite`;
+    optional OSC-Sensorname und Schmalband-Modus. Siril braucht Netz oder den lokalen Gaia-Katalog; sonst
+    sauberer Rückfall. *(KI wird hier bewusst nicht genutzt — PCC ist eine Messung, kein Ermessen.)*
 - **Ergebnis:** lineares 16-bit-TIFF + 32-bit-Linear + optional FITS — fertig für GraXpert/StarNet/PixInsight.
 - **Schneller & besser (neu):** Registrierung läuft **parallel** über alle Kerne; weit
   weggeditherte Frames werden über eine **Cluster-Brücke zurückgeholt** statt verworfen.
@@ -131,7 +145,13 @@ Aus einer Serie eine Langzeitbelichtung **ohne ND-Filter**. Vier Effekte:
 - **Virtuelle Belichtungszeit:** Schieberegler 0–100 % — stufenlos zwischen scharfem Einzelbild
   (eingefroren) und voller Glättung/Spuren. Wie eine kürzere/längere Verschlusszeit.
 - **Effekt vorschlagen:** analysiert die Bewegung in der Serie und wählt den passenden Effekt.
+- **Sigma-Clipping:** bei Glatt/Störer-entfernen — verwirft Ausreißer (Vögel, Satelliten, Hotpixel, Funkeln).
+- **Vordergrund einfrieren (Sequator-Stil):** unterster Anteil scharf aus einem Einzelbild, nur der Himmel
+  wird langzeitbelichtet — gegen Verwischen am Boden durch Wind/Drift.
 - **Aufnahme:** Stativ, gleiche Belichtung. Bei Verwacklung „Ausrichten" auf Versatz/Freihand.
+
+> **HDR (Belichtungsreihen):** Exposure Fusion (Standard, halo-frei) **oder** Radiance-Tonemapping
+> (Debevec + Reinhard/Mantiuk/Drago) für mehr dramatischen lokalen Kontrast; plus Bewegungs-Deghosting.
 
 ---
 
@@ -256,8 +276,23 @@ python3 core/focus_cull_stack.py --input fotos/ --auto
 python3 core/focus_cull_stack.py --input lights/ --astro --astro-align rotate \
     --astro-cosmetic --astro-drizzle 2 --fits-out --dark darks/ --flat flats/
 
-# Langzeitbelichtung, glatt, 60 % virtuelle Belichtung
-python3 core/focus_cull_stack.py --input serie/ --longexp --longexp-mode smooth --longexp-strength 60
+# Astro, Profi: Linear-Fit-Rejection, GHS-Streckung, TPS, echtes Drizzle, echtes PCC
+python3 core/focus_cull_stack.py --input lights/ --astro --astro-method linearfit \
+    --astro-stretch --astro-stretch-mode ghs --astro-ghs-d 2.5 --astro-ghs-b -0.6 \
+    --astro-tps --astro-drizzle 2 --astro-drizzle-true --astro-pixfrac 0.7 \
+    --astro-pcc --astro-pcc-backend auto
+
+# Fokus: Halo-Retusche-Merge mit Helicon-Radius/Smoothing
+python3 core/focus_cull_stack.py --input fotos/ --focus-method halofix \
+    --focus-radius 6 --focus-smoothing 3
+
+# RAW mit Objektivkorrekturen (lensfun-Auto oder manuell)
+python3 core/focus_cull_stack.py --input raws/ --lens-auto   # oder --lens-vignette 0.3 --lens-distortion -0.1
+
+# HDR-Radiance-Tonemapping; Langzeit mit Sigma-Clip + Vordergrund einfrieren
+python3 core/focus_cull_stack.py --input reihen/ --hdr --hdr-method radiance --hdr-tonemap mantiuk
+python3 core/focus_cull_stack.py --input serie/ --longexp --longexp-mode smooth \
+    --longexp-sigma --longexp-freeze 0.6
 
 # Hybrid Fokus+Astro (je Unterordner eine Position)
 python3 core/focus_cull_stack.py --input positionen/ --hybrid-fa

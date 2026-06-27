@@ -44,6 +44,10 @@ Great for products, coins, insects, food.
 - **Recommended count:** 10–40 (enough to cover everything sharp from front to back).
 - **Shooting:** tripod, identical exposure, move focus in small steps.
 - **Presets:** Products / Coins / Food set sensible starting values.
+- **Merge methods:** `pyramid` (Laplacian, default — sharp, good for fine/soft subjects), `depthmap`
+  (depth-map selection — hard depth edges), `average` (Method A — low noise), **`halofix`** (dual-output
+  halo retouch — pyramid sharpness clamped to the source envelope, no halos), `wavelet` (à-trous detail).
+  Helicon-style **Radius/Smoothing** sliders for depthmap/average.
 - **Output:** sharp 16-bit image + optional Photoshop-layered TIFF for retouching.
 
 **🔍 Focus tools** (Pro mode, "Selection" step):
@@ -73,6 +77,16 @@ are dropped automatically (with reasons).
   mount without rotator).
 - **Extras:** hot/cold-pixel correction, drizzle 2× (finer sampling), background/gradient
   removal, sub-grading (FWHM/star count/guiding/clouds/trails).
+- **Pro techniques (Advanced panel):**
+  - **Rejection:** `sigma` · `winsor` · **`linearfit`** (PixInsight-style per-pixel line fit — best with few subs).
+  - **Stretch (preview):** `asinh` · `MTF` (AutoSTF) · **`GHS`** (Generalised Hyperbolic, parametric D/b/SP).
+  - **TPS fine registration** — corrects residual field distortion (wide-angle/refractor) after the global align.
+  - **True drizzle** — real variable-pixel reconstruction (pixfrac drop) instead of plain upscaling; needs
+    drizzle 2× and dithered subs.
+  - **Photometric color calibration (PCC/SPCC)** — real catalog color: **Siril SPCC** (plate-solve + Gaia DR3)
+    → own **astroquery** Gaia path → **lite** (star-based, offline). Backend `auto/siril/gaia/lite`; optional
+    OSC sensor name and narrowband mode. Siril needs network or its local Gaia catalog; otherwise it falls
+    back gracefully. *(AI is deliberately not used here — PCC is a measurement, not a judgement.)*
 - **Output:** linear 16-bit TIFF + 32-bit linear + optional FITS — ready for GraXpert/StarNet/PixInsight.
 - **Faster & better (new):** registration runs **in parallel** across all cores; far-dithered
   frames are **recovered via a cluster bridge** instead of dropped. **Binning** (2×/3×) for more
@@ -127,7 +141,13 @@ A long exposure from a burst **without an ND filter**. Four effects:
 - **Virtual exposure time:** slider 0–100% — continuous between a sharp single frame (frozen)
   and full smoothing/trails. Like a shorter/longer shutter speed.
 - **Suggest effect:** analyses the motion in the series and picks the matching effect.
+- **Sigma-clipping:** for Smooth/Declutter — rejects outliers (birds, satellites, hot pixels, sparkle).
+- **Freeze foreground (Sequator-style):** the bottom fraction stays sharp from a single frame while only
+  the sky is long-exposed — against wind/drift blur on the ground.
 - **Shooting:** tripod, identical exposure. If shaky, set "Align" to shift/handheld.
+
+> **HDR (exposure brackets):** Exposure Fusion (default, halo-free) **or** radiance-map tonemapping
+> (Debevec + Reinhard/Mantiuk/Drago) for a more dramatic local-contrast look; plus motion deghosting.
 
 ---
 
@@ -248,8 +268,23 @@ python3 core/focus_cull_stack.py --input photos/ --auto
 python3 core/focus_cull_stack.py --input lights/ --astro --astro-align rotate \
     --astro-cosmetic --astro-drizzle 2 --fits-out --dark darks/ --flat flats/
 
-# Long exposure, smooth, 60% virtual exposure
-python3 core/focus_cull_stack.py --input series/ --longexp --longexp-mode smooth --longexp-strength 60
+# Astro, pro: linear-fit rejection, GHS stretch, TPS, true drizzle, real PCC
+python3 core/focus_cull_stack.py --input lights/ --astro --astro-method linearfit \
+    --astro-stretch --astro-stretch-mode ghs --astro-ghs-d 2.5 --astro-ghs-b -0.6 \
+    --astro-tps --astro-drizzle 2 --astro-drizzle-true --astro-pixfrac 0.7 \
+    --astro-pcc --astro-pcc-backend auto
+
+# Focus: halo-retouch merge with Helicon radius/smoothing
+python3 core/focus_cull_stack.py --input photos/ --focus-method halofix \
+    --focus-radius 6 --focus-smoothing 3
+
+# RAW with lens corrections (lensfun auto, or manual)
+python3 core/focus_cull_stack.py --input raws/ --lens-auto   # or --lens-vignette 0.3 --lens-distortion -0.1
+
+# HDR radiance tonemapping; long exposure with sigma-clip + freeze foreground
+python3 core/focus_cull_stack.py --input brackets/ --hdr --hdr-method radiance --hdr-tonemap mantiuk
+python3 core/focus_cull_stack.py --input series/ --longexp --longexp-mode smooth \
+    --longexp-sigma --longexp-freeze 0.6
 
 # Hybrid Focus+Astro (one subfolder per position)
 python3 core/focus_cull_stack.py --input positions/ --hybrid-fa
