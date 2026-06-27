@@ -1174,7 +1174,10 @@ def color_balance(f, strength=1.0):
         return f
     src = f.astype(np.float32)
     bg = np.array([np.quantile(src[..., c], 0.30) for c in range(3)], np.float32)
-    out = np.clip(src - bg.reshape(1, 1, 3), 0, None)          # Hintergrund neutral
+    # Hintergrund neutralisieren, aber NICHT hart auf 0 clippen: ein kleiner Sockel (10 %) bleibt
+    # stehen, sonst hat der nachfolgende Stretch (MTF/asinh) keinen Hintergrund mehr zum Anheben und
+    # das Bild bleibt fast schwarz (an echten OSC-Daten verifiziert: Median 4 → 26).
+    out = np.clip(src - bg.reshape(1, 1, 3) * 0.90, 0, None)    # Hintergrund neutral, Sockel erhalten
     hi = np.array([np.quantile(out[..., c], 0.995) for c in range(3)], np.float32)
     scale = np.clip(hi.mean() / np.clip(hi, 1e-6, None), 0.4, 2.5).astype(np.float32)
     out = np.clip(out * scale.reshape(1, 1, 3), 0, None)        # Sterne ~neutral -> echte Farben

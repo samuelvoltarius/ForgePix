@@ -1090,7 +1090,7 @@ def main():
     ap.add_argument("--astro-local-norm", action="store_true",
                     help="Astro: lokale Normalisierung (örtlicher Hintergrundabgleich pro Frame VOR "
                          "der Rejection) — gegen Gradienten & Mehrfach-Sessions")
-    ap.add_argument("--astro-stretch-mode", choices=["asinh", "mtf", "ghs"], default="asinh",
+    ap.add_argument("--astro-stretch-mode", choices=["asinh", "mtf", "ghs"], default="mtf",
                     help="Astro-Streckung: asinh (Standard), mtf (MTF/Histogramm, reversibel, "
                          "definierter Schwarzpunkt — PixInsight-AutoSTF-Stil) oder ghs "
                          "(Generalised Hyperbolic Stretch, voll parametrisch)")
@@ -1143,8 +1143,10 @@ def main():
                     help="Astrometry.net-API-Key (nova.astrometry.net) für blindes Online-Plate-Solving "
                          "im Gaia-PCC-Pfad, wenn kein Siril/lokaler Solver da ist. Alternativ Env-Var "
                          "ASTROMETRY_API_KEY. Wird nicht gespeichert/geloggt.")
-    ap.add_argument("--astro-stretch", action="store_true",
-                    help="Astro: Vorschau-JPG asinh-gestreckt (Ergebnis-TIFF bleibt linear)")
+    ap.add_argument("--astro-stretch", action=argparse.BooleanOptionalAction, default=True,
+                    help="Astro: Anzeige-JPG strecken (Standard AN — sonst ist das JPG schwarz, weil "
+                         "lineare Astro-Daten dunkel sind). --no-astro-stretch für rohes lineares JPG. "
+                         "Das Ergebnis-TIFF bleibt immer linear.")
     ap.add_argument("--astro-bright", type=float, default=-1.0,
                     help="Astro-Aufhellung 5–30 (-1 = Auto/KI). Höher = schwaches Signal stärker anheben")
     ap.add_argument("--astro-saturation", type=float, default=-1.0,
