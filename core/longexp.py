@@ -54,18 +54,144 @@ def _auto_sky_mask(proc, out_shape, sample=12, log=print):
     var = stk.std(axis=0)                                    # zeitliche Streuung je Pixel
     var = cv2.GaussianBlur(var, (0, 0), 2.0)
     med = float(np.median(var)); mad = float(np.median(np.abs(var - med))) * 1.4826 + 1e-6
-    sky = (var > med + 1.5 * mad).astype(np.float32)         # bewegte Pixel = Himmel
+    sky = (var > med + 1.5 * mad).astype(np.uint8)           # bewegte Pixel = Himmel-Kandidat
     sky = cv2.morphologyEx(sky, cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8))
     sky = cv2.morphologyEx(sky, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
-    frac = float(sky.mean())
-    if frac < 0.05 or frac > 0.95:                           # keine klare Trennung (z. B. nachgeführt)
-        log(f"    Auto-Sky: keine klare Himmel/Vordergrund-Trennung ({frac*100:.0f}% bewegt) — übersprungen")
+    frac0 = float(sky.mean())
+    if frac0 < 0.05 or frac0 > 0.95:                         # keine klare Trennung (z. B. nachgeführt)
+        log(f"    Auto-Sky: keine klare Himmel/Vordergrund-Trennung ({frac0*100:.0f}% bewegt) — übersprungen")
         return None
-    fg = 1.0 - cv2.GaussianBlur(sky, (0, 0), 3.0)            # Vordergrund = unbewegt
+
+    # --- räumlicher Constraint (H4): der Himmel ist EINE zusammenhängende Fläche und liegt OBEN ---
+    # Reine Varianzschwelle erzeugt False-Positives in bewegtem Vordergrund (windige Bäume, Wasser,
+    # Gras). Plausibilitäts-Kopplung dagegen:
+    #   1) Horizont schätzen: unterste Zeile, in der die Himmel-Kandidaten noch dominieren (von oben
+    #      kumulierte Zeilenbelegung). Unterhalb wird Himmel verworfen.
+    #   2) Nur die GRÖSSTE zusammenhängende Himmel-Komponente behalten (zusammenhängend & oben) →
+    #      einzelne flackernde Vordergrund-Inseln fallen weg.
+    hh_, ww_ = sky.shape
+    row_frac = sky.mean(axis=1)                              # Anteil Himmel je Zeile (oben→unten)
+    cum = np.cumsum(row_frac) / (np.arange(1, hh_ + 1))      # mittlere Belegung bis Zeile y
+    above = np.where(cum >= 0.5 * max(row_frac.max(), 1e-6))[0]
+    horizon = int(above[-1]) if len(above) else hh_ - 1      # tiefste „himmel-dominierte" Zeile
+    horizon = int(np.clip(horizon + int(0.05 * hh_), int(0.1 * hh_), hh_ - 1))  # etwas Spielraum
+    constrained = sky.copy()
+    constrained[horizon + 1:, :] = 0                         # unter dem Horizont kein Himmel
+
+    n, lbl, stats, _c = cv2.connectedComponentsWithStats(constrained, connectivity=8)
+    if n <= 1:
+        log("    Auto-Sky: keine zusammenhängende Himmel-Fläche oberhalb des Horizonts — übersprungen")
+        return None
+    largest = 1 + int(np.argmax(stats[1:, cv2.CC_STAT_AREA]))  # größte Komponente (ohne Hintergrund)
+    sky_c = (lbl == largest).astype(np.float32)
+    sky_c = cv2.morphologyEx(sky_c, cv2.MORPH_CLOSE, np.ones((7, 7), np.uint8))
+    frac = float(sky_c.mean())
+    if frac < 0.05 or frac > 0.95:
+        log(f"    Auto-Sky: räumlich plausible Himmelsfläche zu klein/groß ({frac*100:.0f}%) — übersprungen")
+        return None
+    fg = 1.0 - cv2.GaussianBlur(sky_c, (0, 0), 3.0)         # Vordergrund = unbewegt + unter Horizont
     fg = cv2.resize(fg, (out_shape[1], out_shape[0]))
     fg = np.clip(fg, 0, 1)
-    log(f"    Auto-Sky: Himmel {frac*100:.0f}% / Vordergrund {(1-frac)*100:.0f}% automatisch getrennt")
+    log(f"    Auto-Sky: Himmel {frac*100:.0f}% (zusammenhängend, Horizont bei {int(horizon/hh_*100)}%) "
+        f"/ Vordergrund {(1-frac)*100:.0f}% — räumlich plausibilisiert")
     return fg[..., None]
+
+
+def stack_stars_point(paths, work_dir=None, align="auto", sigma_clip=False, log=print):
+    """Punkt-Stern-Stacking mit Feldrotations-Ausgleich (Sequators Königsdisziplin) — gibt float32
+    [0..1] (BGR) zurück.
+
+    Anders als der „trails"-Modus (Maximum → Strichspuren) richtet dies jeden Frame an den STERNEN
+    der Referenz aus und MITTELT dann → die Sterne bleiben PUNKTFÖRMIG und das Rauschen sinkt mit √N
+    (echter SNR-Gewinn statt nur Lichtsammeln). Für nicht nachgeführte Nachtaufnahmen vom Stativ.
+
+    Ablauf je Frame:
+      1) Sternzentren detektieren (astro._star_centroids, sub-pixel; ORB als Fallback).
+      2) Ein AFFINES Partial-Modell (Translation + Rotation + Skala) gegen die Referenz schätzen —
+         deckt die FELDROTATION ab, die bei nicht nachgeführten Serien um den Himmelspol auftritt
+         (für übliche Brennweiten reicht eine globale Affine; estimateAffinePartial2D + RANSAC).
+      3) Frame warpen und in einen Akkumulator mitteln (sigma_clip=True → Kappa-Sigma statt Mittel,
+         verwirft Flugzeuge/Satelliten/Hotpixel).
+
+    Frames, deren Stern-Ausrichtung nicht sicher gelingt, werden VERWORFEN (sonst verschmieren sie
+    den Stack), nicht roh dazugemittelt. Die Referenz ist der mittlere Frame.
+    align: 'auto' = Stern-Transform mit ORB-Fallback (Standard); 'none' = keine Ausrichtung (nur
+    mitteln, z. B. wenn schon nachgeführt)."""
+    if not paths:
+        raise RuntimeError("keine Aufnahmen fürs Stern-Stacking")
+    ref = astro._read_float(paths[len(paths) // 2])
+    H, W = ref.shape[:2]
+    refg = astro._gray(ref)
+    log(f"  Punkt-Stern-Stack aus {len(paths)} Aufnahmen (Feldrotation wird ausgeglichen) …")
+
+    if not sigma_clip:
+        acc = np.zeros_like(ref, np.float32)
+        cnt = 0
+        used_M = 0
+        for i, p in enumerate(paths):
+            f = astro._read_float(p)
+            if f.shape[:2] != (H, W):
+                f = cv2.resize(f, (W, H))
+            if align == "none" or i == len(paths) // 2:
+                aligned = f
+            else:
+                M = _star_affine(refg, astro._gray(f))
+                if M is None:
+                    log(f"    Frame {i + 1}: keine sichere Stern-Ausrichtung → verworfen")
+                    continue
+                aligned = cv2.warpAffine(f, M, (W, H), flags=cv2.INTER_LANCZOS4,
+                                         borderMode=cv2.BORDER_REFLECT)
+                used_M += 1
+            acc += aligned
+            cnt += 1
+            log(f"    Stern-Stack {i + 1}/{len(paths)} (gemittelt)")
+        if cnt == 0:
+            raise RuntimeError("Punkt-Stern-Stack: kein Frame ausrichtbar")
+        result = acc / cnt
+        log(f"    Punkt-Stern-Stack: {cnt} Frames gemittelt ({used_M} per Feldrotation ausgerichtet)")
+        return np.clip(result, 0, 1)
+
+    # sigma_clip: ausgerichtete Frames als Temp-TIFF ablegen, dann astro.stack(method='sigma').
+    work_dir = work_dir or os.path.dirname(paths[0])
+    adir = os.path.join(work_dir, "_star_aligned")
+    os.makedirs(adir, exist_ok=True)
+    proc, used_M = [], 0
+    for i, p in enumerate(paths):
+        f = astro._read_float(p)
+        if f.shape[:2] != (H, W):
+            f = cv2.resize(f, (W, H))
+        if align != "none" and i != len(paths) // 2:
+            M = _star_affine(refg, astro._gray(f))
+            if M is None:
+                log(f"    Frame {i + 1}: keine sichere Stern-Ausrichtung → verworfen")
+                continue
+            f = cv2.warpAffine(f, M, (W, H), flags=cv2.INTER_LANCZOS4, borderMode=cv2.BORDER_REFLECT)
+            used_M += 1
+        op = os.path.join(adir, f"s_{i:04d}.tif")
+        cv2.imwrite(op, np.clip(f * 65535, 0, 65535).astype(np.uint16),
+                    [int(cv2.IMWRITE_TIFF_COMPRESSION), 1])
+        proc.append(op)
+    if not proc:
+        import shutil
+        shutil.rmtree(adir, ignore_errors=True)
+        raise RuntimeError("Punkt-Stern-Stack: kein Frame ausrichtbar")
+    result = astro.stack(proc, method="sigma", normalize=False, log=log)
+    import shutil
+    shutil.rmtree(adir, ignore_errors=True)
+    log(f"    Punkt-Stern-Stack: {len(proc)} Frames per Sigma-Clipping kombiniert "
+        f"({used_M} per Feldrotation ausgerichtet)")
+    return np.clip(result, 0, 1)
+
+
+def _star_affine(refg, img_g):
+    """Affine Partial-Transform (Translation + Rotation + Skala) aus den Sternpositionen schätzen,
+    die die Feldrotation nicht nachgeführter Serien abdeckt. Nutzt astro._estimate_star_transform
+    (Stern-Centroids + Offset-Voting + RANSAC) und fällt auf ORB (astro._estimate_rotation) zurück.
+    Gibt eine 2x3-Matrix (img → ref) oder None, wenn keine sichere Ausrichtung möglich ist."""
+    M = astro._estimate_star_transform(refg, img_g)
+    if M is None:
+        M = astro._estimate_rotation(refg, img_g, detector="ORB", min_inliers=12)
+    return M
 
 
 def combine(paths, mode="smooth", align="none", strength=1.0, work_dir=None, detector="ORB",

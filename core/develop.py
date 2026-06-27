@@ -312,3 +312,343 @@ def lens_correct(img, vignette=0.0, distortion=0.0, ca=0.0, auto=False, exif_pat
     if dt == np.uint8:
         return (out * 255.0).astype(np.uint8)
     return out
+
+
+# ===========================================================================
+# R1 — Farb-Management (lineare Pipeline: Kamera → Arbeitsraum → Anzeige)
+# ===========================================================================
+#
+# Alle Matrizen sind 3×3 und arbeiten auf LINEAREM (nicht gamma-kodiertem) RGB
+# als Spaltenvektor:  out = M @ rgb.  Zeilen-Konvention: M[i] · [R,G,B].
+# Primärfarben/Weißpunkt D65 (sRGB/Rec.2020) bzw. D50 (ProPhoto/ACES-Standard).
+#
+# Quellen: sRGB & Rec.709 (IEC 61966-2-1), Rec.2020 (ITU-R BT.2020),
+# ProPhoto/ROMM (ANSI/I3A IT10.7666). Werte als Konstanten hinterlegt, damit
+# ForgePix ohne colour-science-Abhängigkeit auskommt.
+
+# RGB→XYZ (lineares RGB → CIE XYZ), Zeilen = X,Y,Z-Beiträge je Kanal
+_RGB2XYZ = {
+    # sRGB / Rec.709, D65
+    "srgb": np.array([
+        [0.4123908, 0.3575843, 0.1804808],
+        [0.2126390, 0.7151687, 0.0721923],
+        [0.0193308, 0.1191948, 0.9505322],
+    ], dtype=np.float64),
+    # Rec.2020, D65
+    "rec2020": np.array([
+        [0.6369580, 0.1446169, 0.1688810],
+        [0.2627002, 0.6779981, 0.0593017],
+        [0.0000000, 0.0280727, 1.0609851],
+    ], dtype=np.float64),
+    # ProPhoto / ROMM RGB, D50
+    "prophoto": np.array([
+        [0.7976749, 0.1351917, 0.0313534],
+        [0.2880402, 0.7118741, 0.0000857],
+        [0.0000000, 0.0000000, 0.8252100],
+    ], dtype=np.float64),
+}
+
+# Bradford-Chromatic-Adaptation D50<->D65 (ProPhoto ist D50, sRGB/Rec2020 D65).
+# D65→D50 (für XYZ unter D65 → XYZ unter D50, vor ProPhoto-Konversion).
+_CAT_D65_D50 = np.array([
+    [1.0478112, 0.0228866, -0.0501270],
+    [0.0295424, 0.9904844, -0.0170491],
+    [-0.0092345, 0.0150436, 0.7521316],
+], dtype=np.float64)
+_CAT_D50_D65 = np.linalg.inv(_CAT_D65_D50)
+
+
+def _working_rgb2xyz(working):
+    w = (working or "rec2020").lower()
+    if w not in _RGB2XYZ:
+        raise ValueError(f"unbekannter Arbeitsraum: {working!r} "
+                         f"(erlaubt: {sorted(_RGB2XYZ)})")
+    return _RGB2XYZ[w], w
+
+
+def camera_to_working(linear_rgb, cam_xyz_matrix, working="rec2020"):
+    """Lineares Kamera-/Sensor-RGB in einen großen linearen ARBEITSFARBRAUM bringen.
+
+    rawpy liefert `raw.rgb_xyz_matrix` (4×3) — die Matrix, die *XYZ → Kamera-RGB*
+    abbildet (die ersten 3 Zeilen sind die RGB-Kanäle, eine evtl. 4. Zeile ist ein
+    möglicher Emerald-/CYGM-Kanal und wird ignoriert). Wir invertieren sie zu
+    *Kamera-RGB → XYZ* und transformieren dann XYZ → Arbeitsraum (Rec.2020 /
+    ProPhoto / sRGB), bei ProPhoto inkl. Bradford-Adaption D65→D50.
+
+      linear_rgb     : (...,3) LINEARES Kamera-RGB (float, szenenbezogen, R,G,B-Reihenfolge)
+      cam_xyz_matrix : (3,3) oder (4,3) rawpy-XYZ→Kamera-Matrix
+      working        : "rec2020" | "prophoto" | "srgb"
+
+    Rückgabe: (...,3) lineares RGB im Arbeitsraum (float64), nicht geclippt
+    (szenenbezogen darf >1 sein). Reine Matrixmultiplikation, treu/nicht-generativ."""
+    M_cam = np.asarray(cam_xyz_matrix, dtype=np.float64)
+    if M_cam.shape[0] == 4:                       # rawpy: 4. Zeile ist optionaler 4. Kanal
+        M_cam = M_cam[:3]
+    if M_cam.shape != (3, 3):
+        raise ValueError("cam_xyz_matrix muss (3,3) oder (4,3) sein")
+    cam2xyz = np.linalg.inv(M_cam)                # Kamera-RGB → XYZ (D65)
+    rgb2xyz, w = _working_rgb2xyz(working)
+    xyz2working = np.linalg.inv(rgb2xyz)          # XYZ → Arbeitsraum-RGB
+    if w == "prophoto":                           # XYZ D65 → D50 vor ProPhoto
+        cam2xyz = _CAT_D65_D50 @ cam2xyz
+    M = xyz2working @ cam2xyz                      # Kamera-RGB → Arbeitsraum-RGB
+    arr = np.asarray(linear_rgb, dtype=np.float64)
+    return arr @ M.T
+
+
+def _linear_to_gamma(lin, gamma):
+    """Lineares [0,1]-RGB → anzeige-/gamma-kodiertes RGB."""
+    lin = np.clip(lin, 0.0, 1.0)
+    g = (gamma or "srgb").lower()
+    if g == "srgb":
+        a = 0.055
+        return np.where(lin <= 0.0031308, lin * 12.92,
+                        (1 + a) * np.power(lin, 1 / 2.4) - a)
+    if g == "rec709":
+        return np.where(lin < 0.018, lin * 4.5,
+                        1.099 * np.power(lin, 0.45) - 0.099)
+    if g in ("linear", "none", None):
+        return lin
+    try:                                          # numerisches Gamma, z.B. 2.2
+        return np.power(lin, 1.0 / float(g))
+    except (TypeError, ValueError):
+        return lin
+
+
+def working_to_display(img_working, working="rec2020", gamma="srgb"):
+    """Lineares ARBEITSRAUM-RGB zurück nach sRGB-DISPLAY (gamma-kodiert) bringen.
+
+    Kehrt camera_to_working um: Arbeitsraum-RGB → XYZ → sRGB-Primärfarben (linear)
+    → Gamma-Kodierung. Bei ProPhoto-Quelle wird XYZ D50→D65 zurück-adaptiert.
+
+      img_working : (...,3) LINEARES RGB im Arbeitsraum (float)
+      working     : Arbeitsraum der Eingabe ("rec2020" | "prophoto" | "srgb")
+      gamma       : Ausgabe-Transferfunktion: "srgb" | "rec709" | "linear" | Zahl (z.B. 2.2)
+
+    Rückgabe: (...,3) anzeigefertiges sRGB in [0,1] (float64). Treu/nicht-generativ."""
+    rgb2xyz, w = _working_rgb2xyz(working)
+    working2xyz = rgb2xyz                          # Arbeitsraum-RGB → XYZ
+    if w == "prophoto":                            # XYZ D50 → D65 für sRGB
+        working2xyz = _CAT_D50_D65 @ working2xyz
+    xyz2srgb = np.linalg.inv(_RGB2XYZ["srgb"])     # XYZ(D65) → sRGB linear
+    M = xyz2srgb @ working2xyz
+    arr = np.asarray(img_working, dtype=np.float64)
+    lin = arr @ M.T
+    return _linear_to_gamma(lin, gamma)
+
+
+# ===========================================================================
+# R2 — Szenenbezogenes Tonemapping (filmic / sigmoid, ratio-preserving)
+# ===========================================================================
+
+def filmic_tonemap(linear_bgr, contrast=1.0, pivot=0.18, latitude=0.6,
+                   white=8.0, black=0.0, sat_preserve=1.0):
+    """Szenenbezogenes Tonemapping (darktable-„filmic"/-„sigmoid"-Stil): bildet die
+    LINEARE Szenen-Luminanz mit einer S-förmigen (sigmoiden) Kurve auf die Anzeige
+    ab und komprimiert die Lichter SANFT, statt sie hart zu clippen.
+
+    Hue/Sättigung werden ERHALTEN (ratio-preserving): nicht die Kanäle einzeln
+    durch die Kurve geschickt (das verschiebt den Farbton), sondern nur die
+    Luminanz gemappt und alle Kanäle mit demselben Verhältnis (out_L/in_L)
+    skaliert. Über `sat_preserve` < 1 kann optional zu Weiß entsättigt werden.
+
+      linear_bgr   : (...,3) LINEARES BGR (float, szenenbezogen; darf >1 sein) oder uint8/16
+      contrast     : Steilheit der Sigmoid-Kurve (>1 kontrastreicher)
+      pivot        : mittlerer Grauwert der Szene (Linear, ~0.18) → bleibt mittig
+      latitude     : linearer Mittenbereich um den Pivot (0..1, größer = weniger S-Krümmung)
+      white        : Szenen-Luminanz (relativ zum Pivot), die auf Display-Weiß (1.0) fällt
+      black        : Szenen-Luminanz, die auf Display-Schwarz (0.0) fällt
+      sat_preserve : 1.0 = volle Sättigung erhalten; <1 entsättigt Lichter Richtung Weiß
+
+    Rückgabe: dtype/Range wie Eingabe (uint8/16 → geclippt; float → [0,1]).
+    Treu/nicht-generativ — nur Tonwertabbildung."""
+    f, dtype, maxv = _as_float(linear_bgr)
+    if f.ndim != 3:
+        # Graustufen: Luminanz == Wert
+        L = np.clip(f, 0.0, None).astype(np.float64)
+        out = _filmic_curve(L, contrast, pivot, latitude, white, black)
+        out = np.clip(out, 0, 1).astype(np.float32)
+        return (out * maxv).astype(dtype) if dtype != np.float32 else out
+    x = f.astype(np.float64)
+    x = np.clip(x, 0.0, None)                       # szenenbezogen: keine negativen Werte
+    # Rec.709-Luminanz auf LINEAREM RGB (BGR-Reihenfolge)
+    L = 0.0722 * x[..., 0] + 0.7152 * x[..., 1] + 0.2126 * x[..., 2]
+    L = np.maximum(L, 1e-8)
+    Lout = _filmic_curve(L, contrast, pivot, latitude, white, black)
+    ratio = (Lout / L)[..., None]                  # ratio-preserving: Hue/Sat bleiben
+    out = x * ratio
+    # Lichter HUE-ERHALTEND begrenzen: wenn ein Kanal > 1 läuft, das GANZE Pixel herunterskalieren
+    # (RGB-Verhältnisse bleiben → Farbton bleibt), statt per-Kanal hart zu clippen (das verschöbe
+    # den Farbton in gesättigten Lichtern — der klassische Filmic-Fehler).
+    m = out.max(axis=2, keepdims=True)
+    out = np.where(m > 1.0, out / np.maximum(m, 1e-6), out)
+    if sat_preserve < 1.0:                          # Lichter optional zu Weiß entsättigen
+        # desat steigt mit der Display-Luminanz (helle Bereiche bleichen aus)
+        desat = (1.0 - sat_preserve) * np.clip(Lout, 0, 1)[..., None]
+        out = out * (1 - desat) + np.clip(Lout, 0, 1)[..., None] * desat
+    out = np.clip(out, 0, 1).astype(np.float32)
+    return (out * maxv).astype(dtype) if dtype != np.float32 else out
+
+
+def _filmic_curve(L, contrast, pivot, latitude, white, black):
+    """Sigmoid-Tonwertkurve im LOG-Belichtungsraum (szenenlinear → Display [0,1]).
+    Glatt, monoton, komprimiert beide Enden sanft. L > 0 erwartet.
+
+    `white` ist die Szenen-Luminanz (relativ zum Pivot ~0.18), die auf Display-Weiß
+    fällt; daraus folgt der EV-Bereich. `black` (≈0) verschiebt das Fußende leicht.
+    `latitude` streckt den linearen Mittelteil (flachere S-Krümmung), `contrast`
+    erhöht die Steilheit."""
+    pivot = max(float(pivot), 1e-6)
+    eps = 1e-8
+    # Log2-Belichtung relativ zum Pivot (Pivot → 0 EV)
+    ev = np.log2(np.maximum(L, eps) / pivot)
+    white_ev = np.log2(max(float(white), 1.0 + 1e-3))   # EV über Pivot bis Display-Weiß
+    span = max(white_ev, 1e-3)
+    xn = ev / span                                  # Pivot bei 0, Display-Weiß ~ +1
+    k = max(float(contrast), 1e-3) * 2.0
+    lat = np.clip(float(latitude), 0.0, 0.99)
+    # Sigmoid um 0 (Pivot → 0.5 Display), latitude streckt den linearen Mittelteil
+    s = 1.0 / (1.0 + np.exp(-k * xn / (1.0 - lat * 0.9)))
+    # optionaler Schwarz-Versatz (hebt/senkt den Fußpunkt minimal)
+    if black:
+        s = s + float(black) * (1.0 - s)
+    return np.clip(s, 0.0, 1.0)
+
+
+# ===========================================================================
+# R4 — Bessere Rauschreduktion (Luma/Chroma getrennt, 16-bit-treu, ISO-skaliert)
+# ===========================================================================
+
+def _wavelet_denoise_channel(ch, thresh):
+    """Einfaches kantenerhaltendes Wavelet-Soft-Thresholding (à trous / stationär)
+    auf EINEM float-Kanal. Mehrere Skalen via Difference-of-Gaussians; feine
+    Detailbänder werden soft-thresholded (Rauschen sitzt in den feinen Bändern).
+    Rein NumPy/OpenCV, kein pywt nötig."""
+    base = ch.astype(np.float32)
+    out = np.zeros_like(base)
+    sigma = 1.0
+    cur = base.copy()
+    for s in range(4):                              # 4 Detailbänder
+        blur = cv2.GaussianBlur(cur, (0, 0), sigma)
+        detail = cur - blur
+        t = thresh * (0.5 ** s)                     # feinste Skala am stärksten entrauscht
+        # Soft-Thresholding (schrumpft kleine Koeffizienten → Rauschen weg, Kanten bleiben)
+        detail = np.sign(detail) * np.maximum(np.abs(detail) - t, 0.0)
+        out += detail
+        cur = blur
+        sigma *= 2.0
+    out += cur                                      # gröbste Approximation unangetastet
+    return out
+
+
+def denoise_chroma_luma(img, luma=1.0, chroma=1.0, iso=None):
+    """Wavelet-/kantenerhaltendes Entrauschen, GETRENNT auf Luma und Chroma, in
+    FLOAT gerechnet (16-bit bleibt erhalten — anders als fast_denoise, das auf
+    uint8 zwingt). Chroma kann stärker entrauscht werden als Luma (Farbrauschen ist
+    grobkörniger), ohne Detailverlust in der Helligkeit.
+
+      img    : (...,3) BGR uint8/uint16/float oder Graustufen
+      luma   : Luma-Stärke (0 = aus, 1 = normal, höher = stärker)
+      chroma : Chroma-Stärke (0 = aus; meist 1–3× luma sinnvoll)
+      iso    : optionaler ISO-Wert → grobe Heuristik, die den Threshold skaliert
+               (höheres ISO ⇒ mehr Rauschen ⇒ stärker entrauschen)
+
+    Rückgabe: dtype/Range wie Eingabe (16-bit-treu). Treu/nicht-generativ."""
+    f, dtype, maxv = _as_float(img)
+    # ISO-Heuristik: Basisrauschen ~ sqrt(ISO/100); auf einen Threshold-Faktor mappen
+    iso_fac = 1.0
+    if iso is not None and iso > 0:
+        iso_fac = float(np.sqrt(max(iso, 100.0) / 100.0))
+    base_t = 0.02 * iso_fac                          # Basis-Schwelle im [0,1]-Float-Raum
+    if f.ndim != 3:
+        if luma <= 0:
+            return img
+        out = _wavelet_denoise_channel(np.clip(f, 0, 1), base_t * luma)
+        out = np.clip(out, 0, 1).astype(np.float32)
+        return (out * maxv).astype(dtype) if dtype != np.float32 else out
+    lab = cv2.cvtColor(np.clip(f, 0, 1).astype(np.float32), cv2.COLOR_BGR2LAB)
+    L = lab[..., 0] / 100.0                          # L: 0..100 → 0..1
+    a = lab[..., 1]                                  # a,b: ~ -128..127
+    b = lab[..., 2]
+    if luma > 0:
+        L = _wavelet_denoise_channel(L, base_t * luma)
+    if chroma > 0:                                   # Chroma stärker, in nativer a/b-Skala
+        ct = base_t * chroma * 128.0
+        a = _wavelet_denoise_channel(a, ct)
+        b = _wavelet_denoise_channel(b, ct)
+    lab[..., 0] = np.clip(L, 0, 1) * 100.0
+    lab[..., 1] = a
+    lab[..., 2] = b
+    out = cv2.cvtColor(lab, cv2.COLOR_LAB2BGR)
+    out = np.clip(out, 0, 1).astype(np.float32)
+    return (out * maxv).astype(dtype) if dtype != np.float32 else out
+
+
+# ===========================================================================
+# R5 — Parametrische Masken (Auswahl nach Luminanz / Farbton / Sättigung)
+# ===========================================================================
+
+def parametric_mask(img, by="luminance", lo=0.0, hi=1.0, feather=0.1):
+    """Weiche parametrische Auswahl-Maske (0..1) nach Bild-EIGENSCHAFT — andockbar an
+    jedes Editor-Modul und kombinierbar (Multiplikation) mit den geometrischen Masken
+    (gradient_mask/radial_mask).
+
+      by      : "luminance" | "hue" | "saturation"
+                - luminance : Helligkeit (Rec.709), 0..1
+                - hue       : Farbton 0..1 (entspricht 0..360°); Auswahl ist zyklisch
+                - saturation: HSV-Sättigung 0..1
+      lo, hi  : Auswahlbereich [lo,hi] der jeweiligen Eigenschaft (in [0,1])
+      feather : weicher Rand als Anteil (Smoothstep-Übergang außerhalb [lo,hi];
+                bei "hue" als zyklische Glockenkurve um die Bereichsmitte)
+
+    Smoothstep/Glockenkurve → keine harten Kanten. Rückgabe: float32-Maske 0..1,
+    gleiche H×W wie das Bild. Treu/nicht-generativ."""
+    f, _, _ = _as_float(img)
+    fc = np.clip(f, 0, 1).astype(np.float32)
+    by = (by or "luminance").lower()
+    fw = max(float(feather), 1e-4)
+
+    if by == "luminance":
+        if fc.ndim == 3:
+            v = 0.0722 * fc[..., 0] + 0.7152 * fc[..., 1] + 0.2126 * fc[..., 2]
+        else:
+            v = fc
+        return _band_mask(v, lo, hi, fw)
+
+    if fc.ndim != 3:
+        raise ValueError(f"by={by!r} braucht ein Farbbild (3 Kanäle)")
+    hsv = cv2.cvtColor(fc, cv2.COLOR_BGR2HSV)        # H:0..360, S:0..1, V:0..1
+    if by == "saturation":
+        return _band_mask(hsv[..., 1], lo, hi, fw)
+    if by == "hue":
+        h = hsv[..., 0] / 360.0                      # → 0..1
+        return _hue_band_mask(h, lo, hi, fw)
+    raise ValueError(f"unbekanntes by={by!r} (luminance|hue|saturation)")
+
+
+def _band_mask(v, lo, hi, fw):
+    """Glatte Bandpass-Maske: 1 innerhalb [lo,hi], weicher Smoothstep-Abfall über
+    `fw` außerhalb beider Grenzen."""
+    lo = float(lo); hi = float(hi)
+    if hi < lo:
+        lo, hi = hi, lo
+    rise = _smoothstep(lo - fw, lo, v)               # Anstieg an der Unterkante
+    fall = 1.0 - _smoothstep(hi, hi + fw, v)         # Abfall an der Oberkante
+    return np.clip(rise * fall, 0, 1).astype(np.float32)
+
+
+def _hue_band_mask(h, lo, hi, fw):
+    """Zyklische Farbton-Bandmaske (0..1 Farbkreis). Distanz zur Bereichsmitte wird
+    zyklisch (wrap-around bei 1.0) gemessen, dann Smoothstep-Abfall."""
+    lo = float(lo) % 1.0
+    hi = float(hi) % 1.0
+    # zyklische Mitte und Halbbreite des Auswahlbereichs
+    if hi >= lo:
+        center = (lo + hi) / 2.0
+        half = (hi - lo) / 2.0
+    else:                                            # Bereich über 1.0 hinweg (z.B. Rot)
+        center = ((lo + hi + 1.0) / 2.0) % 1.0
+        half = ((hi + 1.0) - lo) / 2.0
+    d = np.abs(h - center)
+    d = np.minimum(d, 1.0 - d)                        # zyklische Distanz
+    return np.clip(1.0 - _smoothstep(half, half + fw, d), 0, 1).astype(np.float32)

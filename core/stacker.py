@@ -191,11 +191,96 @@ def align_sequential(images, ref_idx=None, sub_mode="rigid", detector="ORB", log
     return out
 
 
+def align_images_breathing(images, ref_idx=None, detector="ORB", smooth=True, log=print):
+    """F2 — **Focus-Breathing-Korrektur** für tiefe High-Mag-Stacks. Beim Durchfahren des Fokus
+    ändert sich der Abbildungsmaßstab leicht und **monoton** über die Serie (das „Atmen" des
+    Objektivs). Schätzt man jeden Frame isoliert auf die Referenz, schwanken die Skalen-Schätzungen
+    durch Rauschen/wenig Merkmale an den defokussierten Enden → die Mitten-Skalen „zappeln" und das
+    Stack-Ergebnis verwischt (stacking mush).
+
+    Lösung: pro Frame nur EINEN Skalen-Faktor schätzen (per Ähnlichkeitstransformation auf die
+    Referenz), dann diese Skalen über die Sequenz **monoton glätten/fitten** (Breathing ist glatt
+    und monoton). Anschließend jeden Frame mit dem geglätteten Skalenwert (zentriert um das
+    Bildzentrum) re-skalieren. Verhindert das Zappeln und damit den Matsch in tiefen Stacks.
+
+    smooth=True: monotone Glättung an; False = roher Per-Frame-Scale (zum Vergleich). Gibt eine
+    Liste gleicher Länge im Eingabe-dtype zurück; bei <2 Bildern unverändert."""
+    n = len(images)
+    if n < 2:
+        return images
+    if ref_idx is None:
+        ref_idx = n // 2
+    det, matcher = _make_detector(detector)
+    ref_gray = _to_gray8(images[ref_idx])
+    kp_ref, des_ref = det.detectAndCompute(ref_gray, None)
+    h, w = images[ref_idx].shape[:2]
+
+    # 1) roher Skalen-Faktor je Frame (Ähnlichkeitstransformation Frame→Referenz)
+    scales = np.ones(n, np.float32)
+    valid = np.zeros(n, bool); valid[ref_idx] = True
+    for i in range(n):
+        if i == ref_idx:
+            continue
+        kp, des = det.detectAndCompute(_to_gray8(images[i]), None)
+        if des is None or des_ref is None or len(kp) < 4:
+            continue
+        matches = matcher.knnMatch(des, des_ref, k=2)
+        good = [m for pair in matches if len(pair) == 2
+                for m, nmatch in [pair] if m.distance < 0.75 * nmatch.distance]
+        if len(good) < 8:
+            continue
+        src = np.float32([kp[m.queryIdx].pt for m in good]).reshape(-1, 1, 2)
+        dst = np.float32([kp_ref[m.trainIdx].pt for m in good]).reshape(-1, 1, 2)
+        M, _ = cv2.estimateAffinePartial2D(src, dst, method=cv2.RANSAC, ransacReprojThreshold=3.0)
+        if M is None:
+            continue
+        s = float(np.sqrt(max(1e-9, abs(M[0, 0] * M[1, 1] - M[0, 1] * M[1, 0]))))  # Maßstab = sqrt(det)
+        if 0.5 < s < 2.0:                      # absurde Schätzungen verwerfen
+            scales[i] = s; valid[i] = True
+
+    # fehlende Werte (defokussierte Enden ohne Treffer) linear über den Index interpolieren
+    xs = np.arange(n, dtype=np.float32)
+    if valid.sum() >= 2:
+        scales = np.interp(xs, xs[valid], scales[valid]).astype(np.float32)
+
+    # 2) MONOTON glätten/fitten — Breathing ist glatt+monoton über die Fokus-Sequenz
+    if smooth and valid.sum() >= 2:
+        sm = scales.copy()
+        try:                                   # robuster, glatter Trend per scipy (optional)
+            from scipy.ndimage import uniform_filter1d
+            k = max(1, n // 8)
+            sm = uniform_filter1d(scales, size=2 * k + 1, mode="nearest")
+        except Exception:                      # Fallback: gleitendes Mittel (reines NumPy)
+            k = max(1, n // 8)
+            ker = np.ones(2 * k + 1, np.float32) / (2 * k + 1)
+            sm = np.convolve(np.pad(scales, k, mode="edge"), ker, mode="valid")
+        # auf Monotonie zwingen (Richtung aus dem Roh-Trend): kumuliertes Max bzw. Min über den Index
+        direction = np.sign(scales[-1] - scales[0]) or 1.0
+        sm = np.maximum.accumulate(sm) if direction > 0 else np.minimum.accumulate(sm)
+        # auf die Referenz normieren (Referenz behält Maßstab 1.0)
+        sm = sm / (sm[ref_idx] + 1e-9)
+        scales = sm.astype(np.float32)
+
+    out = [None] * n
+    cx, cy = (w - 1) / 2.0, (h - 1) / 2.0
+    for i in range(n):
+        s = float(scales[i])
+        if abs(s - 1.0) < 1e-4:
+            out[i] = images[i]; continue
+        M = np.float32([[s, 0, cx - s * cx], [0, s, cy - s * cy]])   # um Bildzentrum skalieren
+        out[i] = cv2.warpAffine(images[i], M, (w, h), flags=cv2.INTER_LANCZOS4,
+                                borderMode=cv2.BORDER_CONSTANT)
+    log(f"    Breathing-Korrektur: Maßstab {scales.min():.4f}…{scales.max():.4f} "
+        f"über {n} Frames ({'monoton geglättet' if smooth else 'roh'})")
+    return out
+
+
 def align_images(images, ref_idx=None, mode="rigid", detector="ORB", refine=True, log=print):
     """Richtet alle Bilder auf das Referenzbild aus. Gibt ausgerichtete Liste zurück.
     mode: 'rigid' (Verschiebung/Drehung/Skalierung), 'homography' (Perspektive),
-    'subject' (auf das dominante Motiv — für bewegte Makro-Motive) oder
-    'sequential' (paarweise Nachbar-Verkettung — robust bei großem Fokusbereich).
+    'subject' (auf das dominante Motiv — für bewegte Makro-Motive),
+    'sequential' (paarweise Nachbar-Verkettung — robust bei großem Fokusbereich) oder
+    'breathing' (monoton geglättete Maßstabs-Korrektur gegen Focus-Breathing-Matsch).
     refine: nach der Feature-Schätzung eine **ECC-Subpixel-Verfeinerung** (helligkeitsinvariant)
     aufsetzen — deutlich genauer als reine Merkmals-Korrespondenz, besonders an den (defokussierten)
     Stack-Enden, wo ORB wenig findet. Fällt bei Fehlschlag auf die Feature-Ausrichtung zurück."""
@@ -453,7 +538,141 @@ def focus_stack(images, min_size=32, deghost=False, deghost_thresh=0.35, log=pri
     return np.clip(img, 0, maxval).astype(dtype)
 
 
-def focus_stack_depthmap(images, sharp_blur=4, gamma=8.0, radius=None, smoothing=None, log=print):
+def _window_energy(layer_abs, win=5):
+    """F5-Baustein — Energie nicht punktweise, sondern über ein FENSTER mitteln (Richtung
+    SML/Tenengrad). `layer_abs`: (N,h,w) Betragskoeffizienten. Mittelt jede Ebene mit einem
+    Box-Fenster → rauschrobuster Selektor (ein einzelnes verrauschtes Pixel kippt die Auswahl nicht
+    mehr)."""
+    k = max(1, int(win))
+    return np.stack([cv2.boxFilter(layer_abs[i], cv2.CV_32F, (k, k)) for i in range(layer_abs.shape[0])])
+
+
+def focus_stack_pyramid_consistent(images, min_size=32, win=5, deghost=False,
+                                   deghost_thresh=0.35, log=print):
+    """F3 — **Cross-Scale-konsistente** Laplace-Pyramiden-Fusion (der eigentliche PMax-Trick).
+
+    Die naive Pyramide wählt pro Ebene UNABHÄNGIG `argmax(|Laplace|)` je Bildpunkt. An kontrastreichen
+    Kanten wählen feine und grobe Ebenen dann oft VERSCHIEDENE Quellframes → die rekonstruierten
+    Bänder passen nicht zusammen und es entstehen Halos/Ringing (Überschwinger).
+
+    Hier wird die Koeffizienten-AUSWAHL über die Ebenen **gekoppelt**: die grobe Ebene leitet die
+    feinere. Die Auswahl-Index-Karte der gröbsten Ebene wird hochskaliert und mit der lokalen
+    Ebenen-Evidenz kombiniert (grob als Prior, fein darf nur dort abweichen, wo es klar schärfer ist)
+    → konsistente Frame-Auswahl über alle Skalen, deutlich weniger Halo/Ringing.
+
+    F5: Die Energie wird über ein **Fenster** (`win`) gemittelt statt punktweise (rauschrobust).
+    Gibt das verschmolzene Bild im Eingabe-dtype zurück; bei <2 Bildern unverändert."""
+    n = len(images)
+    if n < 2:
+        return images[0] if images else None
+    dtype = images[0].dtype
+    maxval = 65535.0 if dtype == np.uint16 else 255.0
+    images = [im if im.ndim == 3 else cv2.cvtColor(im, cv2.COLOR_GRAY2BGR) for im in images]
+    fl = [im.astype(np.float32) for im in images]
+    h, w = fl[0].shape[:2]
+    levels = max(1, int(np.log2(min(h, w) / min_size)))
+    log(f"    Cross-Scale-Pyramide: {len(fl)} Frames, {levels} Ebenen")
+
+    laps = [_laplacian_pyramid(_gaussian_pyramid(im, levels)) for im in fl]
+
+    # Energie je Ebene (fenster-gemittelt, rauschrobust)
+    energies = []
+    for l in range(levels):
+        layers = np.stack([lp[l] for lp in laps])                 # (N,h,w,3)
+        e = np.abs(layers).sum(axis=3)                            # (N,h,w)
+        energies.append(_window_energy(e, win=win))
+
+    # Auswahl von GROB nach FEIN koppeln: grobe Index-Karte als Prior hochskalieren
+    fused = []
+    prior_idx = None                                              # Auswahl-Index der nächst-gröberen Ebene
+    for l in range(levels - 1, -1, -1):                           # gröbste Detailebene zuerst
+        e = energies[l]                                           # (N,h,w)
+        hl, wl = e.shape[1], e.shape[2]
+        if prior_idx is not None:
+            up = cv2.resize(prior_idx.astype(np.float32), (wl, hl),
+                            interpolation=cv2.INTER_NEAREST).astype(np.int64)
+            # Energie des grob-bevorzugten Frames an dieser feinen Stelle
+            e_prior = np.take_along_axis(e, up[None], axis=0)[0]  # (h,w)
+            e_best = e.max(axis=0)                                # (h,w)
+            # nur abweichen, wenn die feine Ebene den Prior-Frame DEUTLICH schlägt (gegen Ringing)
+            local_idx = e.argmax(axis=0)
+            beat = e_best > (e_prior * 1.25 + 1e-6)
+            idx = np.where(beat, local_idx, up)
+        else:
+            idx = e.argmax(axis=0)
+        prior_idx = idx
+        layers = np.stack([lp[l] for lp in laps])                # (N,h,w,3)
+        sel = np.take_along_axis(layers, idx[None, :, :, None], axis=0)[0]
+        fused.append(sel)
+    fused = fused[::-1]                                           # zurück in Reihenfolge fein→grob
+    fused.append(np.stack([lp[levels] for lp in laps]).mean(axis=0))   # Basis = tonaler Mittelwert
+
+    img = fused[-1]
+    for l in range(levels - 1, -1, -1):
+        size = (fused[l].shape[1], fused[l].shape[0])
+        img = cv2.pyrUp(img, dstsize=size) + fused[l]
+    img = np.clip(img, 0, maxval)
+
+    if deghost and n >= 3:
+        img = deghost_sharpest(images, img, thresh=deghost_thresh, log=log)
+    return np.clip(img, 0, maxval).astype(dtype)
+
+
+def deghost_sharpest(images, merged, thresh=0.35, log=print):
+    """F5 — besseres Deghost: in **Streuzonen** (wo die Frames stark uneinig sind → Bewegung/Wind)
+    nicht den globalen Median nehmen (der verwischt und kann unscharf sein), sondern den **schärfsten
+    konsistenten Frame** je Region. So bleibt in Bewegungsbereichen ein *echtes, scharfes* Quellbild
+    stehen statt einer matschigen Mittelung. `merged` = bisheriges Stack-Ergebnis (wird in ruhigen
+    Zonen beibehalten). Gibt float32/dtype-erhaltend zurück; bei <2 Bildern `merged` unverändert."""
+    n = len(images)
+    if n < 2:
+        return merged
+    dtype = merged.dtype
+    maxval = 65535.0 if dtype == np.uint16 else 255.0
+    imgs = [im if im.ndim == 3 else cv2.cvtColor(im, cv2.COLOR_GRAY2BGR) for im in images]
+    h, w = merged.shape[:2]
+    # schärfsten Frame je Pixel wählen (SML), Index für kohärente Regionen glätten
+    fm = np.stack([_focus_measure(im) for im in imgs])           # (n,h,w)
+    fm = _window_energy(fm, win=7)
+    idx = np.argmax(fm, axis=0).astype(np.uint8)
+    idx = cv2.medianBlur(idx, 5)
+    sharpest = np.zeros_like(imgs[0], dtype=np.float32)
+    for i in range(n):
+        m = idx == i
+        if m.any():
+            sharpest[m] = imgs[i].astype(np.float32)[m]
+    # Streuungs-Maske: nur dort den schärfsten Frame einblenden
+    dmap = disagreement_map(imgs)
+    dmap = cv2.resize(dmap, (w, h))
+    mask = np.clip((dmap - thresh) / max(1e-6, 1 - thresh), 0, 1)[..., None]
+    out = merged.astype(np.float32) * (1 - mask) + sharpest * mask
+    frac = float((mask[..., 0] > 0.05).mean())
+    log(f"    Deghost (schärfster Frame): {frac*100:.1f}% Streufläche durch echte Quellpixel ersetzt")
+    return np.clip(out, 0, maxval).astype(dtype)
+
+
+def _guided_filter(guide, src, radius=8, eps=1e-3):
+    """F4-Baustein — **Guided Filter** (He et al.): kantenerhaltende Glättung von `src`, geführt von
+    `guide` (Bildstruktur). Wie joint-bilateral, aber linear schnell. Reines OpenCV/NumPy (nutzt das
+    ximgproc-Modul, falls vorhanden, sonst exakte Box-Filter-Implementierung). guide/src float32,
+    gleiche Form (HxW). Glättet innerhalb flacher Guide-Regionen, hält an Guide-Kanten."""
+    g = guide.astype(np.float32); s = src.astype(np.float32)
+    r = max(1, int(radius)); ksize = (2 * r + 1, 2 * r + 1)
+    try:                                                    # schnellster Pfad, wenn ximgproc da ist
+        return cv2.ximgproc.guidedFilter(g, s, r, float(eps))
+    except Exception:
+        pass
+    mean = lambda x: cv2.boxFilter(x, cv2.CV_32F, ksize)    # exakte He-et-al.-Formel über Box-Filter
+    mg, ms = mean(g), mean(s)
+    cov = mean(g * s) - mg * ms
+    var = mean(g * g) - mg * mg
+    a = cov / (var + eps)
+    b = ms - a * mg
+    return mean(a) * g + mean(b)
+
+
+def focus_stack_depthmap(images, sharp_blur=4, gamma=8.0, radius=None, smoothing=None,
+                         regularize=False, reg_sigma_spatial=8.0, reg_sigma_color=0.08, log=print):
     """Depth-Map-Fokus-Stacking (Helicon „DMap"/Zerene-Stil): pro Bildpunkt wird das **schärfste
     Frame** stark bevorzugt — über eine **potenzgewichtete Mischung** der Schärfekarten (Gewicht =
     Schärfe^gamma). Hohes gamma ≈ harte Auswahl des schärfsten Frames (volle Detailschärfe), bleibt
@@ -465,7 +684,15 @@ def focus_stack_depthmap(images, sharp_blur=4, gamma=8.0, radius=None, smoothing
       • radius    = Struktur-/Fenstergröße des Schärfemaßes (größer = ruhiger, aber weniger Feindetail).
                     Steuert die Glättung der Schärfekarte (Standard ≈ sharp_blur).
       • smoothing = Weichheit der Übergänge zwischen Quellbildern (Feathering der Gewichtskarten gegen
-                    harte Nähte; 0 = aus)."""
+                    harte Nähte; 0 = aus).
+
+    F4 — Tiefenkarten-**Regularisierung** (`regularize=True`): die rohe, pixelweise Schärfe-/Frame-
+    Auswahl ist oft fleckig/sprenkelig (DMap-Mottling), weil in flachen Regionen das Rauschen
+    entscheidet, welches Frame „am schärfsten" ist. Lösung: die Schärfekarten **kantenerhaltend**
+    glätten (joint/guided-bilateral mit dem mittleren Bild als Guide) BEVOR gemischt wird — innerhalb
+    glatter Flächen wird die Auswahl beruhigt, echte Objektkanten bleiben scharf getrennt. Reduziert
+    Mottling, ohne Tiefenkanten zu verwaschen. reg_sigma_spatial/reg_sigma_color steuern Reichweite
+    bzw. Kanten-Empfindlichkeit (0..1 Bildwert)."""
     n = len(images)
     if n < 2:
         return images[0] if images else None
@@ -481,6 +708,13 @@ def focus_stack_depthmap(images, sharp_blur=4, gamma=8.0, radius=None, smoothing
         g = cv2.cvtColor(im, cv2.COLOR_BGR2GRAY) if im.ndim == 3 else im
         S[i] = cv2.GaussianBlur(np.abs(cv2.Laplacian(g, cv2.CV_32F)), (0, 0), rad)
         log(f"    Schärfekarte {i + 1}/{n}")
+    if regularize:
+        # F4: jede Schärfekarte kantenerhaltend mit dem mittleren Bild als Guide glätten (gegen Mottling)
+        guide = np.mean(np.stack(fl), axis=0)
+        guide_g = (cv2.cvtColor(guide, cv2.COLOR_BGR2GRAY) if guide.ndim == 3 else guide)
+        S = np.stack([_guided_filter(guide_g, S[i], radius=max(2, int(reg_sigma_spatial)),
+                                     eps=(reg_sigma_color * maxval) ** 2) for i in range(n)])
+        log(f"    DMap-Regularisierung (guided, r={int(reg_sigma_spatial)}) — Mottling reduziert")
     # Potenzgewichte: Schärfe^gamma, je Pixel normiert. Hohes gamma → schärfstes Frame dominiert klar.
     Smax = S.max(axis=0, keepdims=True) + 1e-6
     Wt = (S / Smax) ** gamma                              # 0..1, schärfstes Frame = 1

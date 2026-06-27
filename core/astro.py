@@ -206,6 +206,144 @@ def _estimate_star_transform(refg, img_g):
     return M
 
 
+def match_stars_triangles(ref_pts, img_pts, n_use=60, tol=0.02, min_matches=6):
+    """A3 — Asterismus-/Dreiecks-Matching (astroalign-Prinzip): Sternkorrespondenzen OHNE jede
+    Annahme über Translation, Skalierung, Rotation ODER Spiegelung finden.
+
+    Idee: Aus den hellsten Sternen werden Dreiecke gebildet und je Dreieck ein **invarianter
+    Deskriptor** aus zwei normierten Seitenverhältnissen berechnet (kürzeste/längste und
+    mittlere/längste Seite). Diese beiden Zahlen ändern sich nicht unter Skalierung, Rotation oder
+    Spiegelung — nur die Sterngeometrie zählt. Über einen cKDTree im 2D-Deskriptorraum werden
+    Ref-Dreiecke ihren ähnlichsten Img-Dreiecken zugeordnet; jedes übereinstimmende Dreieck
+    "stimmt" für seine drei Stern-zu-Stern-Paare ab. Die Paare mit den meisten Stimmen gewinnen.
+
+    Dadurch greift das Matching auch bei großer Feldrotation, Mosaik-Überlappung oder gemischter
+    Optik (unterschiedliche Brennweite/Spiegelung), wo das translationsbasierte Offset-Voting
+    versagt.
+
+    Args:
+        ref_pts, img_pts: (N,2)-Punktwolken (x,y), z. B. aus `_star_centroids`.
+        n_use: nur die hellsten/ersten N Sterne je Bild verwenden (Dreiecks-Zahl ~ N³).
+        tol: Toleranz im Deskriptorraum (euklidisch über die zwei Seitenverhältnisse).
+        min_matches: Mindestanzahl gevoteter Sternpaare, sonst (None, None).
+
+    Returns:
+        (src, dst) — zwei (M,2)-Arrays korrespondierender Punkte (img → ref), oder (None, None).
+        scipy optional; ohne scipy Fallback auf eine NumPy-Nächste-Nachbar-Suche.
+    """
+    ref_pts = np.asarray(ref_pts, np.float32)
+    img_pts = np.asarray(img_pts, np.float32)
+    if len(ref_pts) < 3 or len(img_pts) < 3:
+        return None, None
+    R = ref_pts[:n_use]
+    I = img_pts[:n_use]
+
+    def _descriptors(pts):
+        """Alle Dreiecke (Index-Tripel) → invariante Deskriptoren (2D). Verwirft sehr schmale
+        (kollineare) Dreiecke als instabil."""
+        m = len(pts)
+        descs, tris = [], []
+        from itertools import combinations
+        for a, b, c in combinations(range(m), 3):
+            pa, pb, pc = pts[a], pts[b], pts[c]
+            s = sorted([
+                (float(np.linalg.norm(pb - pc)), (a,)),     # Seite gegenüber a
+                (float(np.linalg.norm(pa - pc)), (b,)),
+                (float(np.linalg.norm(pa - pb)), (c,)),
+            ])
+            L = s[2][0]
+            if L < 1e-3:
+                continue
+            r1 = s[0][0] / L                                # kürzeste / längste
+            r2 = s[1][0] / L                                # mittlere / längste
+            if r1 < 0.05 or (L - s[1][0]) < 1e-3:           # zu kollinear → instabil
+                continue
+            # Eckenreihenfolge nach gegenüberliegender Seitenlänge sortieren → spiegel-/rotations-
+            # invariante, konsistente Zuordnung der drei Punkte.
+            order = (s[0][1][0], s[1][1][0], s[2][1][0])
+            descs.append((r1, r2))
+            tris.append(order)
+        return np.array(descs, np.float32), tris
+
+    rd, rtris = _descriptors(R)
+    idd, itris = _descriptors(I)
+    if len(rd) == 0 or len(idd) == 0:
+        return None, None
+
+    # Nächste Img-Deskriptoren zu jedem Ref-Deskriptor suchen.
+    try:
+        from scipy.spatial import cKDTree
+        tree = cKDTree(idd)
+        dists, idxs = tree.query(rd, k=1)
+    except Exception:
+        dists = np.empty(len(rd), np.float32)
+        idxs = np.empty(len(rd), np.int64)
+        for j, d in enumerate(rd):
+            dd = np.linalg.norm(idd - d, axis=1)
+            k = int(np.argmin(dd))
+            dists[j] = dd[k]; idxs[j] = k
+
+    # Voting: jedes gut passende Dreieckspaar stimmt für seine drei Eck-Korrespondenzen.
+    votes = {}
+    for j, (dist, k) in enumerate(zip(dists, idxs)):
+        if dist > tol:
+            continue
+        rt = rtris[j]; it = itris[int(k)]
+        for ri, ii in zip(rt, it):                          # img-Index → ref-Index
+            votes[(ii, ri)] = votes.get((ii, ri), 0) + 1
+
+    if not votes:
+        return None, None
+    # Pro Img-Stern die ref-Zuordnung mit den meisten Stimmen wählen (1:1, gegenseitig-konsistent).
+    best_for_img = {}
+    for (ii, ri), c in votes.items():
+        if ii not in best_for_img or c > best_for_img[ii][1]:
+            best_for_img[ii] = (ri, c)
+    used_ref = {}
+    pairs = []
+    for ii, (ri, c) in sorted(best_for_img.items(), key=lambda kv: -kv[1][1]):
+        if c < 2:                                           # mind. 2 Dreiecke müssen es bestätigen
+            continue
+        if ri in used_ref:                                  # ref-Stern schon vergeben → überspringen
+            continue
+        used_ref[ri] = True
+        pairs.append((ii, ri))
+    if len(pairs) < min_matches:
+        return None, None
+    src = np.array([I[ii] for ii, _ in pairs], np.float32)
+    dst = np.array([R[ri] for _, ri in pairs], np.float32)
+    return src, dst
+
+
+def _estimate_star_transform_robust(refg, img_g, full_affine=False):
+    """A3 — robuste Stern-Transform über Dreiecks-Matching (translationsfrei).
+
+    Schätzt die Abbildung img → ref allein aus der Sterngeometrie und funktioniert daher auch über
+    große Feldrotation, Mosaik-Überlappung oder Mischoptik (Skalierung/Spiegelung), wo das
+    bestehende, translationsannehmende Offset-Voting (`_estimate_star_transform`) aussteigt.
+
+    Ablauf: Sternzentren beider Bilder → `match_stars_triangles` → RANSAC-Affine. `full_affine=True`
+    erlaubt zusätzlich Skalierung/Scherung/Spiegelung (volle Affine), sonst Ähnlichkeits-Affine
+    (Translation+Rotation+gleichmäßige Skalierung). Fallback auf das bestehende Offset-Voting,
+    wenn das Dreiecks-Matching keine ausreichenden Korrespondenzen liefert. Gibt 2x3 oder None.
+    """
+    ref_pts = _star_centroids(refg)
+    img_pts = _star_centroids(img_g)
+    if len(ref_pts) >= 3 and len(img_pts) >= 3:
+        src, dst = match_stars_triangles(ref_pts, img_pts)
+        if src is not None and len(src) >= 3:
+            if full_affine:
+                M, inl = cv2.estimateAffine2D(src, dst, method=cv2.RANSAC,
+                                              ransacReprojThreshold=3.0)
+            else:
+                M, inl = cv2.estimateAffinePartial2D(src, dst, method=cv2.RANSAC,
+                                                     ransacReprojThreshold=3.0)
+            if M is not None and (inl is None or int(inl.sum()) >= 3):
+                return M.astype(np.float32)
+    # Fallback: bestehendes translationsbasiertes Verfahren
+    return _estimate_star_transform(refg, img_g)
+
+
 def _estimate_rotation(refg, img_g, detector="ORB", min_inliers=25):
     """Partielle Affine (Translation + Rotation, kein Scherung) per ORB-Merkmalen schätzen —
     Fallback, wenn das stern-basierte Voting den Versatz nicht findet (z. B. großer Dither-Sprung
@@ -444,10 +582,39 @@ def drizzle_stack(paths, scale=2, pixfrac=0.7, dark=None, flat=None, cosmetic=Fa
     return np.clip(out, 0, 1)
 
 
+def _bg_sigma(f):
+    """A4 — robuste Hintergrund-Streuung σ_bg eines Frames (für die SNR-Gewichtung).
+
+    Schätzt das Rauschen NUR aus dem Himmelshintergrund (untere ~80 % der Helligkeit), damit helle
+    Sterne/Nebel den Wert nicht aufblähen: σ = 1.4826·MAD der Pixel unterhalb des 80%-Quantils.
+    Kleines σ ⇒ rauscharmer/transparenter Frame ⇒ höheres Gewicht."""
+    g = _gray(f).ravel()
+    thr = float(np.quantile(g, 0.80))
+    bgvals = g[g <= thr]
+    if bgvals.size < 16:
+        bgvals = g
+    med = float(np.median(bgvals))
+    mad = float(np.median(np.abs(bgvals - med))) * 1.4826
+    return max(mad, 1e-5)
+
+
 def stack(paths, method="sigma", kappa=2.5, normalize=True, local_norm=False,
-          log=print, preview_cb=None):
+          weight=False, sigma_iters=2, log=print, preview_cb=None):
     """Speicherschonendes Stacken über die Platte (zweistufig bei sigma/winsor).
     Gibt float32-Ergebnis [0..1] (BGR) zurück.
+
+    A4 — `weight=True`: jeder Frame geht mit Gewicht 1/σ_bg² ein (σ_bg = robuste Hintergrund-
+    Streuung, s. `_bg_sigma`). Rauschärmere/transparentere Subs zählen mehr → besseres SNR bei
+    gemischter Transparenz (Dunst, Mond). Bei `average`/`winsor`/`sigma` voll wirksam; `median`/
+    `max` sind ihrer Natur nach ungewichtet (Gewicht wird dort ignoriert).
+
+    A4 — `sigma_iters` (nur method='sigma'): die Sigma-Schwellen 1–2× nachschätzen — nach jeder
+    Rejection werden Mittel/σ aus den ÜBRIG gebliebenen (geclippten) Werten neu berechnet, sodass
+    die Schwelle nicht von den Ausreißern selbst verzerrt bleibt. 1 = altes Einpass-Verhalten.
+
+    Defaults (weight=False, sigma_iters=2) sind sicher: sigma_iters=2 ist eine reine
+    Genauigkeitsverbesserung des bisherigen Sigma-Clippings; weight=False erhält exakt das alte
+    ungewichtete Mittel.
 
     preview_cb(img01_bgr, i, n): optionaler Callback für die Live-Vorschau — wird während des
     Stackens periodisch mit dem laufenden (Teil-)Ergebnis aufgerufen."""
@@ -475,6 +642,14 @@ def stack(paths, method="sigma", kappa=2.5, normalize=True, local_norm=False,
             return local_normalize(f, ref_surf)
         return f + offs[i]
 
+    # A4 — Per-Frame-SNR-Gewichte (1/σ_bg²), robust normiert auf Mittel 1. Bei weight=False alle 1.
+    w = np.ones(n, np.float32)
+    if weight and method in ("average", "winsor", "sigma"):
+        sig = np.array([_bg_sigma(rd(i, p)) for i, p in enumerate(paths)], np.float32)
+        w = 1.0 / (sig * sig)
+        w *= n / float(w.sum())                          # Mittel 1 → Skala/Helligkeit unverändert
+        log(f"    SNR-Gewichtung aktiv (Gewichte {np.round(w.min(),2)}..{np.round(w.max(),2)})")
+
     if method in ("average", "median", "max"):
         if method == "median":
             # Median braucht alle Werte -> in Kacheln über die Höhe, speicherschonend
@@ -487,17 +662,19 @@ def stack(paths, method="sigma", kappa=2.5, normalize=True, local_norm=False,
                 log(f"    median Zeilen {y}/{shape[0]}")
             return np.clip(res, 0, 1)
         acc = np.zeros(shape, np.float32) if method == "average" else None
+        wacc = 0.0
         mx = np.zeros(shape, np.float32) if method == "max" else None
         for i, p in enumerate(paths):
             f = rd(i, p)
             if method == "average":
-                acc += f
+                acc += f * w[i]; wacc += w[i]            # gewichtetes Mittel (w[i]=1 → altes Mittel)
             else:
                 mx = np.maximum(mx, f)
             log(f"    {method} {i + 1}/{n}")
             if preview_cb and (i % _pv_every == 0 or i == n - 1):
-                preview_cb(np.clip((acc / (i + 1)) if method == "average" else mx, 0, 1), i + 1, n)
-        return np.clip(acc / n if method == "average" else mx, 0, 1)
+                preview_cb(np.clip((acc / max(wacc, 1e-6)) if method == "average" else mx, 0, 1),
+                           i + 1, n)
+        return np.clip(acc / max(wacc, 1e-6) if method == "average" else mx, 0, 1)
 
     if method == "linearfit":
         # Linear-Fit-Clipping (PixInsight-Stil): pro Pixel die sortierten Werte über die Frames
@@ -535,19 +712,35 @@ def stack(paths, method="sigma", kappa=2.5, normalize=True, local_norm=False,
     mean = s / n
     std = np.sqrt(np.maximum(s2 / n - mean * mean, 0))
     lo = mean - kappa * std; hi = mean + kappa * std
+
+    if method == "sigma":
+        # A4 — iteratives Sigma: Schwellen 1–2× aus den GECLIPPTEN Werten nachschätzen, damit die
+        # Ausreißer die Schwelle nicht selbst verzerren. extra_iters = sigma_iters−1 Nachpässe.
+        for _ in range(max(0, int(sigma_iters) - 1)):
+            s = np.zeros(shape, np.float32); s2 = np.zeros(shape, np.float32)
+            cnt = np.zeros(shape, np.float32)
+            for i, p in enumerate(paths):
+                f = rd(i, p)
+                m = ((f >= lo) & (f <= hi)).astype(np.float32)
+                s += f * m; s2 += f * f * m; cnt += m
+            cn = np.clip(cnt, 1.0, None)
+            mean = s / cn
+            std = np.sqrt(np.maximum(s2 / cn - mean * mean, 0))
+            lo = mean - kappa * std; hi = mean + kappa * std
+
     acc = np.zeros(shape, np.float32); cnt = np.zeros(shape, np.float32)
     for i, p in enumerate(paths):
         f = rd(i, p)
         if method == "winsor":
             f = np.clip(f, lo, hi)
-            acc += f; cnt += 1
+            acc += f * w[i]; cnt += w[i]                 # gewichtet (w[i]=1 → altes Verhalten)
         else:  # sigma: Ausreißer verwerfen
             m = (f >= lo) & (f <= hi)
-            acc += np.where(m, f, 0); cnt += m
+            acc += np.where(m, f * w[i], 0); cnt += m * w[i]
         log(f"    {method}-Rejection {i + 1}/{n}")
         if preview_cb and (i % _pv_every == 0 or i == n - 1):
-            preview_cb(np.clip(acc / np.clip(cnt, 1, None), 0, 1), i + 1, n)
-    return np.clip(acc / np.clip(cnt, 1, None), 0, 1)
+            preview_cb(np.clip(acc / np.clip(cnt, 1e-6, None), 0, 1), i + 1, n)
+    return np.clip(acc / np.clip(cnt, 1e-6, None), 0, 1)
 
 
 def bin_image(f, factor=2):
@@ -646,28 +839,123 @@ def estimate_psf(f, size=21, max_stars=80):
     return (acc / (acc.sum() + 1e-9)).astype(np.float32)
 
 
-def deconvolve(f, psf=None, iterations=15, star_protect=0.85, log=print):
+def _tv_step(est, weight):
+    """A5 — ein Total-Variation-Regularisierungsschritt: dämpft das aktuelle RL-Estimate leicht in
+    Richtung seiner kantenerhaltenden, geglätteten Version. weight∈[0,1] mischt Original↔geglättet.
+    Kantenerhaltend via bilateralem Filter (fällt auf Gauss zurück, falls nicht verfügbar)."""
+    if weight <= 0:
+        return est
+    e = est.astype(np.float32)
+    mx = float(e.max()) or 1.0
+    try:
+        sm = cv2.bilateralFilter((e / mx).astype(np.float32), d=5,
+                                 sigmaColor=0.05, sigmaSpace=3.0) * mx
+    except Exception:
+        sm = cv2.GaussianBlur(e, (0, 0), 1.0)
+    return (1.0 - weight) * e + weight * sm
+
+
+def _rl_deconv(obs, psf, iterations, regularize=0.0, support=None):
+    """Kern-Richardson-Lucy auf einem Graukanal (FFT-frei). Optional pro Iteration ein TV-Schritt
+    (`regularize`) und eine Support-Maske (`support`, 0..1), die die multiplikative Korrektur lokal
+    in Richtung 1 dämpft (Deringing in flachen Bereichen)."""
+    psf = (psf / (psf.sum() + 1e-9)).astype(np.float32)
+    psf_m = psf[::-1, ::-1].copy()
+    obs = np.clip(obs, 1e-4, None)
+    est = obs.copy()
+    for _ in range(max(1, int(iterations))):
+        conv = cv2.filter2D(est, -1, psf, borderType=cv2.BORDER_REFLECT)
+        relative = obs / np.maximum(conv, 1e-6)
+        corr = cv2.filter2D(relative, -1, psf_m, borderType=cv2.BORDER_REFLECT)
+        if support is not None:
+            corr = 1.0 + support * (corr - 1.0)          # außerhalb des Supports → kaum Korrektur
+        est = np.clip(est * corr, 0, None)
+        if regularize > 0:
+            est = _tv_step(est, float(np.clip(regularize, 0, 1)))
+    return est
+
+
+def _detail_support(lum, thresh=2.5):
+    """A5 — Support-/Detailmaske aus à-trous-artigen Detailebenen: Pixel mit echter Struktur (Sterne,
+    Kanten, Nebel-Detail) bekommen 1, flacher Hintergrund ~0. Dort darf RL schärfen, im Flachen wird
+    gedämpft → keine Ringe/verstärktes Rauschen in leeren Bereichen."""
+    g = lum.astype(np.float32)
+    detail = np.zeros_like(g)
+    cur = g
+    for s in (1.0, 2.0, 4.0):                             # mehrere Skalen aufsummieren
+        blur = cv2.GaussianBlur(g, (0, 0), s)
+        detail = np.maximum(detail, np.abs(cur - blur))
+        cur = blur
+    med = float(np.median(detail))
+    mad = float(np.median(np.abs(detail - med))) * 1.4826 + 1e-6
+    sup = np.clip((detail - med) / (thresh * mad), 0, 1).astype(np.float32)
+    return cv2.GaussianBlur(sup, (0, 0), 2.0)            # weiche Ränder gegen Maskenkanten
+
+
+def deconvolve(f, psf=None, iterations=15, star_protect=0.85, regularize=0.0,
+               deringing=True, tiled_psf=False, tiles=3, log=print):
     """Dekonvolution (PixInsight/Deconvolution-Stil) — schärft echtes Detail zurück, das Seeing/Optik
     verschmiert haben. Richardson-Lucy (für Poisson-Statistik korrekt) auf der LUMINANZ, mit aus den
     Sternen geschätzter PSF (oder übergebener PSF). Wirkt auf LINEARE Daten (vor dem Strecken).
+
+    A5 — `regularize` (0..1): Total-Variation-Regularisierung pro Iteration. RL verstärkt mit jeder
+    Iteration auch Rauschen und neigt zu Ringeln; ein leichter kantenerhaltender Glättungsschritt je
+    Iteration dämpft das, ohne echte Kanten zu verlieren (0 = aus, 0.05–0.2 typisch).
+
+    A5 — `deringing` (Default True): eine Support-/Detailmaske aus den Detailebenen begrenzt die
+    RL-Korrektur auf strukturierte Bereiche. In flachem Hintergrund (wo Ringe & Rauschverstärkung
+    entstehen) wird die Korrektur lokal Richtung neutral gedämpft.
+
+    A5 — `tiled_psf` (Default False): ortsabhängige PSF. Das Feld wird in `tiles`×`tiles` Kacheln
+    geteilt, je Kachel aus den DORTIGEN Sternen eine eigene PSF geschätzt und separat dekonvolviert
+    (mit Überlappung weich zusammengeblendet). Fängt über das Feld variierendes Seeing/Koma/Tilt ab.
+    Fällt auf eine globale PSF zurück, wo eine Kachel zu wenige Sterne hat.
 
     Wichtig — Stern-Schutz: RL erzeugt an hellen, gesättigten Sternkernen gern dunkle Ringe/Übersch-
     winger. `star_protect` (Helligkeitsschwelle 0..1) blendet die hellsten Bereiche weich aufs Original
     zurück → schärferes Nebeldetail OHNE Ring-Artefakte um Sterne. Reine OpenCV/NumPy (FFT-frei)."""
     if f is None:
         return f
-    if psf is None:
-        psf = estimate_psf(f)
-    psf = (psf / (psf.sum() + 1e-9)).astype(np.float32)
-    psf_m = psf[::-1, ::-1].copy()
     lum = _gray(f).astype(np.float32)
     obs = np.clip(lum, 1e-4, None)
-    est = obs.copy()
-    for i in range(max(1, int(iterations))):
-        conv = cv2.filter2D(est, -1, psf, borderType=cv2.BORDER_REFLECT)
-        relative = obs / np.maximum(conv, 1e-6)
-        est = est * cv2.filter2D(relative, -1, psf_m, borderType=cv2.BORDER_REFLECT)
-        est = np.clip(est, 0, None)
+    support = _detail_support(lum) if deringing else None
+
+    if tiled_psf:
+        H, W = lum.shape[:2]
+        nt = max(1, int(tiles))
+        est = np.zeros_like(obs)
+        wsum = np.zeros_like(obs)
+        ov = 0.25                                        # 25 % Überlappung der Kacheln
+        gpsf = psf if psf is not None else estimate_psf(f)
+        ys = np.linspace(0, H, nt + 1).astype(int)
+        xs = np.linspace(0, W, nt + 1).astype(int)
+        for ti in range(nt):
+            for tj in range(nt):
+                y0, y1 = ys[ti], ys[ti + 1]
+                x0, x1 = xs[tj], xs[tj + 1]
+                py = int((y1 - y0) * ov); px = int((x1 - x0) * ov)
+                ay0, ay1 = max(0, y0 - py), min(H, y1 + py)
+                ax0, ax1 = max(0, x0 - px), min(W, x1 + px)
+                sub = f[ay0:ay1, ax0:ax1]
+                try:
+                    lpsf = estimate_psf(sub)
+                except Exception:
+                    lpsf = gpsf
+                if lpsf is None:
+                    lpsf = gpsf
+                sup = support[ay0:ay1, ax0:ax1] if support is not None else None
+                tile_est = _rl_deconv(np.clip(_gray(sub), 1e-4, None), lpsf, iterations,
+                                      regularize, sup)
+                wmask = np.ones_like(tile_est, np.float32)  # weiche Kachelränder
+                wmask = cv2.GaussianBlur(wmask, (0, 0), max(2.0, min(wmask.shape) / 8.0))
+                est[ay0:ay1, ax0:ax1] += tile_est * wmask
+                wsum[ay0:ay1, ax0:ax1] += wmask
+        est = est / np.clip(wsum, 1e-6, None)
+    else:
+        if psf is None:
+            psf = estimate_psf(f)
+        est = _rl_deconv(obs, psf, iterations, regularize, support)
+
     # Schärfungs-Verhältnis auf die Farbkanäle übertragen (Farbe bleibt erhalten)
     ratio = est / np.maximum(lum, 1e-4)
     ratio = np.clip(ratio, 0.3, 3.0)
@@ -678,7 +966,9 @@ def deconvolve(f, psf=None, iterations=15, star_protect=0.85, log=print):
         hi = cv2.GaussianBlur(hi, (0, 0), 2.0)
         m = hi[..., None] if out.ndim == 3 else hi
         out = out * (1 - m) + f.astype(np.float32) * m
-    log(f"    Dekonvolution: Richardson-Lucy {iterations} Iter., PSF {psf.shape[0]}px, Stern-Schutz {star_protect}")
+    psf_sz = psf.shape[0] if (psf is not None and not tiled_psf) else "tiled"
+    log(f"    Dekonvolution: Richardson-Lucy {iterations} Iter., PSF {psf_sz}, "
+        f"reg={regularize}, deringing={deringing}, Stern-Schutz {star_protect}")
     return np.clip(out, 0, 1)
 
 
@@ -721,6 +1011,94 @@ def _star_desat(out, ha_n, oiii_n, strength=0.92):
     mask = cv2.GaussianBlur(mask, (0, 0), 3)[..., None]
     gray = out.mean(axis=2, keepdims=True)
     return np.clip(out * (1 - strength * mask) + gray * (strength * mask), 0, 1)
+
+
+def remove_stars(bgr, sensitivity=5.0, max_size=600, iterations=2, log=print):
+    """A6 — Klassisches (nicht-ML) Star-Removal: liefert ein (teilweise) STERNLOSES Nebelbild plus
+    die Sternmaske. Reines OpenCV/NumPy.
+
+    Vorgehen:
+      1. Sternmaske bauen — Hintergrund (großer Median) abziehen, rauschadaptive Schwelle
+         (Median + sensitivity·MAD), nur kompakte, etwa runde Blobs bis `max_size` px² behalten
+         (so bleiben ausgedehnte Nebelstrukturen außen vor).
+      2. Maske leicht aufweiten (Sternhöfe mitnehmen).
+      3. Sternkerne iterativ entfernen: morphologische Grauwert-Öffnung "schrumpft" helle Punkte,
+         und der Bereich unter der Maske wird per Inpainting (Telea) aus der Nebel-Umgebung gefüllt.
+         Mehrere Iterationen knabbern größere Sterne weiter ab.
+
+    EHRLICHE GRENZEN: Funktioniert gut für KLEINE bis MITTLERE Sterne. GROSSE, gesättigte Sterne mit
+    ausgedehnten Halos/Beugungsspikes werden nur PARTIELL entfernt (Restglow/Ringe bleiben), und sehr
+    sternreiche Felder über dichtem Nebel können lokal etwas Nebeltextur verlieren. Für saubere
+    Resultate auf großen Sternen ist ein ML-Verfahren (StarNet/Starless) überlegen — das ist hier
+    bewusst nicht enthalten (kein ML, keine externen Gewichte).
+
+    Args:
+        bgr: float32 [0..1] BGR (oder Grau).
+        sensitivity: MAD-Faktor der Sternschwelle (kleiner = mehr Sterne erfasst).
+        max_size: maximale Blobfläche (px²), die noch als Stern gilt (größer = Nebel, wird geschont).
+        iterations: Erosions-/Inpaint-Durchgänge (mehr = aggressiver gegen größere Sterne).
+
+    Returns:
+        (starless, mask) — starless: float32 [0..1] gleiche Form/Channels wie Eingabe;
+        mask: float32 [0..1] Sternmaske (1 = Stern).
+    """
+    if bgr is None:
+        return bgr, None
+    f = bgr.astype(np.float32)
+    g = _gray(f)
+    g = g / (float(g.max()) + 1e-6)
+
+    # 1) Sternmaske: Hintergrund weg, rauschadaptive Schwelle
+    a = (np.clip(g, 0, 1) * 255).astype(np.uint8)
+    bg = cv2.medianBlur(a, 31)
+    sub = cv2.subtract(a, bg).astype(np.float32)
+    med = float(np.median(sub))
+    mad = float(np.median(np.abs(sub - med))) * 1.4826 + 1e-6
+    th = (sub > max(med + sensitivity * mad, 3.0)).astype(np.uint8)
+
+    n, lbl, stats, _cent = cv2.connectedComponentsWithStats(th, connectivity=8)
+    mask = np.zeros_like(th)
+    for i in range(1, n):
+        area = int(stats[i, cv2.CC_STAT_AREA])
+        bw = int(stats[i, cv2.CC_STAT_WIDTH]); bh = int(stats[i, cv2.CC_STAT_HEIGHT])
+        if area < 1 or area > max_size:
+            continue
+        # Kompaktheit: Sterne sind etwa rund; sehr langgezogene Strukturen (Nebelfilamente) raus
+        if bw > 0 and bh > 0 and 0.3 <= bw / bh <= 3.3:
+            mask[lbl == i] = 1
+    # 2) Sternhöfe mitnehmen
+    mask = cv2.dilate(mask, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3)), iterations=1)
+
+    # 3) Iterativ: helle Kerne morphologisch dämpfen + Maskenbereich aus Umgebung inpainten
+    out = f.copy()
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+    grow = mask.copy()
+    for _ in range(max(1, int(iterations))):
+        u8 = (np.clip(out, 0, 1) * 255).astype(np.uint8)
+        # morphologische Grauwert-Öffnung drückt isolierte helle Punkte herunter
+        opened = cv2.morphologyEx(u8, cv2.MORPH_OPEN, kernel)
+        sel = grow.astype(bool)
+        if out.ndim == 3:
+            for c in range(out.shape[2]):
+                oc = out[..., c]; opc = opened[..., c].astype(np.float32) / 255.0
+                oc[sel] = np.minimum(oc[sel], opc[sel])
+        else:
+            opc = opened.astype(np.float32) / 255.0
+            out[sel] = np.minimum(out[sel], opc[sel])
+        # Telea-Inpainting füllt die Sternorte aus der Nebel-/Hintergrund-Nachbarschaft
+        u8 = (np.clip(out, 0, 1) * 255).astype(np.uint8)
+        inpainted = cv2.inpaint(u8, grow, 3, cv2.INPAINT_TELEA).astype(np.float32) / 255.0
+        if inpainted.ndim == 2 and out.ndim == 3:
+            inpainted = inpainted[..., None]
+        m3 = grow.astype(np.float32)
+        m3 = m3[..., None] if out.ndim == 3 else m3
+        out = out * (1 - m3) + inpainted * m3
+        grow = cv2.dilate(grow, kernel, iterations=1)    # nächste Runde greift etwas weiter
+
+    starless = np.clip(out, 0, 1).astype(np.float32)
+    log(f"    Star-Removal: {int(mask.sum())} Sternpixel maskiert, {iterations} Iter. "
+        f"(klein/mittel ok; große Halos nur partiell)")
+    return starless, mask.astype(np.float32)
 
 
 def dualband_hoo(bgr, unmix=0.20):

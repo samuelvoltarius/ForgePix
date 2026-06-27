@@ -24,13 +24,17 @@ def _to8(img):
     return img
 
 
-def merge_exposures(images, align=True, deghost="off", log=print):
+def merge_exposures(images, align=True, deghost="off", flow=False, log=print):
     """Eine Belichtungsreihe (Liste BGR-Bilder mit unterschiedlicher Belichtung) zu einem
     durchgezeichneten 8-bit-Bild verschmelzen (Mertens Exposure Fusion).
     align=True richtet freihändige Reihen vorher rigide aus.
     deghost: 'off' | 'auto' | 'aggressive' — entfernt **Bewegungsgeister** (Blätter, Personen,
              Autos): in Bewegungszonen wird nur das best-belichtete Referenzbild genommen statt
-             der Fusion (verhindert Doppelbilder bewegter Objekte)."""
+             der Fusion (verhindert Doppelbilder bewegter Objekte).
+    flow=True: statt in Bewegungszonen hart aufs Referenzbild umzuschalten, werden die anderen
+             Belichtungen per optischem Fluss (Farnebäck) AUF die Referenz gewarpt und neu fusioniert
+             → der HDR-Vorteil (Schatten/Lichter aus mehreren Belichtungen) bleibt auch in bewegten
+             Zonen erhalten, statt dort auf eine einzelne Belichtung zu degradieren."""
     if not images:
         raise ValueError("keine Bilder")
     imgs = [_to8(im) for im in images]
@@ -52,10 +56,14 @@ def merge_exposures(images, align=True, deghost="off", log=print):
                 log(f"    HDR: rigide Ausrichtung fehlgeschlagen ({e}) → MTB")
             except Exception as e2:
                 log(f"    HDR: Ausrichtung übersprungen ({e2})")
+    # flow=True: bewegte Belichtungen vor der Fusion auf die Referenz warpen → Geister verschwinden,
+    # ohne dass in Bewegungszonen auf eine einzelne Belichtung degradiert wird (HDR bleibt erhalten).
+    if flow and deghost != "off" and len(imgs) >= 2:
+        imgs = _flow_align_exposures(imgs, log=log)
     fused = cv2.createMergeMertens().process(imgs)      # float 0..1
     out = np.clip(fused * 255.0, 0, 255).astype(np.uint8)
     log(f"    HDR: {len(imgs)} Belichtungen verschmolzen (Exposure Fusion)")
-    if deghost != "off" and len(imgs) >= 2:
+    if deghost != "off" and not flow and len(imgs) >= 2:
         out = _deghost(imgs, out, aggressive=(deghost == "aggressive"), log=log)
     return out
 
@@ -63,7 +71,9 @@ def merge_exposures(images, align=True, deghost="off", log=print):
 def merge_radiance(images, times=None, tonemap="reinhard", log=print):
     """Echtes HDR über eine Radiance-Map (Debevec-CRF) + Tonemapping — **alternativer dramatischer
     Look** mit lokalem Kontrast (Exposure Fusion bleibt der Standard, halo-frei). Belichtungszeiten
-    werden aus der mittleren Helligkeit geschätzt, wenn keine angegeben. tonemap: reinhard|mantiuk|drago."""
+    werden aus der mittleren Helligkeit geschätzt, wenn keine angegeben.
+    tonemap: reinhard|mantiuk|drago|local. 'local' = lokal-adaptives Durand-Tonemapping (siehe
+    tonemap_local) — komprimiert den globalen Kontrast, erhält feines lokales Detail."""
     imgs = [_to8(im) for im in images]
     if len(imgs) < 2:
         return imgs[0]
@@ -79,6 +89,11 @@ def merge_radiance(images, times=None, tonemap="reinhard", log=print):
         rad = cv2.createMergeDebevec().process(imgs, times, resp)
     except cv2.error:
         rad = cv2.createMergeDebevec().process(imgs, times)
+    if tonemap == "local":
+        # Durand-2002 lokal-adaptives Tonemapping direkt auf der linearen Radiance-Map.
+        out = tonemap_local(rad, strength=1.0, log=log)
+        log("    HDR: Radiance-Map + lokales Tonemapping (Durand)")
+        return out
     tm = {"mantiuk": cv2.createTonemapMantiuk(2.2, 0.85, 1.2),
           "drago": cv2.createTonemapDrago(1.0, 0.7),
           }.get(tonemap, cv2.createTonemapReinhard(1.5, 0, 0, 0))
@@ -87,31 +102,145 @@ def merge_radiance(images, times=None, tonemap="reinhard", log=print):
     return np.clip(np.nan_to_num(ldr) * 255.0, 0, 255).astype(np.uint8)
 
 
+def tonemap_local(hdr_or_bgr, strength=1.0, base_contrast=3.5, log=print):
+    """Lokal-adaptives Tonemapping nach Durand & Dorsey 2002 (Fast Bilateral Filtering) — reiner
+    OpenCV/NumPy-Weg, ohne ML. Liefert „Details-Enhancer"-Niveau (Photomatix-artig): der globale
+    Kontrast wird komprimiert, das lokale Detail bleibt voll erhalten.
+
+    Prinzip: Auf der LOG-Luminanz eine kantenerhaltende Bilateral-Zerlegung in
+      • BASE  = grobe, großräumige Beleuchtung (Bilateralfilter)
+      • DETAIL = Log-Luminanz − Base (feine Textur, lokaler Kontrast)
+    Nur die BASE wird im Kontrast gestaucht (Faktor < 1), das DETAIL wird unangetastet (bzw. leicht
+    betont) wieder aufaddiert → der riesige HDR-Dynamikumfang passt in 8 bit, ohne dass lokale
+    Details verflachen. Die Farbe (Chrominanz) wird aus dem Verhältnis zur Original-Luminanz
+    rekonstruiert (kein Farbstich).
+
+    Eingabe: lineare Radiance-Map (float32, beliebiger Wertebereich, z. B. aus MergeDebevec) ODER
+    ein gewöhnliches 8-/16-bit-BGR-Bild. Ausgabe immer 8-bit BGR.
+    strength 0..~1.5 skaliert die Stärke der Kompression (1.0 = Standard, höher = flacher/dramatischer).
+    base_contrast = Ziel-Kontrastumfang der Base in Log-Stops (kleiner = stärker komprimiert)."""
+    img = np.asarray(hdr_or_bgr)
+    if img.ndim == 2:
+        img = cv2.cvtColor(img.astype(np.float32), cv2.COLOR_GRAY2BGR)
+    f = img.astype(np.float32)
+    # In lineare Radiance bringen: 8/16-bit → [0..1]; echte Radiance-Map bleibt linear.
+    if img.dtype == np.uint8:
+        f = f / 255.0
+    elif img.dtype == np.uint16:
+        f = f / 65535.0
+    f = np.nan_to_num(f, nan=0.0, posinf=0.0, neginf=0.0)
+    f = np.clip(f, 0.0, None)
+    # Luminanz (BT.601 auf BGR) als Tonemapping-Träger; Farbe später aus dem Verhältnis zurück.
+    lum = 0.114 * f[..., 0] + 0.587 * f[..., 1] + 0.299 * f[..., 2]
+    eps = 1e-6
+    lum = np.maximum(lum, eps)
+    log_lum = np.log10(lum)
+    # Bilateral-Zerlegung der Log-Luminanz. sigma_space an die Bildgröße gekoppelt (≈2 % der kurzen
+    # Kante, Durand-Empfehlung), sigma_color an die Streuung der Log-Werte.
+    h, w = log_lum.shape[:2]
+    sigma_space = max(4.0, min(h, w) * 0.02)
+    d = int(max(5, round(sigma_space * 1.5))) | 1
+    spread = float(log_lum.max() - log_lum.min()) + eps
+    sigma_color = max(0.1, 0.4 * spread)
+    base = cv2.bilateralFilter(log_lum.astype(np.float32), d, sigma_color, sigma_space)
+    detail = log_lum - base
+    # Base-Kontrast in einen festen Log-Umfang stauchen (Durand: compressionfactor).
+    base_min, base_max = float(base.min()), float(base.max())
+    base_range = (base_max - base_min) + eps
+    target_range = base_contrast / max(0.2, strength)   # strength↑ → kleinerer Zielumfang = flacher
+    gamma = float(min(1.0, target_range / base_range))  # nie aufspreizen, nur komprimieren
+    # Absolutskala so wählen, dass die hellsten Werte auf ~0 (Log) = 1.0 (linear) liegen.
+    new_log = (base - base_max) * gamma + detail
+    out_lum = np.power(10.0, new_log)                    # zurück in linearen Raum, Weiß ≈ 1.0
+    out_lum = np.clip(out_lum, 0.0, None)
+    # Farbe erhalten: jeden Kanal mit dem Luminanz-Verhältnis skalieren (Durand-Farbrekonstruktion).
+    ratio = (out_lum / lum)[..., None]
+    out = f * ratio
+    # Dezenter Gamma fürs Display (lineare Radiance → sRGB-artig) und robuste 99.5%-Normierung.
+    norm = float(np.percentile(out, 99.5)) + eps
+    out = np.clip(out / norm, 0.0, 1.0)
+    out = np.power(out, 1.0 / 2.2)
+    log(f"    HDR: lokales Tonemapping (Durand) — Base-Kompression γ={gamma:.2f}, σ_space={sigma_space:.0f}px")
+    return np.clip(out * 255.0, 0, 255).astype(np.uint8)
+
+
+def _grad_mag(g):
+    """Gradientenbetrag (Sobel) einer Graustufe — der STRUKTUR-Raum fürs Deghosting. Unempfindlicher
+    gegen reine Helligkeitsunterschiede der Belichtungen als Roh-RGB; reagiert auf echte Bewegung
+    (verschobene Kanten/Objekte)."""
+    gx = cv2.Sobel(g, cv2.CV_32F, 1, 0, ksize=3)
+    gy = cv2.Sobel(g, cv2.CV_32F, 0, 1, ksize=3)
+    return cv2.magnitude(gx, gy)
+
+
 def _deghost(imgs, fused, aggressive=False, log=print):
     """In Bewegungszonen die Fusion durch das best-belichtete Referenzbild ersetzen.
-    Referenz = Frame mit den meisten gut belichteten Pixeln. Bewegung = wo ein helligkeits-
-    angeglichener Frame stark vom Referenzbild abweicht (bewegtes Objekt). Maske gefeathert."""
+    Referenz = Frame mit den meisten gut belichteten Pixeln.
+
+    Verbessert: Die Bewegung wird im **Gradienten-/Strukturraum** statt im Roh-RGB gemessen (robust
+    gegen reine Belichtungsunterschiede) und der Schwellwert wird **adaptiv aus der Statistik der
+    Abweichung** bestimmt (Median + κ·MAD) statt fix — passt sich an Szene/Rauschen an. Maske
+    gefeathert. `aggressive` senkt den κ-Faktor (mehr wird als Bewegung erkannt)."""
     grays = [cv2.cvtColor(im, cv2.COLOR_BGR2GRAY) for im in imgs]
     well = [float(((g > 13) & (g < 242)).mean()) for g in grays]
     ri = int(np.argmax(well))
     ref = imgs[ri].astype(np.float32)
     refg = grays[ri].astype(np.float32) + 1e-3
-    thr = (28.0 if aggressive else 45.0)
+    ref_grad = _grad_mag(refg)
+    kappa = (2.5 if aggressive else 4.0)                        # adaptiver MAD-Faktor
     motion = np.zeros(fused.shape[:2], np.float32)
     for i, im in enumerate(imgs):
         if i == ri:
             continue
         g = grays[i].astype(np.float32) + 1e-3
         gain = float(np.median(refg)) / float(np.median(g))     # Helligkeit an Referenz angleichen
-        matched = np.clip(im.astype(np.float32) * gain, 0, 255)
-        dev = np.abs(matched - ref).mean(axis=2)                 # Restabweichung = Bewegung
+        matched = np.clip(g * gain, 0, 255)
+        # Differenz im Strukturraum: Gradient des angeglichenen Frames vs. Referenz.
+        dev = np.abs(_grad_mag(matched) - ref_grad)
+        med = float(np.median(dev))
+        mad = float(np.median(np.abs(dev - med))) * 1.4826 + 1e-6
+        thr = med + kappa * mad                                 # adaptive Schwelle (Otsu/MAD-Stil)
         motion = np.maximum(motion, (dev > thr).astype(np.float32))
     motion = cv2.morphologyEx(motion, cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8))
+    motion = cv2.morphologyEx(motion, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
     motion = cv2.GaussianBlur(motion, (0, 0), 4.0)[..., None]
     frac = float(motion.mean())
-    log(f"    HDR: Deghosting — {frac*100:.1f}% Bewegungszone → Referenzbild")
+    log(f"    HDR: Deghosting (Gradientenraum, adaptiv) — {frac*100:.1f}% Bewegungszone → Referenzbild")
     res = fused.astype(np.float32) * (1 - motion) + ref * motion
     return np.clip(res, 0, 255).astype(np.uint8)
+
+
+def _flow_align_exposures(imgs, log=print):
+    """Alle Belichtungen per dichtem optischem Fluss (Farnebäck) auf die best-belichtete Referenz
+    warpen (HDR-Deghosting OHNE Verlust des Mehrbelichtungs-Vorteils). Der Fluss wird auf den
+    helligkeits-angeglichenen Graustufen geschätzt (sonst „sieht" der Fluss nur den Belichtungs-
+    unterschied), dann wird das FARB-Bild mit remap auf die Referenz gezogen. Gibt eine neue
+    Liste 8-bit-BGR zurück (Referenz unverändert), die anschließend regulär fusioniert wird."""
+    grays = [cv2.cvtColor(im, cv2.COLOR_BGR2GRAY) for im in imgs]
+    well = [float(((g > 13) & (g < 242)).mean()) for g in grays]
+    ri = int(np.argmax(well))
+    refg = grays[ri].astype(np.float32) + 1e-3
+    h, w = refg.shape
+    gx, gy = np.meshgrid(np.arange(w, dtype=np.float32), np.arange(h, dtype=np.float32))
+    out = []
+    warped_cnt = 0
+    for i, im in enumerate(imgs):
+        if i == ri:
+            out.append(im)
+            continue
+        g = grays[i].astype(np.float32) + 1e-3
+        gain = float(np.median(refg)) / float(np.median(g))     # Helligkeit angleichen für den Fluss
+        matched = np.clip(g * gain, 0, 255).astype(np.uint8)
+        flow = cv2.calcOpticalFlowFarneback(
+            np.clip(refg, 0, 255).astype(np.uint8), matched, None,
+            0.5, 3, 21, 3, 5, 1.2, 0)                            # Referenz→Frame-Fluss
+        mapx = (gx + flow[..., 0]).astype(np.float32)
+        mapy = (gy + flow[..., 1]).astype(np.float32)
+        warped = cv2.remap(im, mapx, mapy, cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT)
+        out.append(warped)
+        warped_cnt += 1
+    log(f"    HDR: {warped_cnt} Belichtung(en) per optischem Fluss auf die Referenz gewarpt (Flow-Deghosting)")
+    return out
 
 
 def apply_look(bgr, preset="natural"):
