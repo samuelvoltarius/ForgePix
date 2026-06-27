@@ -60,7 +60,7 @@ def _boost_nebula(neb, lift=3.5, contrast=0.6, saturation=1.25, core_lo=0.62):
 
 def run(linear_path, palette, work_dir, broadband=False, graxpert_path=None, starnet_path=None,
         boost=True, strength=6.0, saturation=1.05, ai_sharpen=True, cosmicclarity_path=None,
-        log=print):
+        ai_aberration=False, siril_path=None, log=print):
     """Vollen Starless-Workflow ausführen. Gibt den Pfad zum fertigen JPG zurück.
 
     linear_path : 32-bit-lineares Stack-Ergebnis (TIFF/FITS).
@@ -79,6 +79,16 @@ def run(linear_path, palette, work_dir, broadband=False, graxpert_path=None, sta
     # Blau-/Grünstich auf (wie in der Haupt-Pipeline). Muss VOR StarNet passieren, damit die
     # Sternebene aus dem neutralen Bild kommt.
     stretched = astro.neutralize_background(astro.remove_green_cast(stretched))
+    # Optional: KI-Stern-/Aberrationskorrektur (Siril AberrationRemover, headless) VOR StarNet —
+    # rundet verzogene Rand-Sterne. Wirkt auf Sterne (ist eine STERN-Korrektur, kein Nebel-Filter).
+    if ai_aberration:
+        try:
+            import siril_pyscript
+            if siril_pyscript.available("AberrationRemover.py", siril_path):
+                log("  1b/5 Siril AberrationRemover: Sternformen korrigieren …")
+                stretched = siril_pyscript.aberration_remover(stretched, strength=0.6, siril_path=siril_path)
+        except Exception as e:
+            log(f"      AberrationRemover übersprungen ({e})")
 
     # ohne StarNet: hier ist Schluss (nur gestrecktes Bild) — der Starless-Weg braucht StarNet.
     if not tools_engine.find_starnet(starnet_path):
