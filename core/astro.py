@@ -785,8 +785,19 @@ def background_extract(f, strength=0.12, method="rbf", grid=12, log=print):
                     if tile.size:
                         pts.append((x, y)); vals.append(float(np.percentile(tile, 25)))
             pts = np.array(pts, np.float32); vals = np.array(vals, np.float32)
-            med = float(np.median(vals)); mad = float(np.median(np.abs(vals - med))) * 1.4826 + 1e-6
-            keep = vals <= med + 2.5 * mad                  # Nebel-/Struktur-Stützpunkte verwerfen
+            # Stützpunkte gegen einen GLATTEN 2D-Quadrat-Trend verwerfen (nicht global): so bleiben
+            # großflächige Gradienten/Ecken-Glow (Lichtverschmutzung) im Modell und werden mit
+            # abgezogen — nur lokal ÜBER dem Trend liegende Punkte (= Nebel/Struktur) fliegen raus.
+            px, py = pts[:, 0] / W, pts[:, 1] / H
+            design = np.stack([np.ones_like(px), px, py, px * px, px * py, py * py], 1)
+            keep = np.ones(len(vals), bool)
+            for _ in range(3):
+                if keep.sum() < 6:
+                    break
+                coef, *_ = np.linalg.lstsq(design[keep], vals[keep], rcond=None)
+                resid = vals - design @ coef
+                rmad = float(np.median(np.abs(resid - np.median(resid)))) * 1.4826 + 1e-6
+                keep = resid <= 2.5 * rmad                  # nur Punkte ÜBER dem Trend (Nebel) verwerfen
             if keep.sum() >= max(8, grid):
                 rbf = RBFInterpolator(pts[keep], vals[keep], kernel="thin_plate_spline", smoothing=1.0)
                 gy, gx = np.mgrid[0:H, 0:W]
