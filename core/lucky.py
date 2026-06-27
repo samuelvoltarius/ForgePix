@@ -152,6 +152,36 @@ def _global_shift(ref_g, mov_g):
         return 0.0, 0.0
 
 
+def _feature_homography(ref_u8, mov_u8, orb=None, kr=None, dr=None, min_inliers=40):
+    """Globale Homographie mov→ref aus ORB-Merkmalen (handhabt Schwenk/Rotation/Zoom/Perspektive,
+    nicht nur Translation). Gibt (H, inliers) oder (None, 0). kr/dr = vorab berechnete Referenz-
+    Merkmale (spart Zeit über viele Frames)."""
+    if orb is None:
+        orb = cv2.ORB_create(2000)
+    if kr is None:
+        kr, dr = orb.detectAndCompute(ref_u8, None)
+    if dr is None or len(kr) < 10:
+        return None, 0
+    k, d = orb.detectAndCompute(mov_u8, None)
+    if d is None or len(k) < 10:
+        return None, 0
+    bf = cv2.BFMatcher(cv2.NORM_HAMMING)
+    try:
+        matches = bf.knnMatch(d, dr, k=2)
+    except cv2.error:
+        return None, 0
+    good = [a for a, b in (m for m in matches if len(m) == 2) if a.distance < 0.75 * b.distance]
+    if len(good) < 12:
+        return None, 0
+    src = np.float32([k[x.queryIdx].pt for x in good]).reshape(-1, 1, 2)
+    dst = np.float32([kr[x.trainIdx].pt for x in good]).reshape(-1, 1, 2)
+    H, mask = cv2.findHomography(src, dst, cv2.RANSAC, 3.0)
+    if H is None or mask is None:
+        return None, 0
+    inl = int(mask.sum())
+    return (H, inl) if inl >= min_inliers else (None, inl)
+
+
 def lucky_stack_map(path, keep_global=0.6, keep_local=0.3, max_load=200,
                     ap_step=50, box_half=22, patch_half=34, search_half=12,
                     sharpen=1.0, log=print, preview_cb=None):
@@ -189,19 +219,53 @@ def lucky_stack_map(path, keep_global=0.6, keep_local=0.3, max_load=200,
         raise ValueError("zu wenige ladbare Frames")
     h, w = grays[0].shape
 
-    # (1b) global ausrichten: strukturreichstes geladenes Frame = Referenz, Rest per Phasenkorrelation
+    # (1b) global ausrichten: strukturreichstes Frame = Referenz. AUTO-Modus:
+    #   • statisches Ziel + Seeing → Phasenkorrelation (Translation; Homographie würde das Seeing
+    #     überfitten), das LOKALE MAP unten korrigiert die Verzeichnung.
+    #   • bewegte Szene (Schwenk/Drift/Rotation, z. B. Handnachführung) → ORB-HOMOGRAPHIE, sonst
+    #     verschmiert der Stack zu Streifen. Wird automatisch erkannt: greift die Homographie bei
+    #     genug Frames mit klarer Bewegung (>1.5 px Rest nach reiner Verschiebung), wird sie genutzt.
     ref_i = int(np.argmax([_local_quality(g) for g in grays]))
     refg = grays[ref_i]
-    for i in range(len(frames)):
+    refu = refg.astype(np.uint8)
+    orb = cv2.ORB_create(2000)
+    kr, dr = orb.detectAndCompute(refu, None)
+    # Bewegung schätzen: für eine Stichprobe Homographie testen, Versatz der Bildmitte messen
+    motion_votes, sample = 0, list(range(0, len(frames), max(1, len(frames) // 12)))
+    for i in sample:
         if i == ref_i:
             continue
-        dx, dy = _global_shift(refg, grays[i])
-        M = np.float32([[1, 0, dx], [0, 1, dy]])
-        frames[i] = cv2.warpAffine(frames[i], M, (w, h), flags=cv2.INTER_LANCZOS4,
-                                   borderMode=cv2.BORDER_REPLICATE)
-        grays[i] = cv2.warpAffine(grays[i], M, (w, h), flags=cv2.INTER_LANCZOS4,
-                                  borderMode=cv2.BORDER_REPLICATE)
-    log("    MAP: global ausgerichtet")
+        H, inl = _feature_homography(refu, grays[i].astype(np.uint8), orb, kr, dr)
+        if H is not None:
+            c = cv2.perspectiveTransform(np.float32([[[w / 2, h / 2]]]), H)[0, 0]
+            if np.hypot(c[0] - w / 2, c[1] - h / 2) > 1.5:
+                motion_votes += 1
+    use_feature = motion_votes >= max(2, len(sample) // 3)
+    log(f"    MAP: globale Ausrichtung = {'Feature-Homographie (bewegte Szene)' if use_feature else 'Phasenkorrelation (statisch)'}")
+    keep = []
+    for i in range(len(frames)):
+        if i == ref_i:
+            keep.append(i); continue
+        if use_feature:
+            H, inl = _feature_homography(refu, grays[i].astype(np.uint8), orb, kr, dr)
+            if H is None:                                 # Inhalt schon weggewandert → Frame verwerfen
+                continue
+            frames[i] = cv2.warpPerspective(frames[i], H, (w, h), flags=cv2.INTER_LANCZOS4,
+                                            borderMode=cv2.BORDER_REPLICATE)
+            grays[i] = cv2.warpPerspective(grays[i], H, (w, h), flags=cv2.INTER_LANCZOS4,
+                                           borderMode=cv2.BORDER_REPLICATE)
+        else:
+            dx, dy = _global_shift(refg, grays[i])
+            M = np.float32([[1, 0, dx], [0, 1, dy]])
+            frames[i] = cv2.warpAffine(frames[i], M, (w, h), flags=cv2.INTER_LANCZOS4,
+                                       borderMode=cv2.BORDER_REPLICATE)
+            grays[i] = cv2.warpAffine(grays[i], M, (w, h), flags=cv2.INTER_LANCZOS4,
+                                      borderMode=cv2.BORDER_REPLICATE)
+        keep.append(i)
+    if use_feature and len(keep) < len(frames):
+        frames = [frames[i] for i in keep]
+        grays = [grays[i] for i in keep]
+        log(f"    MAP: {len(frames)} Frames mit ausreichender Überlappung behalten")
 
     # (2) Mittelbild
     mean_c = np.mean(np.stack([f.astype(np.float32) for f in frames]), axis=0)

@@ -1306,6 +1306,27 @@ class TestProToolGaps(TmpCase):
 
 
 
+
+    def test_lucky_feature_homography_handhabt_rotation(self):
+        import lucky
+        r = _rng()
+        img = (r.rand(220, 260) * 255).astype(np.uint8)
+        img = cv2.GaussianBlur(img, (0, 0), 1.2)
+        for _ in range(30):
+            cv2.circle(img, (r.randint(0, 260), r.randint(0, 220)), r.randint(4, 12),
+                       int(r.randint(0, 255)), -1)
+        # bekannte Rotation+Translation (das was Phasenkorrelation NICHT kann)
+        M = cv2.getRotationMatrix2D((130, 110), 7.0, 1.0); M[0, 2] += 12; M[1, 2] += 8
+        moved = cv2.warpAffine(img, M, (260, 220), borderMode=cv2.BORDER_REPLICATE)
+        H, inl = lucky._feature_homography(img, moved)
+        self.assertIsNotNone(H)
+        self.assertGreaterEqual(inl, 40)
+        # H bildet moved->img zurueck: eine Ecke testen
+        back = cv2.warpPerspective(moved, H, (260, 220), borderMode=cv2.BORDER_REPLICATE)
+        # Rueckabbildung muss dem Original aehnlich sein (hohe Korrelation)
+        c = np.corrcoef(img.ravel(), back.ravel())[0, 1]
+        self.assertGreater(float(c), 0.85)
+
     def test_lucky_map_sharpen_verbessert(self):
         import lucky
         r = _rng(); S = 200
