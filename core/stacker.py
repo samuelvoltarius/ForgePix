@@ -191,11 +191,14 @@ def align_sequential(images, ref_idx=None, sub_mode="rigid", detector="ORB", log
     return out
 
 
-def align_images(images, ref_idx=None, mode="rigid", detector="ORB", log=print):
+def align_images(images, ref_idx=None, mode="rigid", detector="ORB", refine=True, log=print):
     """Richtet alle Bilder auf das Referenzbild aus. Gibt ausgerichtete Liste zurück.
     mode: 'rigid' (Verschiebung/Drehung/Skalierung), 'homography' (Perspektive),
     'subject' (auf das dominante Motiv — für bewegte Makro-Motive) oder
-    'sequential' (paarweise Nachbar-Verkettung — robust bei großem Fokusbereich)."""
+    'sequential' (paarweise Nachbar-Verkettung — robust bei großem Fokusbereich).
+    refine: nach der Feature-Schätzung eine **ECC-Subpixel-Verfeinerung** (helligkeitsinvariant)
+    aufsetzen — deutlich genauer als reine Merkmals-Korrespondenz, besonders an den (defokussierten)
+    Stack-Enden, wo ORB wenig findet. Fällt bei Fehlschlag auf die Feature-Ausrichtung zurück."""
     n = len(images)
     if n < 2:
         return images
@@ -241,8 +244,26 @@ def align_images(images, ref_idx=None, mode="rigid", detector="ORB", log=print):
         else:
             M, _ = cv2.estimateAffinePartial2D(src, dst, method=cv2.RANSAC,
                                                ransacReprojThreshold=3.0)
-            out[i] = cv2.warpAffine(img, M, (w, h), flags=cv2.INTER_LANCZOS4,
-                                    borderMode=cv2.BORDER_CONSTANT) if M is not None else img
+            if M is None:
+                out[i] = img
+            elif refine:
+                # ECC-Subpixel-Verfeinerung auf der Feature-Schätzung aufsetzen (helligkeitsinvariant).
+                # ECC-Konvention: warpMatrix bildet Referenz→Frame ab → init = invertierte Feature-M;
+                # als WARP_INVERSE_MAP angewandt richtet es den Frame auf die Referenz aus. BORDER_CONSTANT
+                # bleibt erhalten, damit crop_to_overlap die Warp-Ränder findet.
+                try:
+                    import align_local
+                    init_ecc = cv2.invertAffineTransform(M)
+                    warp, cc = align_local.ecc_refine(images[ref_idx], img, init=init_ecc, motion="affine")
+                    out[i] = cv2.warpAffine(img, warp, (w, h),
+                                            flags=cv2.INTER_LANCZOS4 | cv2.WARP_INVERSE_MAP,
+                                            borderMode=cv2.BORDER_CONSTANT)
+                except Exception:
+                    out[i] = cv2.warpAffine(img, M, (w, h), flags=cv2.INTER_LANCZOS4,
+                                            borderMode=cv2.BORDER_CONSTANT)
+            else:
+                out[i] = cv2.warpAffine(img, M, (w, h), flags=cv2.INTER_LANCZOS4,
+                                        borderMode=cv2.BORDER_CONSTANT)
         log(f"    Frame {i + 1}/{n}: ausgerichtet ({len(good)} Treffer)")
     return out
 
