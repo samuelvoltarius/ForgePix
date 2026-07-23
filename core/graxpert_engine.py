@@ -45,10 +45,9 @@ def _remote_from_env():
 
 
 def _ssh_prefix(rem):
-    base = []
-    if rem.get("pass"):
-        base = ["sshpass", "-p", rem["pass"]]
-    return base
+    # `sshpass -e` liest das Passwort aus der Umgebung (SSHPASS) — `-p <pass>` stünde für alle
+    # Nutzer sichtbar in der Prozessliste (ps). Die Env setzt _run_remote pro Aufruf.
+    return ["sshpass", "-e"] if rem.get("pass") else []
 
 
 def _run_remote(inp, out_base, command, smoothing, gpu, rem, timeout, log):
@@ -58,6 +57,8 @@ def _run_remote(inp, out_base, command, smoothing, gpu, rem, timeout, log):
     rdir = "~/.forgepix_graxpert"
     sp = _ssh_prefix(rem)
     o = dict(capture_output=True, text=True, timeout=timeout)
+    if rem.get("pass"):
+        o["env"] = {**os.environ, "SSHPASS": rem["pass"]}   # Passwort NUR über die Umgebung
     log(f"    GraXpert {command} (Remote {host}, GPU) …")
     subprocess.run(sp + ["ssh", "-o", "BatchMode=" + ("no" if rem.get("pass") else "yes"),
                          host, f"mkdir -p {rdir} && rm -f {rdir}/gx_*"], **o)
@@ -124,12 +125,8 @@ def run(linear_bgr, work_dir, command="background-extraction", smoothing=0.2, gp
     outs = sorted(glob.glob(out_base + "*"))
     if not outs:
         raise RuntimeError("GraXpert lieferte keine Ausgabe")
-    d = fits.getdata(outs[0]).astype(np.float32)
-    if d.ndim == 3 and d.shape[0] == 3:                    # CHW→HWC
-        d = np.transpose(d, (1, 2, 0))
-    if d.ndim == 3 and d.shape[2] == 3:                    # RGB→BGR
-        d = d[..., ::-1]
-    mx = float(d.max())
-    if mx > 1.0:
-        d = d / mx
+    # gemeinsamer FITS-Reader mit FESTER Normierung — das frühere Reskalieren auf Peak=1 (d/max)
+    # veränderte die Helligkeit des Ergebnisses abhängig vom hellsten Pixel.
+    import siril_engine
+    d = siril_engine.read_fits_bgr(outs[0], gray2bgr=False)
     return np.clip(d, 0, None)

@@ -6,6 +6,74 @@ All notable changes to ForgePix. Format based on
 [Keep a Changelog](https://keepachangelog.com/), versioning per
 [SemVer](https://semver.org/).
 
+## [1.27.1] – 2026-07-22
+### Big cleanup/correctness pass — 4 review + 3 fix agents across the whole codebase
+No new features; ~70 verified findings fixed (bugs > leaks > dead code > duplication).
+All 165 tests green; GUI + pipeline verified together.
+
+**Pipeline bugs (the silent, nasty kind):**
+- **Real PCC/SPCC never ran on the default path:** a duplicate `_broadband` definition in
+  `_astro_write` shadowed the Siril/Gaia path with the lite fallback — the whole three-tier
+  chain (Siril SPCC → Gaia → lite) was only reachable with `--no-astro-stretch`. Fixed.
+- **Bias master was accepted, reported — and never applied** (own engine). Now: without a dark,
+  lights are calibrated with light−bias and the flat is bias-corrected; with a dark, no double
+  subtraction.
+- **Drizzle-lite only scaled the translation,** not the image content → frames sat unscaled in
+  the 2× canvas. The full matrix is scaled now (matching the true-drizzle path).
+- **FITS normalization used each frame's own maximum** (a hot pixel/satellite shifted whole-sub
+  brightness) → fixed scale via one shared helper (`siril_engine.fits_scale01`) for
+  astro/Siril/GraXpert.
+- **Wavelet focus stacking had zero effect on color images** (the fusion was discarded) and
+  clipped 16-bit to 255 → luma transfer + dtype-correct clipping.
+- **Mosaic exposure compensation was a no-op** (applied to a discarded copy) → works now.
+- **Highlight reconstruction** desaturated partially clipped pixels instead of filling them from
+  intact channels (`.any` → `.all`).
+- Double sharpening in `--auto`, dedup culling compared against already-removed frames, median
+  stack ignored local normalization, `align_mode`/`detector` were no-op parameters (wired now,
+  incl. triangle matching as fallback), star counting: nebula blobs ate the budget, one corrupt
+  image aborted the whole analysis, lucky: top-N frames counted twice + ~5 GB RAM spike, HDR was
+  missing from three GUI mode checks.
+
+**GUI:**
+- GraXpert/StarNet/starless ran **synchronously on the GUI thread** (beachball for up to 30 min)
+  → now a background thread with live log.
+- API keys were echoed in clear text into the log → masked. SSH password no longer visible in
+  the process list via `sshpass -p` (now `sshpass -e`).
+- Hard-coded `/tmp` (all previews broken on Windows) → `tempfile.gettempdir()`; Windows Explorer
+  `/select` fixed; garbled umlauts in the live log (UTF-8 chunk buffering); extra sessions stuck
+  to every astro run until app restart; preview/thumbnail cache is actually used now; Ctrl+5 +
+  shortcut help for HDR.
+- ~30 hard-coded dialog strings wrapped in `tr()` + 32 new English translations.
+
+**Cleanup:**
+- Dead code removed (ShineStacker relics, unused engine finders, `fast_denoise`, `refine_mask`);
+  duplicates consolidated: `to_uint8()`/`luma()` (Rec. 709 instead of a 601/709 mix!) in
+  `constants.py`, `write_tiff16`/`read_fits_bgr`/`find_siril` in `siril_engine`,
+  `app_settings()`/`save_image()`/`_is_makro()` in the GUI.
+- External tools: stale-output trap (an old run passed as the result) + return-code checks;
+  temp-dir leaks (Siril bridge, SPCC) with try/finally; Cosmic Clarity no longer wipes foreign
+  files from input/output; exiftool as ONE batch call instead of a process per file.
+- Honesty fix: **AutoBGE/Statistical_Stretch** removed from the Siril bridge — advertised in
+  1.27.0 but never callable from the app (only AberrationRemover is wired).
+
+**Second round (the previously deferred rebuilds):**
+- **One clarity implementation:** preview (GUI) and final pipeline used two different "clarity"
+  algorithms → same slider value, different result. Now the multi-scale, halo-safe equalizer
+  everywhere; verified: preview ≡ final result (max deviation 1/255 = quantization).
+- **One decode instead of three:** the tile sharpness matrix is computed inside `analyze` —
+  the blur filter and focus-coverage check no longer re-decode the series (identical culling
+  verified on a synthetic series).
+- **Astro stacking IO:** registered 16-bit TIFFs are read **row-wise** via memmap during
+  median/linear-fit stacking (before: every file fully decoded per band — 100 frames × 20 bands
+  = 2000 full reads); normalization median + SNR sigma in ONE pre-pass (was two); result
+  verified bit-identical.
+- **Registration: ~120× faster offset voting** (KD-tree instead of the O(n²) Python loop,
+  30/30 test cases identical to the old semantics; fallback without scipy included).
+- **Machine-readable status markers:** the pipeline now emits `PHASE:`/`RESULT:`/`RATIONALE:`
+  (like the proven `PREVIEW:`) — the GUI's status line, result detection and "why?" panel no
+  longer depend on German log phrasing (the old keyword matching remains as fallback for older
+  pipeline versions).
+
 ## [1.27.0] – 2026-06-28
 ### Siril Python bridge, AI super-resolution, optional remote GPU — all local-first
 - **Siril Python bridge** (`core/siril_pyscript.py`): runs Siril's bundled Python scripts **headless**

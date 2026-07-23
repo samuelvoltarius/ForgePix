@@ -2,19 +2,19 @@
 """ui/result_view.py — Ergebnis-/Vorschau-Anzeige, Ansicht-Umschalter und Entscheidungs-Panel
 (Stack-Konfidenz, Befunde, „Warum?") als Mixin für MainWindow."""
 import os
+import tempfile
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QPixmap
 
 from i18n import tr
+from constants import to_uint8
 from ui.appinfo import _cache_path, IMG_EXTS
 
 try:
     import cv2
-    import numpy as np
 except Exception:
     cv2 = None
-    np = None
 
 
 class ResultMixin:
@@ -38,30 +38,33 @@ class ResultMixin:
             return None
         if cv2 is None:
             return src  # Fallback: direkt versuchen
+        out = _cache_path("sf_prev_", src)
+        if os.path.isfile(out):    # Cache-Pfad ist deterministisch (Pfad+mtime) → nicht neu rechnen
+            return out
         img = cv2.imread(src, cv2.IMREAD_UNCHANGED)
         if img is None:
             return src if QPixmap(src).isNull() is False else None
-        if img.dtype != "uint8":
-            img = (img / 256).astype("uint8") if img.max() > 255 else img.astype("uint8")
+        img = to_uint8(img)
         h, w = img.shape[:2]
         if max(h, w) > 1400:
             f = 1400 / max(h, w)
             img = cv2.resize(img, (int(w * f), int(h * f)), interpolation=cv2.INTER_AREA)
-        out = _cache_path("sf_prev_", src)
         cv2.imwrite(out, img)
         return out
 
     def _set_preview(self, src):
         png = self._preview_png(src)
         self._preview_src = png
+        self._preview_pix = None
         if png:
             pix = QPixmap(png)
             if not pix.isNull():
+                self._preview_pix = pix   # ungescalt cachen — resizeEvent skaliert nur noch
                 self.preview.setPixmap(pix.scaled(self.preview.size(), Qt.KeepAspectRatio,
                                                   Qt.SmoothTransformation))
                 self.preview.setToolTip(src)
                 return
-        self.preview.setText("(Vorschau nicht darstellbar)")
+        self.preview.setText(tr("(Vorschau nicht darstellbar)"))
 
     def _sharpest_kept(self, result_path):
         """Schärfsten behaltenen Quell-Frame aus dem cull_report ziehen."""
@@ -113,8 +116,7 @@ class ResultMixin:
         self.cmp_btn.setEnabled(bool(self.before_path))
         self.ghost_btn.setEnabled(bool(self._ghostmap_path()))
         # Ansicht-Umschalter: Ergebnis immer, Geister-Karte wenn da, Fokus-Map nur Makro
-        makro = not (getattr(self, "is_astro", False) or getattr(self, "is_hybrid", False)
-                     or getattr(self, "is_longexp", False) or getattr(self, "is_hdr", False))
+        makro = self._is_makro()
         self.view_result.setEnabled(True)
         self.view_ghost.setEnabled(bool(self._ghostmap_path()))
         self.view_focusmap.setEnabled(makro)
@@ -130,10 +132,7 @@ class ResultMixin:
         self.enhance_btn.setVisible(sky); self.enhance_btn.setEnabled(sky)   # One-Click „Veredeln"
         # Retusche nur wo es Sinn macht (Fokus-Stacking): Makro + Hybrid Fokus+Astro
         fa = getattr(self, "is_hybrid", False) and self.hybrid_kind.currentData() == "fa"
-        retouch_ok = (not getattr(self, "is_astro", False)
-                      and not getattr(self, "is_longexp", False)
-                      and not getattr(self, "is_hdr", False)
-                      and (not getattr(self, "is_hybrid", False) or fa))
+        retouch_ok = makro or fa
         self.retouch_btn.setVisible(retouch_ok)
         self.retouch_btn.setEnabled(retouch_ok)
         self._build_filmstrip(res)
@@ -168,7 +167,7 @@ class ResultMixin:
             if not paths or len(paths) < 3:
                 return None
             fm = fa.focus_map(paths)
-            p = os.path.join("/tmp", "fp_focusmap_view.png")
+            p = os.path.join(tempfile.gettempdir(), "fp_focusmap_view.png")   # /tmp fehlt unter Windows
             cv2.imwrite(p, fm)
             self._focusmap_cache = p
             return p

@@ -20,6 +20,7 @@ if not os.path.isdir(_LANG_DIR):
     _LANG_DIR = os.path.join(os.path.dirname(_d), "lang")
 _current = "de"
 _table = {}
+_warned = set()                     # je Sprachdatei nur EINMAL warnen
 
 
 def available_languages():
@@ -42,8 +43,12 @@ def set_language(code):
     path = os.path.join(_LANG_DIR, f"{_current}.json")
     if os.path.isfile(path):
         try:
-            _table = json.load(open(path, encoding="utf-8"))
-        except Exception:
+            with open(path, encoding="utf-8") as fh:
+                _table = json.load(fh)
+        except Exception as e:      # kaputte Sprachdatei nicht still schlucken — einmalig warnen
+            if path not in _warned:
+                print(f"i18n: Sprachdatei {path} nicht lesbar ({e}) — Fallback auf Deutsch")
+                _warned.add(path)
             _table = {}
 
 

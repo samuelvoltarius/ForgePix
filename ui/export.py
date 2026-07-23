@@ -72,7 +72,6 @@ class ExportMixin:
         cancel.clicked.connect(dlg.reject)
 
         def do_export():
-            import numpy as np
             chosen = [k for k in ("instagram", "whatsapp", "web", "4k", "print") if targets[k].isChecked()]
             any_sel = (targets["webjpg"].isChecked() or tiff16.isChecked() or psd.isChecked() or chosen)
             if not any_sel:

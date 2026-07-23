@@ -25,20 +25,13 @@ import tempfile
 import numpy as np
 import cv2
 
+import siril_engine
 
 # ---------------------------------------------------------------- Siril-Pfad ----
 
-def find_siril(explicit=None):
-    """Pfad zur Siril-CLI finden (siril-cli bevorzugt, sonst siril)."""
-    cands = [explicit] if explicit else []
-    cands += [shutil.which("siril-cli"), shutil.which("siril"),
-              "/Applications/Siril.app/Contents/MacOS/siril-cli",
-              "/Applications/Siril.app/Contents/MacOS/Siril",
-              "/usr/local/bin/siril-cli", "/usr/bin/siril-cli"]
-    for c in cands:
-        if c and os.path.isfile(c):
-            return c
-    return None
+# find_siril kommt zentral aus siril_engine (die frühere lokale Kopie war ein Duplikat;
+# die Kandidatenliste wurde dort vereinheitlicht — inkl. des GUI-Binary-Kandidaten).
+find_siril = siril_engine.find_siril
 
 
 def siril_available(explicit=None):
@@ -69,19 +62,23 @@ def _write_linear_fits(bgr, path, hints=None):
 
 
 def _read_fits_bgr(path):
-    """Siril-Ergebnis-FITS (RGB-Cube) als BGR float [0..1] lesen."""
-    from astropy.io import fits
-    data = fits.getdata(path).astype(np.float32)
-    if data.ndim == 3 and data.shape[0] == 3:
-        rgb = np.transpose(data, (1, 2, 0))
-    elif data.ndim == 3 and data.shape[2] == 3:
-        rgb = data
-    else:
-        rgb = cv2.cvtColor(data, cv2.COLOR_GRAY2RGB)
-    mx = float(rgb.max())
-    if mx > 1.5:                                   # Siril speichert oft 16-bit-Skala
-        rgb = rgb / (65535.0 if mx > 255 else 255.0)
-    return cv2.cvtColor(np.clip(rgb, 0, 1).astype(np.float32), cv2.COLOR_RGB2BGR)
+    """Siril-Ergebnis-FITS (RGB-Cube) als BGR float [0..1] lesen — gemeinsamer Helper mit
+    fester Normierung (siril_engine.read_fits_bgr), statt dreier leicht verschiedener Kopien."""
+    return np.clip(siril_engine.read_fits_bgr(path), 0, 1)
+
+
+def _platesolve_cmd(hints):
+    """Siril-'platesolve'-Kommandozeile aus den Astrometrie-Hints bauen (gemeinsam für
+    siril_spcc und _solve_wcs_siril — vorher zweimal identisch aufgebaut)."""
+    h = hints or {}
+    ps = ["platesolve"]
+    if h.get("ra") is not None and h.get("dec") is not None:
+        ps.append(f"{h['ra']},{h['dec']}")
+    if h.get("focal"):
+        ps.append(f"-focal={h['focal']}")
+    if h.get("pixelsize"):
+        ps.append(f"-pixelsize={h['pixelsize']}")
+    return " ".join(ps)
 
 
 def siril_spcc(bgr, hints=None, oscsensor=None, oscfilter=None, osclpf=None,
@@ -92,59 +89,49 @@ def siril_spcc(bgr, hints=None, oscsensor=None, oscfilter=None, osclpf=None,
     if not exe:
         raise RuntimeError("Siril nicht gefunden")
     work = tempfile.mkdtemp(prefix="forgepix_siril_")
-    inp = os.path.join(work, "linear.fit")
-    outp = os.path.join(work, "spcc_out")            # Siril hängt .fit an
-    _write_linear_fits(bgr, inp, hints)
-    h = hints or {}
-    ps = ["platesolve"]
-    if h.get("ra") is not None and h.get("dec") is not None:
-        ps.append(f"{h['ra']},{h['dec']}")
-    if h.get("focal"):
-        ps.append(f"-focal={h['focal']}")
-    if h.get("pixelsize"):
-        ps.append(f"-pixelsize={h['pixelsize']}")
-    sp = ["spcc", "-catalog=gaia"]                  # online Gaia direkt: scheitert SCHNELL ohne Netz
-    if narrowband:                                  # (statt den mehrere GB großen lokalen Katalog zu laden)
-        sp.append("-narrowband")
-    if oscsensor:
-        sp.append(f'-oscsensor="{oscsensor}"')
-    if oscfilter:
-        sp.append(f'-oscfilter="{oscfilter}"')
-    if osclpf:
-        sp.append(f'-osclpf="{osclpf}"')
-    script = "\n".join([
-        "requires 1.0.0",
-        f'load "{inp}"',
-        " ".join(ps),
-        " ".join(sp),
-        f'save "{outp}"',
-    ]) + "\n"
-    log("  Siril-SPCC: Plate-Solve + Gaia-DR3-Farbkalibrierung …")
-    try:
-        proc = subprocess.run([exe, "-s", "-"], input=script, capture_output=True,
-                              text=True, timeout=150, cwd=work)
-    except subprocess.TimeoutExpired:
+    try:                                            # Tempdir in JEDEM Fall aufräumen (wie gaia_pcc)
+        inp = os.path.join(work, "linear.fit")
+        outp = os.path.join(work, "spcc_out")        # Siril hängt .fit an
+        _write_linear_fits(bgr, inp, hints)
+        sp = ["spcc", "-catalog=gaia"]              # online Gaia direkt: scheitert SCHNELL ohne Netz
+        if narrowband:                              # (statt den mehrere GB großen lokalen Katalog zu laden)
+            sp.append("-narrowband")
+        if oscsensor:
+            sp.append(f'-oscsensor="{oscsensor}"')
+        if oscfilter:
+            sp.append(f'-oscfilter="{oscfilter}"')
+        if osclpf:
+            sp.append(f'-osclpf="{osclpf}"')
+        script = "\n".join([
+            "requires 1.0.0",
+            f'load "{inp}"',
+            _platesolve_cmd(hints),
+            " ".join(sp),
+            f'save "{outp}"',
+        ]) + "\n"
+        log("  Siril-SPCC: Plate-Solve + Gaia-DR3-Farbkalibrierung …")
+        try:
+            proc = subprocess.run([exe, "-s", "-"], input=script, capture_output=True,
+                                  text=True, timeout=150, cwd=work)
+        except subprocess.TimeoutExpired:
+            raise RuntimeError("Siril-SPCC: Zeitüberschreitung (Katalog/Netz?)")
+        # Erfolg NICHT über lokalisierte Log-Strings erkennen (locale-abhängig), sondern über
+        # returncode + Existenz der frischen Ergebnisdatei (work ist ein neues Tempdir, die
+        # Datei kann nur aus DIESEM Lauf stammen).
+        res = None
+        for cand in (outp + ".fit", outp + ".fits", outp + ".fit.fz"):
+            if os.path.isfile(cand):
+                res = cand
+                break
+        if res is None:
+            tail = "\n".join(((proc.stdout or "") + "\n" + (proc.stderr or "")).splitlines()[-6:])
+            raise RuntimeError(f"Siril-SPCC lieferte kein Ergebnis (rc={proc.returncode}). "
+                               "Log-Ende:\n" + tail)
+        out = _read_fits_bgr(res)
+        log("  Siril-SPCC: fertig (Gaia DR3).")
+        return out
+    finally:
         shutil.rmtree(work, ignore_errors=True)
-        raise RuntimeError("Siril-SPCC: Zeitüberschreitung (Katalog/Netz?)")
-    sout = proc.stdout or ""
-    if "fehlgeschlagen" in sout or "nicht erreichbar" in sout or "Katalogfehler" in sout:
-        # Siril-Script meldet Fehler (z. B. Gaia-Server nicht erreichbar) → Orchestrator fällt zurück
-        if not any(os.path.isfile(outp + e) for e in (".fit", ".fits", ".fit.fz")):
-            shutil.rmtree(work, ignore_errors=True)
-            raise RuntimeError("Siril-SPCC: Katalog/Netz nicht verfügbar")
-    res = None
-    for cand in (outp + ".fit", outp + ".fits", outp + ".fit.fz"):
-        if os.path.isfile(cand):
-            res = cand
-            break
-    tail = "\n".join((proc.stdout or "").splitlines()[-6:])
-    if res is None:
-        shutil.rmtree(work, ignore_errors=True)
-        raise RuntimeError("Siril-SPCC lieferte kein Ergebnis. Log-Ende:\n" + tail)
-    out = _read_fits_bgr(res)
-    shutil.rmtree(work, ignore_errors=True)
-    log("  Siril-SPCC: fertig (Gaia DR3).")
-    return out
 
 
 # ---------------------------------------------- Eigener Gaia-Pfad (MIT) ----
@@ -170,20 +157,11 @@ def _solve_wcs_siril(bgr, hints, work, siril_path=None, log=print):
     exe = find_siril(siril_path)
     if not exe:
         return None
-    from astropy.wcs import WCS
-    from astropy.io import fits
     inp = os.path.join(work, "solve_in.fit")
     outp = os.path.join(work, "solved")
     _write_linear_fits(bgr, inp, hints)
-    h = hints or {}
-    ps = ["platesolve"]
-    if h.get("ra") is not None and h.get("dec") is not None:
-        ps.append(f"{h['ra']},{h['dec']}")
-    if h.get("focal"):
-        ps.append(f"-focal={h['focal']}")
-    if h.get("pixelsize"):
-        ps.append(f"-pixelsize={h['pixelsize']}")
-    script = "\n".join(["requires 1.0.0", f'load "{inp}"', " ".join(ps), f'save "{outp}"']) + "\n"
+    script = "\n".join(["requires 1.0.0", f'load "{inp}"', _platesolve_cmd(hints),
+                        f'save "{outp}"']) + "\n"
     try:
         subprocess.run([exe, "-s", "-"], input=script, capture_output=True, text=True, timeout=180)
     except subprocess.TimeoutExpired:
@@ -262,6 +240,7 @@ def _solve_wcs_astrometry(gray, api_key, work, log=print):
         if not jobid:
             log("  Astrometry.net: keine Job-ID (Zeitüberschreitung)")
             return None
+        st = None
         while time.time() - t0 < 360:
             st = s.get(f"{ASTROMETRY_API}/jobs/{jobid}", timeout=30).json().get("status")
             if st == "success":
@@ -270,6 +249,11 @@ def _solve_wcs_astrometry(gray, api_key, work, log=print):
                 log("  Astrometry.net: Solve fehlgeschlagen")
                 return None
             time.sleep(5)
+        # Erfolg EXPLIZIT prüfen: die Schleife kann auch per Zeitüberschreitung enden —
+        # dann gäbe es kein WCS-File zum Herunterladen.
+        if st != "success":
+            log(f"  Astrometry.net: keine Lösung (Status {st}, Zeitüberschreitung?)")
+            return None
         wpath = os.path.join(work, "anet.wcs")
         # Pflicht-Header laut API-Doku gegen Bot-/Scraper-Sperre beim Datei-Download
         wr = s.get(f"https://nova.astrometry.net/wcs_file/{jobid}",
@@ -313,9 +297,7 @@ def gaia_pcc(bgr, hints=None, siril_path=None, astrometry_key=None, log=print):
             wcs = _solve_wcs_external(kind, solver, lpath, work, hints or {}, log)
         if wcs is None:
             raise RuntimeError("Plate-Solve fehlgeschlagen")
-        from astro import _star_centroids
         H, W = gray.shape
-        ipts = _star_centroids(gray / (gray.max() + 1e-6), max_stars=400)
         sky = wcs.pixel_to_world_values(W / 2.0, H / 2.0)
         radius = 0.6
         log(f"  Gaia-PCC: Feld gelöst (Zentrum {float(sky[0]):.3f},{float(sky[1]):.3f}), frage Gaia DR3 ab …")
@@ -324,7 +306,7 @@ def gaia_pcc(bgr, hints=None, siril_path=None, astrometry_key=None, log=print):
             f"WHERE 1=CONTAINS(POINT('ICRS',ra,dec),CIRCLE('ICRS',{float(sky[0])},{float(sky[1])},{radius})) "
             "AND bp_rp IS NOT NULL AND phot_g_mean_mag < 16 ORDER BY phot_g_mean_mag ASC")
         cat = job.get_results()
-        scale = _fit_channel_gains(bgr, ipts, cat, wcs, log)
+        scale = _fit_channel_gains(bgr, cat, wcs, log)
         out = np.clip(bgr.astype(np.float32) * scale.reshape(1, 1, 3), 0, None)
         log(f"  Gaia-PCC: Kanal-Skalierung BGR={np.round(scale, 3)} aus {len(cat)} Katalogsternen")
         return out
@@ -335,12 +317,11 @@ def gaia_pcc(bgr, hints=None, siril_path=None, astrometry_key=None, log=print):
 def _solve_wcs_external(kind, solver, lpath, work, hints, log):
     """Plate-Solve über einen externen Solver (ASTAP/astrometry.net) — Fallback, wenn kein Siril da
     ist. Gibt ein WCS-Objekt zurück oder None."""
-    from astropy.wcs import WCS
-    from astropy.io import fits
     h = hints or {}
     if kind == "astap":
         cmd = [solver, "-f", lpath, "-wcs"]
-        if h.get("ra") is not None:
+        # ra UND dec prüfen — ASTAP braucht beide; dec=None crashte hier vorher mit TypeError
+        if h.get("ra") is not None and h.get("dec") is not None:
             cmd += ["-ra", str(h["ra"] / 15.0), "-spd", str(h["dec"] + 90)]
         subprocess.run(cmd, capture_output=True, text=True, timeout=300, cwd=work)
         base = os.path.splitext(lpath)[0]
@@ -353,9 +334,10 @@ def _solve_wcs_external(kind, solver, lpath, work, hints, log):
     return _read_wcs2d(wfile) if os.path.isfile(wfile) else None
 
 
-def _fit_channel_gains(bgr, ipts, cat, wcs, log):
-    """Katalogsterne (Gaia ra/dec, bp_rp) über WCS auf Bildpixel projizieren, mit den erkannten
-    Bildsternen matchen und je Stern die gemessene Farbe gegen die erwartete (aus bp_rp) stellen.
+def _fit_channel_gains(bgr, cat, wcs, log):
+    """Katalogsterne (Gaia ra/dec, bp_rp) über WCS auf Bildpixel projizieren und dort die
+    gemessene Sternfarbe abgreifen (direkt am projizierten Ort — ein separates Matching gegen
+    erkannte Bildsterne findet nicht statt und wurde daher entfernt).
     Liefert eine BGR-Kanal-Skalierung, die die mittlere gemessene Sternfarbe neutral/erwartungstreu macht."""
     H, W = bgr.shape[:2]
     px, py = wcs.world_to_pixel_values(np.asarray(cat["ra"]), np.asarray(cat["dec"]))
@@ -400,9 +382,28 @@ def run_pcc(linear_bgr, hints=None, prefer="auto", oscsensor=None, narrowband=Fa
     return astro.photometric_balance(linear_bgr, 1.0, log=log)
 
 
+def _sex2deg(val, hours=False):
+    """Sexagesimalen Header-String ("12 34 56.7" oder "-05:12:30") nach Grad parsen.
+    hours=True: Wert ist in Stunden (RA-Konvention) → ×15. Gibt float oder None."""
+    try:
+        parts = str(val).strip().replace(":", " ").split()
+        if not 2 <= len(parts) <= 3:
+            return None
+        neg = parts[0].lstrip().startswith("-")
+        nums = [abs(float(p)) for p in parts] + [0.0] * (3 - len(parts))
+        deg = nums[0] + nums[1] / 60.0 + nums[2] / 3600.0
+        if neg:
+            deg = -deg
+        return deg * 15.0 if hours else deg
+    except (ValueError, TypeError):
+        return None
+
+
 def fits_hints(path):
     """Astrometrie-/Optik-Schlüssel aus einem FITS-Header lesen (RA/DEC/Brennweite/Pixelgröße/
-    Sensor) — als Vorgabe fürs Plate-Solving. Gibt ein Dict (leere Werte = None)."""
+    Sensor) — als Vorgabe fürs Plate-Solving. Gibt ein Dict (leere Werte = None).
+    RA/DEC werden IMMER numerisch (Grad) geliefert: sexagesimale String-Header ("12 34 56")
+    werden geparst statt roh durchgereicht (rohe Strings crashten _write_linear_fits)."""
     try:
         from astropy.io import fits
         h = fits.getheader(path)
@@ -416,6 +417,18 @@ def fits_hints(path):
                 except (ValueError, TypeError):
                     return h[k]
         return None
-    return {"ra": g("RA", "OBJCTRA", "CRVAL1"), "dec": g("DEC", "OBJCTDEC", "CRVAL2"),
+    def ang(*keys):
+        # Winkel-Header: Zahl → Grad; sexagesimale Strings parsen, Unbrauchbares verwerfen.
+        # RA-/OBJCTRA-Strings folgen der Stunden-Konvention (HH MM SS), DEC-Strings sind Grad.
+        for k in keys:
+            if k in h:
+                try:
+                    return float(h[k])
+                except (ValueError, TypeError):
+                    d = _sex2deg(h[k], hours=k in ("RA", "OBJCTRA"))
+                    if d is not None:
+                        return d
+        return None
+    return {"ra": ang("RA", "OBJCTRA", "CRVAL1"), "dec": ang("DEC", "OBJCTDEC", "CRVAL2"),
             "focal": g("FOCALLEN"), "pixelsize": g("XPIXSZ", "PIXSIZE1"),
             "instrument": g("INSTRUME")}

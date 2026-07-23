@@ -2,6 +2,7 @@
 """ui/appinfo.py — geteilte Pfad- und Namens-Konstanten für ForgePix (von mehreren ui-Modulen genutzt)."""
 import os
 import hashlib
+import tempfile
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # Projekt-Root (ui/ liegt darunter)
 SCRIPT = os.path.join(HERE, "core", "focus_cull_stack.py")          # Pipeline-Skript liegt in core/
@@ -12,6 +13,7 @@ IMG_EXTS = {".jpg", ".jpeg", ".png", ".tif", ".tiff"}
 
 
 def _cache_path(prefix, src):
-    """Stabiler /tmp-Cache-Pfad (md5 statt hash() — nicht zufallssalted, kollisionssicher)."""
+    """Stabiler Temp-Cache-Pfad (md5 statt hash() — nicht zufallssalted, kollisionssicher).
+    tempfile.gettempdir() statt hartem /tmp — sonst brechen alle Vorschauen unter Windows."""
     key = f"{src}:{os.path.getmtime(src)}".encode()
-    return os.path.join("/tmp", f"{prefix}{hashlib.md5(key).hexdigest()[:16]}.png")
+    return os.path.join(tempfile.gettempdir(), f"{prefix}{hashlib.md5(key).hexdigest()[:16]}.png")

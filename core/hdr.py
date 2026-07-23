@@ -11,26 +11,37 @@ Wichtig: HDR (Belichtungsreihe) ≠ Fokus-Stacking (Schärfereihe) — zwei vers
 """
 import numpy as np
 import cv2
+from constants import to_uint8
 
 
 def _to8(img):
-    """Nach 8-bit BGR (Mertens erwartet 8-bit-Bilder)."""
+    """Nach 8-bit BGR (Mertens erwartet 8-bit-Bilder). Kern = constants.to_uint8; zusätzlich
+    Gray→BGR und Float-[0,1]-Eingaben vorher auf 0..255 skalieren (sonst würde astype(uint8)
+    das Bild praktisch schwarz machen)."""
     if img.ndim == 2:
         img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
-    if img.dtype == np.uint16:
-        return (img / 256).astype(np.uint8)
-    if img.dtype != np.uint8:
-        return np.clip(img, 0, 255).astype(np.uint8)
-    return img
+    if img.dtype not in (np.uint8, np.uint16) and img.size and float(img.max()) <= 1.0 + 1e-6:
+        img = np.clip(img * 255.0, 0, 255)
+    return to_uint8(img)
 
 
-def read_exposure_times(paths):
-    """Echte Belichtungszeiten (Sekunden) aus dem EXIF lesen. Gibt ein float32-Array zurück, wenn
-    für JEDES Bild eine Zeit gefunden wurde, sonst None (dann muss geschätzt werden). Korrekte
-    Belichtungsverhältnisse sind für die Debevec-CRF-Kalibrierung entscheidend — geratene Zeiten
-    lassen die Response-Kurven pro Farbkanal divergieren → Farbflecken in dunklen Bereichen."""
-    if not paths:
-        return None
+def _resize_like_first(imgs, shape=None):
+    """Alle Bilder auf EINE gemeinsame Größe bringen (Default: Größe des ersten Bilds).
+    shape=(h, w) erlaubt eine abweichende Referenzgröße (z. B. mittleres Bild der Serie)."""
+    h, w = shape if shape is not None else imgs[0].shape[:2]
+    return [cv2.resize(im, (w, h)) if im.shape[:2] != (h, w) else im for im in imgs]
+
+
+def _best_exposed(imgs):
+    """Referenzwahl fürs Deghosting/Flow-Warping: das am besten belichtete Frame = das mit den
+    meisten gut belichteten Pixeln (weder abgesoffen noch ausgebrannt). Gibt (ref_index, grays)."""
+    grays = [cv2.cvtColor(im, cv2.COLOR_BGR2GRAY) for im in imgs]
+    well = [float(((g > 13) & (g < 242)).mean()) for g in grays]
+    return int(np.argmax(well)), grays
+
+
+def _exposure_times_pil(paths):
+    """Belichtungszeiten via PIL-EXIF. Liste von float-oder-None je Pfad, oder None (kein PIL)."""
     try:
         from PIL import Image
         from PIL.ExifTags import TAGS
@@ -42,12 +53,45 @@ def read_exposure_times(paths):
             ex = Image.open(p)._getexif() or {}
             d = {TAGS.get(k, k): v for k, v in ex.items()}
             t = d.get("ExposureTime")
-            if t is None:
-                return None
-            times.append(float(t))
+            times.append(float(t) if t is not None else None)
         except Exception:
-            return None
-    if len(times) != len(paths) or any(t <= 0 for t in times):
+            times.append(None)
+    return times
+
+
+def _exposure_times_exiftool(paths):
+    """Belichtungszeiten via exiftool — ALLE Pfade in EINEM Aufruf (-j -n) statt ein Prozess
+    pro Datei. Liste von float-oder-None je Pfad, oder None (exiftool fehlt/scheitert)."""
+    try:
+        import subprocess
+        import json
+        out = subprocess.run(["exiftool", "-j", "-n", "-ExposureTime"] + list(paths),
+                             capture_output=True, text=True).stdout
+        recs = json.loads(out)
+        by_src = {r.get("SourceFile"): r.get("ExposureTime") for r in recs}
+        # exiftool meldet SourceFile wie übergeben — über den Pfad zuordnen, Reihenfolge sicher
+        times = []
+        for p in paths:
+            t = by_src.get(p)
+            times.append(float(t) if t is not None else None)
+        return times
+    except Exception:
+        return None
+
+
+def read_exposure_times(paths):
+    """Echte Belichtungszeiten (Sekunden) aus dem EXIF lesen — EINE Funktion für alle Aufrufer:
+    PIL als Primärweg, exiftool (ein Batch-Aufruf für alle Dateien) als Fallback. Gibt ein
+    float32-Array zurück, wenn für JEDES Bild eine gültige Zeit gefunden wurde, sonst None
+    (dann muss geschätzt werden). Korrekte Belichtungsverhältnisse sind für die
+    Debevec-CRF-Kalibrierung entscheidend — geratene Zeiten lassen die Response-Kurven pro
+    Farbkanal divergieren → Farbflecken in dunklen Bereichen."""
+    if not paths:
+        return None
+    times = _exposure_times_pil(paths)
+    if times is None or any(t is None for t in times):
+        times = _exposure_times_exiftool(paths)              # Fallback: exiftool, EIN Aufruf
+    if times is None or any(t is None or t <= 0 for t in times):
         return None
     return np.asarray(times, np.float32)
 
@@ -80,8 +124,7 @@ def merge_exposures(images, align=True, deghost="off", flow=False, log=print):
     imgs = [_to8(im) for im in images]
     if len(imgs) == 1:
         return imgs[0]
-    h, w = imgs[0].shape[:2]
-    imgs = [cv2.resize(im, (w, h)) if im.shape[:2] != (h, w) else im for im in imgs]
+    imgs = _resize_like_first(imgs)
     if align:
         # 1) Feature-basiert (rigide) — fängt Verschiebung UND Drehung der Freihand-Reihe ab.
         #    Belichtungsunterschiede stören ORB kaum (Matching auf normierten Graustufen).
@@ -117,8 +160,7 @@ def merge_radiance(images, times=None, tonemap="reinhard", log=print):
     imgs = [_to8(im) for im in images]
     if len(imgs) < 2:
         return imgs[0]
-    h, w = imgs[0].shape[:2]
-    imgs = [cv2.resize(im, (w, h)) if im.shape[:2] != (h, w) else im for im in imgs]
+    imgs = _resize_like_first(imgs)
     if times is None:
         meds = [float(np.median(cv2.cvtColor(im, cv2.COLOR_BGR2GRAY))) + 1.0 for im in imgs]
         base = float(np.median(meds))
@@ -240,9 +282,7 @@ def _deghost(imgs, fused, aggressive=False, log=print):
     gegen reine Belichtungsunterschiede) und der Schwellwert wird **adaptiv aus der Statistik der
     Abweichung** bestimmt (Median + κ·MAD) statt fix — passt sich an Szene/Rauschen an. Maske
     gefeathert. `aggressive` senkt den κ-Faktor (mehr wird als Bewegung erkannt)."""
-    grays = [cv2.cvtColor(im, cv2.COLOR_BGR2GRAY) for im in imgs]
-    well = [float(((g > 13) & (g < 242)).mean()) for g in grays]
-    ri = int(np.argmax(well))
+    ri, grays = _best_exposed(imgs)
     ref = imgs[ri].astype(np.float32)
     refg = grays[ri].astype(np.float32) + 1e-3
     ref_grad = _grad_mag(refg)
@@ -275,9 +315,7 @@ def _flow_align_exposures(imgs, log=print):
     helligkeits-angeglichenen Graustufen geschätzt (sonst „sieht" der Fluss nur den Belichtungs-
     unterschied), dann wird das FARB-Bild mit remap auf die Referenz gezogen. Gibt eine neue
     Liste 8-bit-BGR zurück (Referenz unverändert), die anschließend regulär fusioniert wird."""
-    grays = [cv2.cvtColor(im, cv2.COLOR_BGR2GRAY) for im in imgs]
-    well = [float(((g > 13) & (g < 242)).mean()) for g in grays]
-    ri = int(np.argmax(well))
+    ri, grays = _best_exposed(imgs)
     refg = grays[ri].astype(np.float32) + 1e-3
     h, w = refg.shape
     gx, gy = np.meshgrid(np.arange(w, dtype=np.float32), np.arange(h, dtype=np.float32))
@@ -368,18 +406,6 @@ def apply_look(bgr, preset="natural"):
     return cv2.cvtColor(np.clip(lab, 0, 255).astype(np.uint8), cv2.COLOR_LAB2BGR)
 
 
-def _exposure_time(path):
-    """Belichtungszeit (Sekunden) aus EXIF, oder None."""
-    try:
-        import subprocess
-        import json
-        out = subprocess.run(["exiftool", "-j", "-n", "-ExposureTime", path],
-                             capture_output=True, text=True).stdout
-        return float(json.loads(out)[0].get("ExposureTime"))
-    except Exception:
-        return None
-
-
 def split_brackets(paths, size=0, log=print):
     """Eine Dateiliste in einzelne Belichtungsreihen aufteilen.
     size>0: feste Gruppengröße (z. B. 3 für klassisches AEB).
@@ -389,8 +415,8 @@ def split_brackets(paths, size=0, log=print):
     if size and size > 0:
         groups = [paths[i:i + size] for i in range(0, len(paths), size)]
         return [g for g in groups if len(g) >= 2]
-    evs = [_exposure_time(p) for p in paths]
-    if any(e is None or e <= 0 for e in evs):
+    evs = read_exposure_times(paths)                     # PIL, Fallback exiftool (ein Batch-Aufruf)
+    if evs is None:
         return [paths]                                   # EXIF unklar → eine Reihe
     groups, cur = [], [paths[0]]
     for i in range(1, len(paths)):

@@ -11,6 +11,8 @@ Reine MIT-kompatible Abhängigkeiten (OpenCV, NumPy) — frei verwend-/verschenk
 import numpy as np
 import cv2
 
+from constants import to_uint8
+
 
 def _to_gray8(img):
     """8-bit-Graustufen fürs Feature-Matching (auch aus 16-bit)."""
@@ -221,17 +223,9 @@ def align_images_breathing(images, ref_idx=None, detector="ORB", smooth=True, lo
     for i in range(n):
         if i == ref_idx:
             continue
-        kp, des = det.detectAndCompute(_to_gray8(images[i]), None)
-        if des is None or des_ref is None or len(kp) < 4:
-            continue
-        matches = matcher.knnMatch(des, des_ref, k=2)
-        good = [m for pair in matches if len(pair) == 2
-                for m, nmatch in [pair] if m.distance < 0.75 * nmatch.distance]
-        if len(good) < 8:
-            continue
-        src = np.float32([kp[m.queryIdx].pt for m in good]).reshape(-1, 1, 2)
-        dst = np.float32([kp_ref[m.trainIdx].pt for m in good]).reshape(-1, 1, 2)
-        M, _ = cv2.estimateAffinePartial2D(src, dst, method=cv2.RANSAC, ransacReprojThreshold=3.0)
+        # Ähnlichkeitstransformation Frame→Referenz über den gemeinsamen Helfer
+        # (identische Semantik: Ratio-Test 0.75, estimateAffinePartial2D mit RANSAC/3.0)
+        M = _estimate_transform(images[i], images[ref_idx], "rigid", det, matcher, kp_ref, des_ref)
         if M is None:
             continue
         s = float(np.sqrt(max(1e-9, abs(M[0, 0] * M[1, 1] - M[0, 1] * M[1, 0]))))  # Maßstab = sqrt(det)
@@ -278,9 +272,8 @@ def align_images_breathing(images, ref_idx=None, detector="ORB", smooth=True, lo
 def align_images(images, ref_idx=None, mode="rigid", detector="ORB", refine=True, log=print):
     """Richtet alle Bilder auf das Referenzbild aus. Gibt ausgerichtete Liste zurück.
     mode: 'rigid' (Verschiebung/Drehung/Skalierung), 'homography' (Perspektive),
-    'subject' (auf das dominante Motiv — für bewegte Makro-Motive),
-    'sequential' (paarweise Nachbar-Verkettung — robust bei großem Fokusbereich) oder
-    'breathing' (monoton geglättete Maßstabs-Korrektur gegen Focus-Breathing-Matsch).
+    'subject' (auf das dominante Motiv — für bewegte Makro-Motive) oder
+    'sequential' (paarweise Nachbar-Verkettung — robust bei großem Fokusbereich).
     refine: nach der Feature-Schätzung eine **ECC-Subpixel-Verfeinerung** (helligkeitsinvariant)
     aufsetzen — deutlich genauer als reine Merkmals-Korrespondenz, besonders an den (defokussierten)
     Stack-Enden, wo ORB wenig findet. Fällt bei Fehlschlag auf die Feature-Ausrichtung zurück."""
@@ -308,30 +301,20 @@ def align_images(images, ref_idx=None, mode="rigid", detector="ORB", refine=True
         if i == ref_idx:
             continue
         img = images[i]
-        kp, des = det.detectAndCompute(_to_gray8(img), None)
-        if des is None or des_ref is None or len(kp) < 4:
-            log(f"    Frame {i + 1}: zu wenige Merkmale — unverändert übernommen")
+        # Matching + robuste Schätzung über den gemeinsamen Helfer _estimate_transform
+        # (identische Semantik zum früheren Inline-Block: Ratio-Test 0.75,
+        # findHomography bzw. estimateAffinePartial2D mit RANSAC/Schwelle 3.0)
+        M3 = _estimate_transform(img, images[ref_idx], mode, det, matcher, kp_ref, des_ref)
+        if M3 is None:
+            log(f"    Frame {i + 1}: zu wenige Merkmale/Treffer — unverändert übernommen")
             out[i] = img
             continue
-        matches = matcher.knnMatch(des, des_ref, k=2)
-        good = [m for pair in matches if len(pair) == 2
-                for m, nmatch in [pair] if m.distance < 0.75 * nmatch.distance]
-        if len(good) < 8:
-            log(f"    Frame {i + 1}: nur {len(good)} Treffer — unverändert übernommen")
-            out[i] = img
-            continue
-        src = np.float32([kp[m.queryIdx].pt for m in good]).reshape(-1, 1, 2)
-        dst = np.float32([kp_ref[m.trainIdx].pt for m in good]).reshape(-1, 1, 2)
         if mode == "homography":
-            M, _ = cv2.findHomography(src, dst, cv2.RANSAC, 3.0)
-            out[i] = cv2.warpPerspective(img, M, (w, h), flags=cv2.INTER_LANCZOS4,
-                                         borderMode=cv2.BORDER_CONSTANT) if M is not None else img
+            out[i] = cv2.warpPerspective(img, M3, (w, h), flags=cv2.INTER_LANCZOS4,
+                                         borderMode=cv2.BORDER_CONSTANT)
         else:
-            M, _ = cv2.estimateAffinePartial2D(src, dst, method=cv2.RANSAC,
-                                               ransacReprojThreshold=3.0)
-            if M is None:
-                out[i] = img
-            elif refine:
+            M = M3[:2]
+            if refine:
                 # ECC-Subpixel-Verfeinerung auf der Feature-Schätzung aufsetzen (helligkeitsinvariant).
                 # ECC-Konvention: warpMatrix bildet Referenz→Frame ab → init = invertierte Feature-M;
                 # als WARP_INVERSE_MAP angewandt richtet es den Frame auf die Referenz aus. BORDER_CONSTANT
@@ -349,7 +332,7 @@ def align_images(images, ref_idx=None, mode="rigid", detector="ORB", refine=True
             else:
                 out[i] = cv2.warpAffine(img, M, (w, h), flags=cv2.INTER_LANCZOS4,
                                         borderMode=cv2.BORDER_CONSTANT)
-        log(f"    Frame {i + 1}/{n}: ausgerichtet ({len(good)} Treffer)")
+        log(f"    Frame {i + 1}/{n}: ausgerichtet")
     return out
 
 
@@ -371,18 +354,21 @@ def _laplacian_pyramid(gauss):
     return lap
 
 
+def _small_gray(im, max_side=700):
+    """Downscaled 8-bit-Graustufenbild für die Streuungs-Analyse (gemeinsamer Helfer
+    für disagreement_map und die gestreamte Variante)."""
+    g = cv2.cvtColor(im, cv2.COLOR_BGR2GRAY) if im.ndim == 3 else im
+    g = to_uint8(g)
+    s = max_side / max(g.shape)
+    if s < 1.0:
+        g = cv2.resize(g, (int(g.shape[1] * s), int(g.shape[0] * s)), interpolation=cv2.INTER_AREA)
+    return g
+
+
 def disagreement_map(images, max_side=700):
     """Pro-Pixel-Streuung der (ausgerichteten) Frames in Graustufen, normiert [0..1].
     Hoch = Frames widersprechen sich = Kandidat für Bewegung/Ghosting."""
-    small = []
-    for im in images:
-        g = cv2.cvtColor(im, cv2.COLOR_BGR2GRAY) if im.ndim == 3 else im
-        if g.dtype != np.uint8:
-            g = (g / 256).astype(np.uint8) if g.max() > 255 else g.astype(np.uint8)
-        s = max_side / max(g.shape)
-        if s < 1.0:
-            g = cv2.resize(g, (int(g.shape[1] * s), int(g.shape[0] * s)), interpolation=cv2.INTER_AREA)
-        small.append(g.astype(np.float32))
+    small = [_small_gray(im, max_side).astype(np.float32) for im in images]
     std = np.stack(small).std(axis=0)
     std = cv2.GaussianBlur(std, (0, 0), 3)
     return std / (std.max() + 1e-6)
@@ -396,21 +382,11 @@ def disagreement_map_streamed(paths, max_side=700, align_mode="rigid", detector=
     ref_bgr = None
     mean = m2 = None
     count = 0
-
-    def _small_gray(im):
-        g = cv2.cvtColor(im, cv2.COLOR_BGR2GRAY) if im.ndim == 3 else im
-        if g.dtype != np.uint8:
-            g = (g / 256).astype(np.uint8) if g.max() > 255 else g.astype(np.uint8)
-        s = max_side / max(g.shape)
-        if s < 1.0:
-            g = cv2.resize(g, (int(g.shape[1] * s), int(g.shape[0] * s)), interpolation=cv2.INTER_AREA)
-        return g
-
     for p in paths:
         im = cv2.imread(p, cv2.IMREAD_UNCHANGED)
         if im is None:
             continue
-        g = _small_gray(im)
+        g = _small_gray(im, max_side)
         if ref_bgr is None:
             ref_bgr = cv2.cvtColor(g, cv2.COLOR_GRAY2BGR)
             mean = np.zeros(g.shape, np.float32)
@@ -640,7 +616,8 @@ def deghost_sharpest(images, merged, thresh=0.35, log=print):
     for i in range(n):
         m = idx == i
         if m.any():
-            sharpest[m] = imgs[i].astype(np.float32)[m]
+            # nur die maskierten Pixel konvertieren (statt das ganze Frame nach float32)
+            sharpest[m] = imgs[i][m].astype(np.float32)
     # Streuungs-Maske: nur dort den schärfsten Frame einblenden
     dmap = disagreement_map(imgs)
     dmap = cv2.resize(dmap, (w, h))
@@ -717,7 +694,8 @@ def focus_stack_depthmap(images, sharp_blur=4, gamma=8.0, radius=None, smoothing
         log(f"    DMap-Regularisierung (guided, r={int(reg_sigma_spatial)}) — Mottling reduziert")
     # Potenzgewichte: Schärfe^gamma, je Pixel normiert. Hohes gamma → schärfstes Frame dominiert klar.
     Smax = S.max(axis=0, keepdims=True) + 1e-6
-    Wt = (S / Smax) ** gamma                              # 0..1, schärfstes Frame = 1
+    S /= Smax                                             # in-place: S wird zur Gewichtskarte
+    Wt = np.power(S, gamma, out=S)                        # 0..1, schärfstes Frame = 1 (spart Peak-RAM)
     if sm > 0:                                            # Übergänge feathern (weiche Nähte)
         Wt = np.stack([cv2.GaussianBlur(Wt[i], (0, 0), sm) for i in range(n)])
     Wt /= Wt.sum(axis=0, keepdims=True) + 1e-6
@@ -761,10 +739,10 @@ def focus_stack_average(images, radius=9, smoothing=0, log=print):
     return np.clip(out, 0, maxval).astype(dtype)
 
 
-def color_reassign(images, merged):
+def color_reassign(images):
     """Farb-Neuzuweisung: für jeden Bildpunkt die ECHTE Farbe aus dem Quellframe nehmen, dessen
     Schärfemaß dort am höchsten ist (statt der gemischten Pyramiden-Farbe) — verhindert erfundene
-    Farben/Farb-Halos. `merged` nur als Größen-Referenz."""
+    Farben/Farb-Halos."""
     n = len(images)
     fm = np.stack([_focus_measure(im) for im in images])     # (n,h,w)
     idx = np.argmax(fm, axis=0).astype(np.uint8)
@@ -798,12 +776,18 @@ def focus_stack_wavelet(images, levels=5, log=print):
         fused_details.append(np.take_along_axis(layer, idx[None], axis=0)[0])
     approx = np.mean(np.stack([decs[i][1] for i in range(n)]), axis=0)   # Basis = Mittel
     merged_gray = approx + sum(fused_details)
-    merged = cv2.cvtColor(np.clip(merged_gray, 0, 255).astype(np.uint8), cv2.COLOR_GRAY2BGR) \
-        if images[0].ndim == 3 else np.clip(merged_gray, 0, 255).astype(images[0].dtype)
+    dtype = images[0].dtype
+    maxv = 65535.0 if dtype == np.uint16 else 255.0           # Clip dtype-abhängig (wie wavelet_sharpen)
     log(f"    Wavelet-Merge: {n} Frames, {levels} Ebenen")
-    if images[0].ndim == 3:                                   # echte Farbe aus dem schärfsten Frame
-        return color_reassign(images, merged)
-    return merged
+    if images[0].ndim == 3:
+        # Echte Farbe aus dem schärfsten Quellframe + die fusionierte Wavelet-Luminanz per
+        # Luma-Verhältnis übertragen (vorher wurde die Fusion verworfen und hatte null Effekt).
+        reassigned = color_reassign(images).astype(np.float32)
+        rl = cv2.cvtColor(reassigned, cv2.COLOR_BGR2GRAY)     # gleiche Konvention wie `grays` oben
+        ratio = np.clip(merged_gray, 0, maxv) / np.maximum(rl, 1e-6)
+        ratio = np.clip(ratio, 0.0, 4.0)                      # Guard gegen Division-durch-0-Ausreißer
+        return np.clip(reassigned * ratio[..., None], 0, maxv).astype(dtype)
+    return np.clip(merged_gray, 0, maxv).astype(dtype)
 
 
 def _largest_rect(mask):
@@ -939,11 +923,25 @@ def unsharp_mask(img, amount_percent=0.0, radius=1.0):
 
 
 def local_contrast(img, amount_percent=0.0):
-    """Klarheit / Mikrokontrast = Unsharp Mask mit großem Radius (treu, kein Erfinden)."""
+    """Klarheit / Mikrokontrast (treu, kein Erfinden). Dünner Wrapper um develop.local_contrast
+    (multiskaliger Lokal-Kontrast-Equalizer, halo-arm, darktable-Stil) — damit die GUI-Vorschau
+    (ui/components.py) und die finale Pipeline bei GLEICHEM Klarheit-Wert dasselbe Ergebnis
+    liefern. Vorher rechnete hier ein einfaches Großradius-Unsharp → sichtbare Abweichung
+    Vorschau vs. Endergebnis.
+
+    amount_percent = Nutzer-Skala 0..100 → develop-amount 0..1 (exakt wie die Vorschau:
+    clarity/100). uint8/uint16 handhabt develop dtype-erhaltend selbst; Float-Bilder mit
+    Werten > 1 (alte stacker-Konvention: 0..255) werden sauber auf 0..1 normiert und zurück."""
     if amount_percent <= 0:
         return img
-    r = max(3.0, min(img.shape[0], img.shape[1]) / 120.0)
-    return unsharp_mask(img, amount_percent, r)
+    import develop
+    amount = float(amount_percent) / 100.0
+    if np.issubdtype(img.dtype, np.floating) and img.size and float(img.max()) > 1.0:
+        scale = 65535.0 if float(img.max()) > 300.0 else 255.0
+        out = develop.local_contrast((img / scale).astype(np.float32), amount=amount)
+        return (np.clip(out, 0, 1) * scale).astype(img.dtype)
+    out = develop.local_contrast(img, amount=amount)
+    return out if out.dtype == img.dtype else out.astype(img.dtype)
 
 
 def write_layered_tiff(out_path, named_layers, flat_bgr=None):

@@ -15,10 +15,12 @@ Speicher: hält nie alle Frames gleichzeitig im RAM (anders als der Fokus-Stacke
 Reine OpenCV/NumPy-Abhängigkeiten.
 """
 import os
+
 import numpy as np
 import cv2
 
 from constants import RAW_EXTS
+from siril_engine import fits_scale01   # feste FITS-Normierung (gemeinsam mit den Engine-Brücken)
 
 # OSC-Bayer-Muster (FITS BAYERPAT) -> OpenCV-Debayer-Code. Achtung: OpenCVs Bayer-Benennung ist
 # ggü. der üblichen FITS-Konvention um eine Zeile/Spalte verschoben (bekannte Falle).
@@ -73,12 +75,14 @@ def _read_float(path):
             if bayer not in _BAYER2CV:
                 bayer = detect_bayer(d)
             if bayer in _BAYER2CV:
-                mx = float(np.nanmax(d)) or 1.0
-                raw16 = np.clip(np.nan_to_num(d) / mx * 65535.0, 0, 65535).astype(np.uint16)
+                # FESTE Skala statt frame-eigenem Maximum: ein Hotpixel/Satellit würde sonst
+                # die Helligkeit des ganzen Subs verschieben (inkonsistent zwischen Frames).
+                raw16 = np.clip(np.nan_to_num(fits_scale01(d)) * 65535.0, 0, 65535).astype(np.uint16)
                 bgr = cv2.cvtColor(raw16, _BAYER2CV[bayer])      # -> BGR (Farbe!)
                 return bgr.astype(np.float32) / 65535.0
-        mx = float(np.nanmax(d)) if d.size else 1.0
-        f = d / mx if mx > 1.5 else np.clip(d, 0, 1)  # ADU -> 0..1
+        # ADU -> 0..1 über die FESTE Konvention (wie photometric/siril-Brücken), NICHT d/max:
+        # das frame-eigene Maximum (Hotpixel/Satellit) darf die Skala des Subs nicht verschieben.
+        f = np.clip(fits_scale01(d), 0, 1)
         if f.ndim == 2:
             f = cv2.cvtColor(f, cv2.COLOR_GRAY2BGR)
         elif f.shape[2] == 3:
@@ -168,13 +172,25 @@ def _coarse_offset_vote(ref_pts, img_pts, nbright=80, tol=2.5, min_votes=8):
         return None
     R, I = ref_pts[:nbright], img_pts[:nbright]
     offs = (R[:, None, :] - I[None, :, :]).reshape(-1, 2)        # alle Paar-Versätze
-    best, bestc = None, 0
-    for o in offs:
-        c = int((np.abs(offs - o).max(1) < tol).sum())          # Übereinstimmungen
-        if c > bestc:
-            bestc, best = c, o
+    # Voting vektorisiert (statt Python-Schleife über bis zu 6400 Kandidaten, pro Frame):
+    # je Kandidat zählen, wie viele Versätze im tol-Fenster (Chebyshev) liegen.
+    # KD-Baum: O(n log n) statt O(n²) — bei 6400 Kandidaten ~200× schneller. (Einziger
+    # theoretischer Unterschied: <= tol statt < tol am exakten Fensterrand — bei
+    # float-Sternzentren praktisch unmöglich.) Fallback ohne scipy: gechunktes Broadcasting.
+    n = len(offs)
+    try:
+        from scipy.spatial import cKDTree
+        counts = cKDTree(offs).query_ball_point(offs, r=tol, p=np.inf, return_length=True)
+    except Exception:
+        counts = np.empty(n, np.int32)
+        step = max(1, 4_000_000 // max(1, n))                    # Chunk-Zeilen fürs RAM-Budget
+        for s in range(0, n, step):
+            counts[s:s + step] = (np.abs(offs[s:s + step, None, :] - offs[None, :, :])
+                                  .max(2) < tol).sum(1)
+    bestc = int(counts.max()) if n else 0
     if bestc < min_votes:
         return None
+    best = offs[int(np.argmax(counts))]     # argmax = erster Index mit Maximalzahl (wie zuvor)
     # Mittel der zustimmenden Versätze (sub-pixel-genauer als ein einzelner Paar-Versatz)
     near = offs[np.abs(offs - best).max(1) < tol]
     return near.mean(0)
@@ -204,6 +220,19 @@ def _estimate_star_transform(refg, img_g):
     if M is None or (inl is not None and int(inl.sum()) < 6):
         return None
     return M
+
+
+def _estimate_star_shift(refg, img_g):
+    """REINE Translation aus dem Offset-Voting der Sternzentren — für align_mode='shift'
+    (nachgeführte Montierung ohne Feldrotation). Bewusst KEINE Rotations-Schätzung: der Nutzer
+    hat zugesichert, dass nur Drift/Dither vorliegt. Gibt 2x3-Translationsmatrix oder None."""
+    ref_pts, img_pts = _star_centroids(refg), _star_centroids(img_g)
+    if len(ref_pts) < 8 or len(img_pts) < 8:
+        return None
+    off = _coarse_offset_vote(ref_pts, img_pts)
+    if off is None:
+        return None
+    return np.float32([[1, 0, off[0]], [0, 1, off[1]]])       # img + off ≈ ref
 
 
 def match_stars_triangles(ref_pts, img_pts, n_use=60, tol=0.02, min_matches=6):
@@ -351,12 +380,26 @@ def _estimate_rotation(refg, img_g, detector="ORB", min_inliers=25):
     None — damit unsicher ausgerichtete Frames lieber verworfen als verschmiert gestackt werden."""
     a = (np.clip(refg, 0, 1) * 255).astype(np.uint8)
     b = (np.clip(img_g, 0, 1) * 255).astype(np.uint8)
-    det = cv2.ORB_create(5000)
+    # detector wirklich verdrahten: 'sift'/'akaze' auf Wunsch, sonst ORB — mit Fallback auf ORB,
+    # falls das gewählte Feature im OpenCV-Build fehlt.
+    det = None
+    name = str(detector or "ORB").upper()
+    try:
+        if name == "SIFT":
+            det = cv2.SIFT_create()
+        elif name == "AKAZE":
+            det = cv2.AKAZE_create()
+    except Exception:
+        det = None
+    if det is None:
+        det = cv2.ORB_create(5000)
     ka, da = det.detectAndCompute(a, None)
     kb, db = det.detectAndCompute(b, None)
     if da is None or db is None or len(ka) < 8 or len(kb) < 8:
         return None
-    bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
+    # Binär-Deskriptoren (ORB/AKAZE) → Hamming; Float-Deskriptoren (SIFT) → L2
+    norm = cv2.NORM_HAMMING if da.dtype == np.uint8 else cv2.NORM_L2
+    bf = cv2.BFMatcher(norm, crossCheck=True)
     m = sorted(bf.match(da, db), key=lambda x: x.distance)[:300]
     if len(m) < min_inliers:
         return None
@@ -420,7 +463,10 @@ def _tps_refine(fw, refg_out, max_ctrl=150, min_resid=0.5, log=print):
 def _warp_and_save(f, M, out_size, op, drizzle, tps_refg=None):
     if M is not None:
         if drizzle > 1:
-            M = M.copy(); M[:, 2] *= drizzle
+            # VOLLE 2x3-Matrix skalieren (wie in drizzle_stack) — nur die Translation zu skalieren
+            # ließe den linearen Teil (Rotation/Skala) unskaliert im drizzle-fachen Canvas
+            # (registrierte Frames wären geometrisch falsch).
+            M = (drizzle * M).astype(np.float32)
         f = cv2.warpAffine(f, M, out_size, flags=cv2.INTER_LANCZOS4, borderMode=cv2.BORDER_REFLECT)
     elif drizzle > 1:
         f = cv2.resize(f, out_size, interpolation=cv2.INTER_LANCZOS4)
@@ -436,8 +482,10 @@ def register_and_cache(paths, out_dir, dark=None, flat=None, do_register=True,
                        tps=False, log=print):
     """Frames kalibrieren + ausrichten, als 16-bit-TIFF in out_dir ablegen.
 
-    align_mode: 'shift'/'rotate' (stern-basiert; phaseCorrelate wird bewusst NICHT genutzt — rastet
-                bei Astro auf dem festen Fixed-Pattern statt auf den gewanderten Sternen ein).
+    align_mode: 'shift' = NUR Translation (Nachführung ohne Feldrotation, s. CLI --astro-align),
+                'rotate' = Translation + Feldrotation (Alt-Az). Stern-basiert; phaseCorrelate wird
+                bewusst NICHT genutzt — rastet bei Astro auf dem festen Fixed-Pattern statt auf
+                den gewanderten Sternen ein.
     cosmetic:   Hot-/Cold-Pixel vor dem Ausrichten entfernen.
     drizzle:    Ausgabe-Hochskalierung (1=aus, 2=doppelte Kantenlänge, „Drizzle-lite").
 
@@ -470,9 +518,18 @@ def register_and_cache(paths, out_dir, dark=None, flat=None, do_register=True,
         if not do_register:
             return (i, _warp_and_save(f, None, out_size, op, drizzle))
         fg = _gray(f)
-        M = _estimate_star_transform(refg, fg)
-        if M is None:
-            M = _estimate_rotation(refg, fg, detector)
+        if align_mode == "shift":
+            # 'shift' = nur Translation: Rotations-Schätzungen werden bewusst übersprungen
+            # (vorher wurde der Parameter nie gelesen und immer voll affin geschätzt).
+            M = _estimate_star_shift(refg, fg)
+        else:
+            M = _estimate_star_transform(refg, fg)
+            if M is None:
+                # Dreiecks-Matching (translationsfrei, astroalign-Prinzip) als 2. Versuch,
+                # BEVOR auf die ORB-Merkmals-Schätzung zurückgefallen wird.
+                M = _estimate_star_transform_robust(refg, fg)
+            if M is None:
+                M = _estimate_rotation(refg, fg, detector)
         if M is None:
             return (i, None)                                 # 2. Pass versucht Cluster-Brücke
         return (i, _warp_and_save(f, M, out_size, op, drizzle, tps_refg))
@@ -489,7 +546,11 @@ def register_and_cache(paths, out_dir, dark=None, flat=None, do_register=True,
     # vor — so kann eine schwache Brücke kein Verschmieren zurückbringen.
     if do_register and len(skipped) >= 3:
         ref_pts = _star_centroids(refg)
-        grays = {i: _gray(_prep(i)) for i in skipped}
+        # _prep je Frame nur EINMAL laufen lassen (vorher lief es doppelt: fürs Grau hier und
+        # nochmal fürs Warpen unten) — kostet etwas RAM für die übersprungenen Frames,
+        # spart aber einen vollen Lese-/Kalibrier-Pass pro gerettetem Frame.
+        preps = {i: _prep(i) for i in skipped}
+        grays = {i: _gray(f) for i, f in preps.items()}
         subref = max(skipped, key=lambda i: len(_star_centroids(grays[i])))
         bridge = _estimate_rotation(refg, grays[subref], detector, min_inliers=10)  # subref -> ref
         rescued = 0
@@ -510,7 +571,7 @@ def register_and_cache(paths, out_dir, dark=None, flat=None, do_register=True,
                 if good < 25:                                # zu wenige saubere Treffer → lieber lassen
                     continue
                 op = os.path.join(out_dir, f"reg_{i:04d}.tif")
-                aligned.append(_warp_and_save(_prep(i), M, out_size, op, drizzle, tps_refg))
+                aligned.append(_warp_and_save(preps.pop(i), M, out_size, op, drizzle, tps_refg))
                 rescued += 1
         if rescued:
             log(f"    +{rescued} weit geditherte Frames über Cluster-Brücke zurückgeholt ({len(aligned)}/{len(paths)})")
@@ -551,6 +612,9 @@ def drizzle_stack(paths, scale=2, pixfrac=0.7, dark=None, flat=None, cosmetic=Fa
             f = f[..., None]
         fg = _gray(f)
         M = _estimate_star_transform(refg, fg)
+        if M is None:
+            # Dreiecks-Matching als 2. Versuch (wie in register_and_cache), bevor ORB rät
+            M = _estimate_star_transform_robust(refg, fg)
         if M is None:
             M = _estimate_rotation(refg, fg, detector)
         if M is None:
@@ -625,12 +689,22 @@ def stack(paths, method="sigma", kappa=2.5, normalize=True, local_norm=False,
     first = _read_float(paths[0])
     shape = first.shape
 
-    # additive Normalisierung: Hintergrund (Median) je Frame angleichen
+    # additive Normalisierung + SNR-Sigma in EINEM Vorab-Pass (vorher zwei getrennte
+    # Volldurchläufe über alle Dateien). σ_bg ist gegen den späteren Skalar-Offset invariant
+    # (konstante Verschiebung ändert weder Ränge noch Streuung), darf also vom rohen Frame kommen.
+    need_w = weight and method in ("average", "winsor", "sigma")
     offs = np.zeros(n, np.float32)
-    if normalize:
-        meds = [float(np.median(_read_float(p))) for p in paths]
-        gm = float(np.median(meds))
-        offs = np.array([gm - m for m in meds], np.float32)
+    sig_raw = np.ones(n, np.float32)
+    if normalize or need_w:
+        meds = np.zeros(n, np.float32)
+        for i, p in enumerate(paths):
+            f = _read_float(p)
+            meds[i] = float(np.median(f))
+            if need_w:
+                sig_raw[i] = _bg_sigma(f)
+        if normalize:
+            gm = float(np.median(meds))
+            offs = gm - meds
     # lokale Normalisierung: örtliche Hintergrund-Fläche statt nur Skalar (gegen Gradienten)
     ref_surf = _bg_surface(first) if (normalize and local_norm) else None
     if ref_surf is not None:
@@ -642,10 +716,41 @@ def stack(paths, method="sigma", kappa=2.5, normalize=True, local_norm=False,
             return local_normalize(f, ref_surf)
         return f + offs[i]
 
+    # E1 — Banded-IO: registrierte unkomprimierte 16-bit-TIFFs per memmap NUR zeilenweise lesen,
+    # statt pro Band jede Datei komplett zu dekodieren (100 Frames × 20 Bänder = 2000 Voll-Reads).
+    # Achtung Kanalordnung: cv2 schreibt BGR-Arrays als RGB-TIFF → beim memmap-Lesen [..., ::-1].
+    # Fallback (FITS/komprimiert/lokale Normalisierung): bisheriger Voll-Read über rd().
+    _mm = {}
+
+    def rows_of(i, p, y0, y1):
+        if ref_surf is not None:
+            return rd(i, p)[y0:y1]           # lokale Normalisierung braucht das Vollbild (Fläche)
+        mm = _mm.get(p, False)
+        if mm is False:
+            mm = None
+            if os.path.splitext(p)[1].lower() in (".tif", ".tiff"):
+                try:
+                    import tifffile
+                    m = tifffile.memmap(p, mode="r")
+                    if m.ndim == 3 and m.shape[2] == 3 and m.dtype == np.uint16:
+                        mm = m
+                except Exception:
+                    mm = None
+            _mm[p] = mm
+        if mm is None:
+            return rd(i, p)[y0:y1]
+        return mm[y0:y1, :, ::-1].astype(np.float32) / 65535.0 + offs[i]
+
     # A4 — Per-Frame-SNR-Gewichte (1/σ_bg²), robust normiert auf Mittel 1. Bei weight=False alle 1.
     w = np.ones(n, np.float32)
-    if weight and method in ("average", "winsor", "sigma"):
-        sig = np.array([_bg_sigma(rd(i, p)) for i, p in enumerate(paths)], np.float32)
+    if need_w:
+        # σ_bg aus dem kombinierten Vorab-Pass. Bei lokaler Normalisierung muss σ auf den
+        # normalisierten Frames gemessen werden (Flächen-Abgleich ändert die Streuung) —
+        # dieser (seltene) Pfad liest wie bisher ein zweites Mal.
+        if ref_surf is not None:
+            sig = np.array([_bg_sigma(rd(i, p)) for i, p in enumerate(paths)], np.float32)
+        else:
+            sig = sig_raw
         w = 1.0 / (sig * sig)
         w *= n / float(w.sum())                          # Mittel 1 → Skala/Helligkeit unverändert
         log(f"    SNR-Gewichtung aktiv (Gewichte {np.round(w.min(),2)}..{np.round(w.max(),2)})")
@@ -656,8 +761,9 @@ def stack(paths, method="sigma", kappa=2.5, normalize=True, local_norm=False,
             res = np.empty(shape, np.float32)
             rows = max(1, 2_000_000 // (shape[1] * shape[2]))  # ~Zeilen pro Kachel
             for y in range(0, shape[0], rows):
-                band = np.stack([_read_float(p)[y:y + rows] + offs[i]
-                                 for i, p in enumerate(paths)])
+                # rows_of(): memmap-Zeilenlesen (E1) inkl. Normalisierung — lokale
+                # Normalisierung läuft über den rd()-Fallback (braucht das Vollbild)
+                band = np.stack([rows_of(i, p, y, y + rows) for i, p in enumerate(paths)])
                 res[y:y + rows] = np.median(band, axis=0)
                 log(f"    median Zeilen {y}/{shape[0]}")
             return np.clip(res, 0, 1)
@@ -686,7 +792,7 @@ def stack(paths, method="sigma", kappa=2.5, normalize=True, local_norm=False,
         x = np.arange(n, dtype=np.float32)
         xm = x.mean(); xv = float(((x - xm) ** 2).sum()) + 1e-9
         for y in range(0, shape[0], rows):
-            band = np.stack([rd(i, p)[y:y + rows] for i, p in enumerate(paths)])  # (n, r, w, c)
+            band = np.stack([rows_of(i, p, y, y + rows) for i, p in enumerate(paths)])  # (n,r,w,c)
             v = np.sort(band, axis=0)
             mask = np.ones_like(v, dtype=bool)
             for _ in range(2):                       # 2 Iterationen reichen praktisch
@@ -957,8 +1063,14 @@ def deconvolve(f, psf=None, iterations=15, star_protect=0.85, regularize=0.0,
                 sup = support[ay0:ay1, ax0:ax1] if support is not None else None
                 tile_est = _rl_deconv(np.clip(_gray(sub), 1e-4, None), lpsf, iterations,
                                       regularize, sup)
-                wmask = np.ones_like(tile_est, np.float32)  # weiche Kachelränder
-                wmask = cv2.GaussianBlur(wmask, (0, 0), max(2.0, min(wmask.shape) / 8.0))
+                # Echtes weiches Fenster: Rampe von den Kachelrändern zur Mitte, damit sich
+                # überlappende Kacheln WIRKLICH weich mischen. (Eine konstante Eins-Maske +
+                # GaussianBlur mit Reflect-Rand blieb konstant 1 → das Blending war ein No-Op.)
+                th_, tw_ = tile_est.shape[:2]
+                my = max(1, int(th_ * ov)); mx2 = max(1, int(tw_ * ov))
+                ry = np.minimum(1.0, np.minimum(np.arange(th_) + 1, th_ - np.arange(th_)) / my)
+                rx = np.minimum(1.0, np.minimum(np.arange(tw_) + 1, tw_ - np.arange(tw_)) / mx2)
+                wmask = np.outer(ry, rx).astype(np.float32)
                 est[ay0:ay1, ax0:ax1] += tile_est * wmask
                 wsum[ay0:ay1, ax0:ax1] += wmask
         est = est / np.clip(wsum, 1e-6, None)

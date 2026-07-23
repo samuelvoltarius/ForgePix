@@ -8,8 +8,8 @@ geschärft. ForgePix wandelt das Video dafür selbst um (OpenCV-VideoCapture, mp
 
 Speicherschonend in zwei Durchgängen:
   1) jeden (gesampelten) Frame nur BEWERTEN (Schärfe = Laplace-Varianz) — nichts behalten.
-  2) die besten X % erneut lesen, auf eine Referenz ausrichten (Scheiben-Schwerpunkt) und in einen
-     Summen-Akku addieren → am Ende teilen. RAM ~ wenige Frames statt tausende.
+  2) die besten X % erneut lesen, auf eine Referenz ausrichten (Subpixel-Phasenkorrelation) und in
+     einen Summen-Akku addieren → am Ende teilen. RAM ~ wenige Frames statt tausende.
 
 Reine OpenCV/NumPy-Abhängigkeiten (MIT-kompatibel).
 """
@@ -34,20 +34,6 @@ def _sharpness(frame):
     return lap_var / (mean * mean)                             # helligkeitsnormiert
 
 
-def _disk_centroid(frame, thresh=None):
-    """Schwerpunkt der hellen Scheibe (Sonne/Mond) auf dunklem Grund — für die Ausrichtung.
-    Gibt (x, y) oder None (keine Scheibe)."""
-    g = _gray(frame).astype(np.float32)
-    t = thresh if thresh is not None else max(20.0, g.mean() + 0.5 * g.std())
-    m = (g > t).astype(np.uint8)
-    if m.sum() < 50:
-        return None
-    M = cv2.moments(m, binaryImage=True)
-    if M["m00"] == 0:
-        return None
-    return M["m10"] / M["m00"], M["m01"] / M["m00"]
-
-
 def grade_video(path, max_frames=3000, log=print):
     """Durchgang 1: Schärfe je (gesampeltem) Frame. Gibt sortierte Liste [(schärfe, frame_index)]
     (beste zuerst) + (gesamt_frames, breite, höhe) zurück."""
@@ -60,10 +46,13 @@ def grade_video(path, max_frames=3000, log=print):
     scores = []
     idx = 0
     read = 0
+    fshape = None                                              # tatsächliche Frame-Shape merken
     while True:
         ok, fr = cap.read()
         if not ok:
             break
+        if fr is not None and fshape is None:
+            fshape = fr.shape[:2]
         if idx % step == 0 and fr is not None:
             scores.append((_sharpness(fr), idx))
             read += 1
@@ -71,6 +60,9 @@ def grade_video(path, max_frames=3000, log=print):
                 log(f"    Bewerte Frames … {read}")
         idx += 1
     cap.release()
+    # CAP_PROP-Breite/-Höhe können 0 oder falsch sein → gegen die echte Frame-Shape validieren
+    if fshape is not None and (h, w) != fshape:
+        h, w = fshape
     scores.sort(key=lambda s: -s[0])
     log(f"    {read} Frames bewertet (von {total or idx})")
     return scores, (total or idx, w, h)
@@ -107,10 +99,11 @@ def lucky_stack(path, keep_pct=0.30, max_frames=3000, align=True, sharpen_amount
         raise ValueError("Referenzframe nicht lesbar")
     if ref.ndim == 2:
         ref = cv2.cvtColor(ref, cv2.COLOR_GRAY2BGR)
+    ref_members = {top_idx[0]}                               # Frames, die im Referenz-Akku stecken
+    ref_acc = ref.astype(np.float64).copy()
+    ref_used = 1
     if ref_topn > 1:
         ref_anchor_g = _gray(ref).astype(np.float32)
-        ref_acc = ref.astype(np.float64).copy()
-        ref_used = 1
         for ti in top_idx[1:]:
             cap.set(cv2.CAP_PROP_POS_FRAMES, ti)
             ok, tf = cap.read()
@@ -125,15 +118,19 @@ def lucky_stack(path, keep_pct=0.30, max_frames=3000, align=True, sharpen_amount
                                     borderMode=cv2.BORDER_REPLICATE)
             ref_acc += tf.astype(np.float64)
             ref_used += 1
+            ref_members.add(ti)
         ref = np.clip(ref_acc / ref_used, 0, 255).astype(np.uint8)
         log(f"    Referenz aus Mittel der {ref_used} schärfsten Frames (ref_topn={ref_topn})")
     ref_g = _gray(ref).astype(np.float32)
 
-    acc = ref.astype(np.float64).copy()
-    used = 1
+    # Akku startet mit der SUMME der Referenz-Frames (jedes genau 1× gewichtet); ALLE Mitglieder
+    # der Referenz werden unten übersprungen — vorher wurden bei ref_topn>1 die Top-Frames 2..N
+    # doppelt gezählt (einmal im Referenz-Mittel, einmal regulär in der Schleife).
+    acc = ref_acc
+    used = ref_used
     for k, fi in enumerate(keep_idx):
-        if fi == scores[0][1]:
-            continue                                        # Referenz schon drin
+        if fi in ref_members:
+            continue                                        # Referenz-Frames schon drin
         cap.set(cv2.CAP_PROP_POS_FRAMES, fi)
         ok, fr = cap.read()
         if not ok or fr is None:
@@ -323,8 +320,12 @@ def lucky_stack_map(path, keep_global=0.6, keep_local=0.3, max_load=200,
         grays = [grays[i] for i in keep]
         log(f"    MAP: {len(frames)} Frames mit ausreichender Überlappung behalten")
 
-    # (2) Mittelbild
-    mean_c = np.mean(np.stack([f.astype(np.float32) for f in frames]), axis=0)
+    # (2) Mittelbild — inkrementelle Summe statt np.stack (das würde ALLE Frames auf einmal
+    # materialisieren, bei langen Serien mehrere GB)
+    mean_c = np.zeros(frames[0].shape, np.float64)
+    for f in frames:
+        mean_c += f
+    mean_c = (mean_c / len(frames)).astype(np.float32)
     mean_g = cv2.cvtColor(mean_c.astype(np.uint8), cv2.COLOR_BGR2GRAY).astype(np.float32)
 
     # (3) AP-Raster, nur wo Struktur
@@ -382,7 +383,14 @@ def lucky_stack_map(path, keep_global=0.6, keep_local=0.3, max_load=200,
     wy = np.hanning(2 * patch_half)
     hann = (np.outer(wy, wy) + 1e-3).astype(np.float32)       # Gewicht im Eingaberaster
     keep_n = max(3, int(len(frames) * keep_local))
-    # Vorab je Frame die lokale Qualität pro AP — ändert sich über Pässe nicht (basiert aufs Frame)
+    # Vorab je AP die lokale Frame-Auswahl — hängt nur von den Frames ab, NICHT vom Template,
+    # ist also über alle (Refine-)Pässe invariant → einmal berechnen statt je Pass neu.
+    ap_sel = []
+    for (y, x) in aps:
+        box_q = [(_local_quality(g[y - box_half:y + box_half, x - box_half:x + box_half]), i)
+                 for i, g in enumerate(grays)]
+        box_q.sort(key=lambda t: -t[0])
+        ap_sel.append([i for _, i in box_q[:keep_n]])
     pf = max(0.05, min(1.0, float(pixfrac)))
 
     def _drizzle_drop(acc2, wsum2, patch, hpatch, cx, cy):
@@ -422,10 +430,7 @@ def lucky_stack_map(path, keep_global=0.6, keep_local=0.3, max_load=200,
         acc2 = np.zeros((H2, W2, 3), np.float64)
         wsum2 = np.zeros((H2, W2), np.float64)
         for k, (y, x) in enumerate(aps):
-            box_q = [(_local_quality(g[y - box_half:y + box_half, x - box_half:x + box_half]), i)
-                     for i, g in enumerate(grays)]
-            box_q.sort(key=lambda t: -t[0])
-            sel = [i for _, i in box_q[:keep_n]]
+            sel = ap_sel[k]                                   # vorab berechnet (pass-invariant)
             tpl = template_g[y - box_half:y + box_half, x - box_half:x + box_half]
             patches = []
             for i in sel:

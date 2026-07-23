@@ -14,8 +14,6 @@ import os
 import shutil
 import subprocess
 
-_MAC = "/Applications"
-
 
 def _ensure_uncompressed_tif(infile):
     """GraXpert/StarNet (tifffile-basiert) können LZW-komprimierte TIFFs NICHT lesen
@@ -74,14 +72,6 @@ def find_starnet(explicit=None):
     return None
 
 
-def graxpert_available(explicit=None):
-    return find_graxpert(explicit) is not None
-
-
-def starnet_available(explicit=None):
-    return find_starnet(explicit) is not None
-
-
 def run_graxpert(infile, outfile=None, op="background-extraction", path=None, log=print):
     """GraXpert headless auf eine Datei anwenden. Gibt den Ergebnis-Pfad zurück.
     op: 'background-extraction' (Standard) | 'denoising'."""
@@ -91,6 +81,11 @@ def run_graxpert(infile, outfile=None, op="background-extraction", path=None, lo
     if outfile is None:
         b, e = os.path.splitext(infile)
         outfile = f"{b}_graxpert{e or '.tif'}"
+    if os.path.isfile(outfile):                             # Stale-Output-Falle: alte Ausgabe eines
+        try:                                                # früheren Laufs würde sonst als frisches
+            os.remove(outfile)                              # Ergebnis durchgehen
+        except OSError:
+            pass
     infile = _ensure_uncompressed_tif(infile)               # gegen LZW-Lesefehler in GraXpert
     cmd = [exe, "-cli", "-cmd", op, infile, "-output", outfile, "-gpu", "true"]  # GPU (CoreML/CUDA)
     log("  GraXpert: " + " ".join(cmd))
@@ -98,6 +93,9 @@ def run_graxpert(infile, outfile=None, op="background-extraction", path=None, lo
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=1800)
     except subprocess.TimeoutExpired:
         raise RuntimeError("GraXpert: Zeitüberschreitung (30 min)")
+    if proc.returncode != 0:                                # Fehl-Exit nicht stillschweigend schlucken
+        tail = (proc.stderr or proc.stdout or "")[-400:]
+        raise RuntimeError(f"GraXpert-Fehler (Exit {proc.returncode}). Log-Ende:\n" + tail)
     # GraXpert hängt je nach Version ein Suffix an — flexibel nach dem Ergebnis suchen
     if os.path.isfile(outfile):
         return outfile
@@ -122,6 +120,11 @@ def run_starnet(infile, outfile=None, path=None, log=print):
         b, e = os.path.splitext(infile)
         outfile = f"{b}_starless{e or '.tif'}"
     outfile = os.path.abspath(outfile)
+    if os.path.isfile(outfile):               # Stale-Output-Falle (siehe run_graxpert)
+        try:
+            os.remove(outfile)
+        except OSError:
+            pass
     workdir = os.path.dirname(exe)            # Gewichte + dylibs liegen hier
     cmd = [exe, infile, outfile]
     log("  StarNet++: " + " ".join(cmd) + f"  (cwd={workdir})")
@@ -129,6 +132,9 @@ def run_starnet(infile, outfile=None, path=None, log=print):
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=1800, cwd=workdir)
     except subprocess.TimeoutExpired:
         raise RuntimeError("StarNet++: Zeitüberschreitung (30 min)")
+    if proc.returncode != 0:                  # Fehl-Exit nicht stillschweigend schlucken
+        tail = (proc.stderr or proc.stdout or "")[-400:]
+        raise RuntimeError(f"StarNet++-Fehler (Exit {proc.returncode}). Log-Ende:\n" + tail)
     if os.path.isfile(outfile):
         return outfile
     cand = _newest_sibling(outfile, infile)
@@ -178,7 +184,12 @@ def _newest_sibling(expected, infile):
     cands = []
     for f in os.listdir(d):
         p = os.path.join(d, f)
-        if (p != infile and os.path.splitext(f)[1].lower() in (".tif", ".tiff", ".fits", ".fit", ".png")
-                and os.path.getmtime(p) >= in_mtime):
-            cands.append(p)
-    return max(cands, key=os.path.getmtime) if cands else None
+        if p == infile or os.path.splitext(f)[1].lower() not in (".tif", ".tiff", ".fits", ".fit", ".png"):
+            continue
+        try:                                   # Datei kann zwischen listdir und getmtime verschwinden
+            m = os.path.getmtime(p)
+        except OSError:
+            continue
+        if m >= in_mtime:
+            cands.append((m, p))
+    return max(cands)[1] if cands else None

@@ -6,13 +6,13 @@ Enthält die hochwertigen Bausteine, die ForgePix' Editor bisher fehlten:
   • highlight_reconstruct — ausgebrannte Lichter rekonstruieren (Kanal-Verhältnis-Füllung +
     Entsättigen-zu-Weiß gegen magenta Lichter)
   • tone_curve_lut / apply_lut — Tonwertkurve (PCHIP-Punkt-Kurve, ohne Überschwingen)
-  • fast_denoise — kantenerhaltendes Entrauschen (Non-Local-Means, Luma/Chroma)
-  • gradient_mask / radial_mask / refine_mask — lokale Anpassungs-Masken (Smoothstep + Guided Filter)
+  • gradient_mask / radial_mask — lokale Anpassungs-Masken (Smoothstep)
 
 Schärfung (Wavelet/Unsharp) liegt in wavelet.py. Reine OpenCV/NumPy(/scipy)-Abhängigkeiten.
 """
 import numpy as np
 import cv2
+from constants import luma
 
 
 def _as_float(img):
@@ -42,31 +42,40 @@ def highlight_reconstruct(img, thresh=0.92, sigma=8.0):
         den = cv2.GaussianBlur(valid, (0, 0), sigma) + 1e-6
         filled = num / den
         out[..., c] = np.where(clipped, np.maximum(ch, filled), ch)
-    anyclip = (f >= thresh).any(axis=2)
-    if anyclip.any():
+    # NUR voll geclippte Pixel (alle Kanäle ausgebrannt) zu Weiß entsättigen — .any() würde jedes
+    # teil-geclippte Pixel weiß ziehen und die Ratio-Rekonstruktion oben wieder überschreiben.
+    allclip = (f >= thresh).all(axis=2)
+    if allclip.any():
         mx = out.max(axis=2, keepdims=True)
         neutral = np.maximum(out, mx * 0.92)                  # Kanäle Richtung Pixel-Maximum → weiß
-        m = anyclip[..., None]
+        m = allclip[..., None]
         out = np.where(m, neutral, out)
     out = np.clip(out, 0, 1)
     return (out * maxv).astype(dtype) if dtype != np.float32 else out
 
 
+_scipy_warned = False
+
+
 def tone_curve_lut(points, bits=16):
     """Monotone PCHIP-Punkt-Kurve → LUT (kein Überschwingen, anders als natürlicher Spline).
     points: Liste (x,y) in [0,1], (0,0)/(1,1) werden ergänzt."""
+    global _scipy_warned
     try:
         from scipy.interpolate import PchipInterpolator
-        pts = dict(points)
-        pts.setdefault(0.0, 0.0); pts.setdefault(1.0, 1.0)
-        xs = np.array(sorted(pts)); ys = np.array([pts[x] for x in xs])
-        spl = PchipInterpolator(xs, ys)
-        n = 1 << bits
-        grid = np.linspace(0, 1, n)
-        return np.clip(spl(grid), 0, 1).astype(np.float32)
-    except Exception:
+    except ImportError:                                       # gezielt: NUR fehlendes scipy fällt
+        if not _scipy_warned:                                 # zurück — und das nicht mehr still
+            print("    Hinweis: scipy fehlt — Tonwertkurve inaktiv (lineare LUT)")
+            _scipy_warned = True
         n = 1 << bits
         return np.linspace(0, 1, n, dtype=np.float32)
+    pts = dict(points)
+    pts.setdefault(0.0, 0.0); pts.setdefault(1.0, 1.0)
+    xs = np.array(sorted(pts)); ys = np.array([pts[x] for x in xs])
+    spl = PchipInterpolator(xs, ys)
+    n = 1 << bits
+    grid = np.linspace(0, 1, n)
+    return np.clip(spl(grid), 0, 1).astype(np.float32)
 
 
 def apply_lut(img, lut01):
@@ -74,26 +83,13 @@ def apply_lut(img, lut01):
     f, dtype, maxv = _as_float(img)
     n = len(lut01)
     if f.ndim == 3:
-        y = 0.114 * f[..., 0] + 0.587 * f[..., 1] + 0.299 * f[..., 2]
+        y = luma(f)                                          # Rec.709 (einheitlich via constants)
         idx = np.clip(y * (n - 1), 0, n - 1).astype(np.int32)
         gain = np.where(y > 1e-4, lut01[idx] / np.maximum(y, 1e-4), 1.0)[..., None]
         out = np.clip(f * gain, 0, 1)
     else:
         idx = np.clip(f * (n - 1), 0, n - 1).astype(np.int32)
         out = lut01[idx]
-    return (out * maxv).astype(dtype) if dtype != np.float32 else out
-
-
-def fast_denoise(img, luma=7.0, chroma=10.0):
-    """Kantenerhaltendes Entrauschen (Non-Local-Means, getrennt Luma/Chroma). Schnell genug für
-    die Vorschau. Für stärkstes Entrauschen multiskalig → wavelet.wavelet_denoise."""
-    f, dtype, maxv = _as_float(img)
-    u8 = (np.clip(f, 0, 1) * 255).astype(np.uint8)
-    if u8.ndim == 3:
-        d = cv2.fastNlMeansDenoisingColored(u8, None, float(luma), float(chroma), 7, 21)
-    else:
-        d = cv2.fastNlMeansDenoising(u8, None, float(luma), 7, 21)
-    out = d.astype(np.float32) / 255.0
     return (out * maxv).astype(dtype) if dtype != np.float32 else out
 
 
@@ -181,14 +177,14 @@ def dehaze(img, strength=1.0, omega=0.9, patch=15):
     flat = dark.ravel()
     n = max(1, int(flat.size * 0.001))
     idx = np.argpartition(flat, -n)[-n:]                    # hellste 0.1% des Dark Channels
-    g = cv2.cvtColor((f * 255).astype(np.uint8), cv2.COLOR_BGR2GRAY).ravel()
+    gray_u8 = cv2.cvtColor((f * 255).astype(np.uint8), cv2.COLOR_BGR2GRAY)  # einmal, doppelt genutzt
+    g = gray_u8.ravel()
     A = f.reshape(-1, 3)[idx][np.argmax(g[idx])]            # Atmosphärenlicht
     A = np.clip(A, 1e-3, 1.0)
     t = 1.0 - omega * cv2.erode((f / A).min(axis=2),
                                 cv2.getStructuringElement(cv2.MORPH_RECT, (patch, patch)))
     try:                                                    # Transmission kantentreu verfeinern
-        t = cv2.ximgproc.guidedFilter(cv2.cvtColor((f * 255).astype(np.uint8), cv2.COLOR_BGR2GRAY),
-                                      t.astype(np.float32), 40, 1e-3)
+        t = cv2.ximgproc.guidedFilter(gray_u8, t.astype(np.float32), 40, 1e-3)
     except Exception:
         t = cv2.GaussianBlur(t, (0, 0), 8)
     t = np.clip(t, 0.1, 1.0)[..., None]
@@ -223,17 +219,6 @@ def radial_mask(shape, cx, cy, rx, ry, feather=0.3):
     return (1.0 - _smoothstep(1.0 - feather, 1.0, r)).astype(np.float32)
 
 
-def refine_mask(mask, guide_img, radius=16, eps=1e-3):
-    """Maske kanten-treu an die Bildkanten anschmiegen (Guided Filter), falls verfügbar."""
-    try:
-        g = cv2.cvtColor(guide_img, cv2.COLOR_BGR2GRAY) if guide_img.ndim == 3 else guide_img
-        g = g.astype(np.float32) / (65535.0 if g.dtype == np.uint16 else 255.0) \
-            if g.dtype != np.float32 else g
-        return cv2.ximgproc.guidedFilter(g, mask.astype(np.float32), radius, eps)
-    except Exception:
-        return cv2.GaussianBlur(mask.astype(np.float32), (0, 0), 3.0)
-
-
 def _lensfun_auto(f, exif_path, log=print):
     """Automatische Objektivkorrektur über die lensfun-Datenbank (Vignette + Verzeichnung + TCA),
     anhand der Kamera-/Objektiv-Angaben aus den EXIF-Daten. Nur aktiv, wenn lensfunpy installiert
@@ -259,8 +244,8 @@ def _lensfun_auto(f, exif_path, log=print):
         out = f.copy()
         try:
             mod.apply_color_modification(out)            # Vignette
-        except Exception:
-            pass
+        except Exception as e:                           # nicht still — kurz vermerken
+            log(f"    Objektivkorrektur: Vignetten-Korrektur übersprungen ({e})")
         coords = mod.apply_geometry_distortion()         # Verzeichnung (+TCA, falls Profil)
         if coords is not None:
             out = cv2.remap(out, coords, None, cv2.INTER_LANCZOS4, borderMode=cv2.BORDER_REFLECT)
@@ -491,8 +476,8 @@ def filmic_tonemap(linear_bgr, contrast=1.0, pivot=0.18, latitude=0.6,
         return (out * maxv).astype(dtype) if dtype != np.float32 else out
     x = f.astype(np.float64)
     x = np.clip(x, 0.0, None)                       # szenenbezogen: keine negativen Werte
-    # Rec.709-Luminanz auf LINEAREM RGB (BGR-Reihenfolge)
-    L = 0.0722 * x[..., 0] + 0.7152 * x[..., 1] + 0.2126 * x[..., 2]
+    # Rec.709-Luminanz auf LINEAREM RGB (BGR-Reihenfolge, einheitlich via constants)
+    L = luma(x)
     L = np.maximum(L, 1e-8)
     Lout = _filmic_curve(L, contrast, pivot, latitude, white, black)
     ratio = (Lout / L)[..., None]                  # ratio-preserving: Hue/Sat bleiben
@@ -563,8 +548,8 @@ def _wavelet_denoise_channel(ch, thresh):
 
 def denoise_chroma_luma(img, luma=1.0, chroma=1.0, iso=None):
     """Wavelet-/kantenerhaltendes Entrauschen, GETRENNT auf Luma und Chroma, in
-    FLOAT gerechnet (16-bit bleibt erhalten — anders als fast_denoise, das auf
-    uint8 zwingt). Chroma kann stärker entrauscht werden als Luma (Farbrauschen ist
+    FLOAT gerechnet (16-bit bleibt erhalten — nichts wird auf
+    uint8 gezwungen). Chroma kann stärker entrauscht werden als Luma (Farbrauschen ist
     grobkörniger), ohne Detailverlust in der Helligkeit.
 
       img    : (...,3) BGR uint8/uint16/float oder Graustufen
@@ -629,10 +614,7 @@ def parametric_mask(img, by="luminance", lo=0.0, hi=1.0, feather=0.1):
     fw = max(float(feather), 1e-4)
 
     if by == "luminance":
-        if fc.ndim == 3:
-            v = 0.0722 * fc[..., 0] + 0.7152 * fc[..., 1] + 0.2126 * fc[..., 2]
-        else:
-            v = fc
+        v = luma(fc) if fc.ndim == 3 else fc                 # Rec.709 (einheitlich via constants)
         return _band_mask(v, lo, hi, fw)
 
     if fc.ndim != 3:

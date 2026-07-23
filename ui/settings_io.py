@@ -3,6 +3,12 @@
 from PySide6.QtCore import QSettings
 
 
+def app_settings():
+    """Zentrale QSettings-Factory — EINE Stelle für Org-/App-Namen statt elf
+    verstreuter `QSettings("ServeOne", "ForgePix")`-Kopien (Tippfehler-Schutz)."""
+    return QSettings("ServeOne", "ForgePix")
+
+
 class SettingsMixin:
     """Mappt Widgets <-> QSettings und stellt sie beim Start wieder her (inkl. Alt-Namen-Migration)."""
 
@@ -49,12 +55,12 @@ class SettingsMixin:
         }
 
     def _save_settings(self):
-        st = QSettings("ServeOne", "ForgePix")
+        st = app_settings()
         for k, (_set, get) in self._settings_map().items():
             st.setValue(k, get())
 
     def _restore_settings(self):
-        st = QSettings("ServeOne", "ForgePix")
+        st = app_settings()
         # Einmalige Migration: Einstellungen vom alten Namen „StackForge" übernehmen
         if not st.allKeys():
             old = QSettings("ServeOne", "StackForge")

@@ -44,27 +44,41 @@ def sharpen(bgr01, mode="Non-Stellar Only", nonstellar_strength=2.0, nonstellar_
     exe_dir = os.path.dirname(cli)
     indir, outdir = os.path.join(exe_dir, "input"), os.path.join(exe_dir, "output")
     os.makedirs(indir, exist_ok=True); os.makedirs(outdir, exist_ok=True)
-    for f in glob.glob(os.path.join(indir, "*")) + glob.glob(os.path.join(outdir, "*")):
-        os.remove(f)
+    # Eindeutiger Dateiname pro Lauf (PID + UUID) statt die input/output-Ordner komplett zu
+    # wischen — parallele/fremde Dateien in den Tool-Ordnern bleiben unangetastet; die eigenen
+    # Dateien werden im finally wieder entfernt.
+    import uuid
     import tifffile
-    rgb16 = (np.clip(cv2.cvtColor(np.asarray(bgr01, np.float32), cv2.COLOR_BGR2RGB), 0, 1)
-             * 65535).astype(np.uint16)
-    tifffile.imwrite(os.path.join(indir, "ccin.tif"), rgb16, photometric="rgb")
-    cmd = [cli, "--sharpening_mode", mode,
-           "--nonstellar_strength", str(nonstellar_strength),
-           "--nonstellar_amount", str(nonstellar_amount),
-           "--stellar_amount", str(stellar_amount)]
-    if auto_psf:
-        cmd.append("--auto_detect_psf")
-    if not gpu:
-        cmd.append("--disable_gpu")
-    log(f"    Cosmic Clarity Schärfung ({mode}, GPU={gpu}) …")
-    subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, cwd=exe_dir)
-    outs = glob.glob(os.path.join(outdir, "*.tif")) + glob.glob(os.path.join(outdir, "*.tiff"))
-    if not outs:
-        raise RuntimeError("Cosmic Clarity lieferte keine Ausgabe")
-    g = tifffile.imread(outs[0]).astype(np.float32)
-    g = g / 65535.0 if g.max() > 1.5 else g
-    if g.ndim == 3:
-        g = cv2.cvtColor(g, cv2.COLOR_RGB2BGR)
-    return np.clip(g, 0, 1)
+    import siril_engine
+    stem = f"ccin_{os.getpid()}_{uuid.uuid4().hex[:8]}"
+    inp = os.path.join(indir, stem + ".tif")
+    outs = []
+    try:
+        siril_engine.write_tiff16(inp, bgr01)               # gemeinsamer 16-bit-Writer
+        cmd = [cli, "--sharpening_mode", mode,
+               "--nonstellar_strength", str(nonstellar_strength),
+               "--nonstellar_amount", str(nonstellar_amount),
+               "--stellar_amount", str(stellar_amount)]
+        if auto_psf:
+            cmd.append("--auto_detect_psf")
+        if not gpu:
+            cmd.append("--disable_gpu")
+        log(f"    Cosmic Clarity Schärfung ({mode}, GPU={gpu}) …")
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, cwd=exe_dir)
+        # nur die EIGENE Ausgabe (<stem>_sharpened.tif) einsammeln, keine fremden Dateien
+        outs = sorted(glob.glob(os.path.join(outdir, stem + "*")))
+        if not outs:
+            tail = ((proc.stderr or proc.stdout or "").strip())[-300:]
+            raise RuntimeError(f"Cosmic Clarity lieferte keine Ausgabe (rc={proc.returncode})"
+                               + (f": {tail}" if tail else ""))
+        g = tifffile.imread(outs[0]).astype(np.float32)
+        g = g / 65535.0 if g.max() > 1.5 else g
+        if g.ndim == 3:
+            g = cv2.cvtColor(g, cv2.COLOR_RGB2BGR)
+        return np.clip(g, 0, 1)
+    finally:
+        for f in [inp] + list(outs):
+            try:
+                os.remove(f)
+            except OSError:
+                pass

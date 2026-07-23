@@ -7,12 +7,13 @@ MainWindow zu; reine UI-Erzeugung ohne eigene Zustandshaltung.
 """
 import os
 
-from PySide6.QtCore import Qt, QSettings
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel,
                                QPushButton, QDialog, QScrollArea)
 
 from i18n import tr
+from ui.settings_io import app_settings
 from ui.appinfo import ICON_PNG
 
 
@@ -107,7 +108,7 @@ class WelcomeMixin:
         lay.addWidget(steps)
 
         # „Weiter wo du warst" — zuletzt verwendeten Ordner mit einem Klick wieder laden
-        last = QSettings("ServeOne", "ForgePix").value("in", "") or ""
+        last = app_settings().value("in", "") or ""
         if last and os.path.isdir(last):
             lay.addSpacing(14)
             rrow = QHBoxLayout(); rrow.addStretch(1)
@@ -123,7 +124,7 @@ class WelcomeMixin:
     def _resume_last(self, folder):
         """Zuletzt verwendeten Ordner + Modul wiederherstellen und in den Arbeitsbereich wechseln."""
         try:
-            ti = int(QSettings("ServeOne", "ForgePix").value("task_i", self.task_box.currentIndex()))
+            ti = int(app_settings().value("task_i", self.task_box.currentIndex()))
         except (TypeError, ValueError):
             ti = self.task_box.currentIndex()
         self._choose_module(ti)

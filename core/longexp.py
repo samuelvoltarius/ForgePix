@@ -216,8 +216,10 @@ def combine(paths, mode="smooth", align="none", strength=1.0, work_dir=None, det
         imgs = [im for im in imgs if im is not None]
         if not imgs:
             raise RuntimeError("keine lesbaren Aufnahmen für die Ausrichtung")
-        h, w = imgs[len(imgs) // 2].shape[:2]
-        imgs = [cv2.resize(im, (w, h)) if im.shape[:2] != (h, w) else im for im in imgs]
+        # gemeinsamer Resize-Helper aus hdr (kein Import-Zyklus: hdr importiert longexp nicht);
+        # Referenzgröße = mittleres Bild der Serie
+        from hdr import _resize_like_first
+        imgs = _resize_like_first(imgs, imgs[len(imgs) // 2].shape[:2])
         imgs = stacker.align_images(imgs, mode=transform, detector=detector)
         adir = os.path.join(work_dir, "_le_aligned")
         os.makedirs(adir, exist_ok=True)
@@ -327,6 +329,10 @@ def suggest_mode(paths, max_side=900, sample=8):
         if s > max_side:
             f = max_side / s
             im = cv2.resize(im, (int(im.shape[1] * f), int(im.shape[0] * f)))
+        # alle Frames auf die Shape des ERSTEN bringen — gemischte Größen in der Serie würden
+        # sonst unten np.stack crashen
+        if colors and im.shape[:2] != colors[0].shape[:2]:
+            im = cv2.resize(im, (colors[0].shape[1], colors[0].shape[0]))
         colors.append(im.astype(np.float32))
         grays.append(cv2.cvtColor(im, cv2.COLOR_BGR2GRAY).astype(np.float32))
     if len(grays) < 2:

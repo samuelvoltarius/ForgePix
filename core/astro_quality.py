@@ -31,7 +31,9 @@ def _read_gray(path, max_side=1600):
             rgb = raw.postprocess(output_bps=8, use_camera_wb=True, no_auto_bright=True, half_size=True)
         g = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
     else:
-        g = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
+        # ANYDEPTH: 16-bit-TIFF/PNG in voller Tiefe laden (IMREAD_GRAYSCALE allein stutzt sofort
+        # auf 8 bit — der uint16-Zweig unten war dadurch unerreichbar) und sauber wandeln.
+        g = cv2.imread(path, cv2.IMREAD_GRAYSCALE | cv2.IMREAD_ANYDEPTH)
     if g is None:
         return None
     if g.dtype == np.uint16:
@@ -51,11 +53,12 @@ def detect_stars(gray, max_stars=120):
     mask = (gray > bg + 5 * sigma).astype(np.uint8)
     n, labels, stats, _cent = cv2.connectedComponentsWithStats(mask, 8)
     order = np.argsort(-stats[1:, cv2.CC_STAT_AREA]) + 1  # größte zuerst
+    # ERST nach Fläche filtern, DANN Top-N nehmen — sonst verbrauchen große Nebel-/Wolken-Blobs
+    # das max_stars-Budget und echte Sterne fallen heraus.
+    order = [i for i in order if 3 <= int(stats[i, cv2.CC_STAT_AREA]) <= 800]
     stars = []
     for i in order[:max_stars]:
         area = int(stats[i, cv2.CC_STAT_AREA])
-        if area < 3 or area > 800:
-            continue
         ys, xs = np.where(labels == i)
         if len(xs) < 3:
             continue

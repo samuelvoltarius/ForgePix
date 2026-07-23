@@ -15,7 +15,7 @@ import cv2
 _MODEL = os.path.expanduser("~/.forgepix/models/realesrgan_x2.onnx")
 _SCALE = 2
 _TILE = 64
-_session = None
+_sessions = {}                      # Cache je aufgelöstem Modellpfad (Modellwechsel muss greifen)
 
 
 def model_path(path=None):
@@ -31,13 +31,15 @@ def available(path=None):
 
 
 def _get_session(path=None):
-    global _session
-    if _session is None:
+    # Cache-Key = aufgelöster Modellpfad — ein globaler Einzel-Cache würde einen späteren
+    # Modellwechsel stillschweigend ignorieren (immer die erste Session zurückgeben).
+    key = os.path.abspath(model_path(path))
+    if key not in _sessions:
         import onnxruntime as ort
         prov = [p for p in ("CoreMLExecutionProvider", "CUDAExecutionProvider", "CPUExecutionProvider")
                 if p in ort.get_available_providers()]
-        _session = ort.InferenceSession(model_path(path), providers=prov)
-    return _session
+        _sessions[key] = ort.InferenceSession(key, providers=prov)
+    return _sessions[key]
 
 
 def upscale(bgr01, overlap=8, blend=0.65, path=None, log=print):
@@ -71,8 +73,13 @@ def upscale(bgr01, overlap=8, blend=0.65, path=None, log=print):
             out = sess.run(None, {iname: inp})[0][0]            # (3, 128, 128)
             out = np.clip(np.transpose(out, (1, 2, 0)), 0, 1)
             oy, ox = y0 * _SCALE, x0 * _SCALE
-            acc[oy:oy + _TILE * _SCALE, ox:ox + _TILE * _SCALE] += out * win
-            wsum[oy:oy + _TILE * _SCALE, ox:ox + _TILE * _SCALE] += win
+            # Bei Bildern < 64 px Kante wurde die Kachel auf 64 gepolstert — das Modell liefert
+            # trotzdem 128: Ausgabe/Gewicht auf die tatsächliche Slice-Größe zuschneiden, sonst
+            # Broadcast-ValueError gegen das kleinere Akku-Gitter.
+            th = min(_TILE * _SCALE, OH - oy)
+            tw = min(_TILE * _SCALE, OW - ox)
+            acc[oy:oy + th, ox:ox + tw] += out[:th, :tw] * win[:th, :tw]
+            wsum[oy:oy + th, ox:ox + tw] += win[:th, :tw]
     res = acc / np.maximum(wsum, 1e-6)
     out = np.clip(cv2.cvtColor(res, cv2.COLOR_RGB2BGR), 0, 1)
     if blend < 1.0:                                         # KI-„Plastik" mit Lanczos-Textur mischen

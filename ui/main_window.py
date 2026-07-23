@@ -9,12 +9,14 @@ Einstiegspunkt: focus_stack_gui.py (dünner Launcher) bzw. ForgePix.app.
 import os
 import re
 import sys
+import tempfile
 
 from i18n import tr, set_language, available_languages, current_language
+from constants import to_uint8, RAW_EXTS
 
 
 
-from PySide6.QtCore import Qt, QProcess, QSettings, QSize, QTimer
+from PySide6.QtCore import Qt, QProcess, QSize, QTimer
 from PySide6.QtGui import (QPixmap, QFont, QIcon, QShortcut, QKeySequence, QAction)
 from PySide6.QtWidgets import (
     QApplication, QWidget, QMainWindow, QVBoxLayout, QHBoxLayout, QGridLayout,
@@ -38,14 +40,14 @@ from ui.appinfo import SCRIPT, ICON, ICON_PNG, APP_NAME, _cache_path  # noqa: E4
 
 from ui.theme import THEME
 from ui.welcome import WelcomeMixin
-from ui.settings_io import SettingsMixin
+from ui.settings_io import SettingsMixin, app_settings
 from ui.export import ExportMixin
 from ui.result_view import ResultMixin
 from ui.components import (CompareSlider, AdjustDialog, RetouchDialog, ControlPointDialog,
                            help_btn, _row, reveal_in_files, open_path, notify, CollapsibleSection)
 
 
-from ui.workers import _AnalyzeWorker, _UpdateChecker, _version_newer  # noqa: F401
+from ui.workers import _AnalyzeWorker, _ToolWorker, _UpdateChecker, _version_newer  # noqa: F401
 
 
 class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWindow):
@@ -162,9 +164,9 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         self.chk_updates.setToolTip(tr("Fragt einmal beim Start die GitHub-Releases ab und zeigt "
                                        "einen Hinweis, wenn eine neuere Version vorliegt. Keine Daten gesendet."))
         self.chk_updates.setChecked(
-            QSettings("ServeOne", "ForgePix").value("check_updates", "1") != "0")
+            app_settings().value("check_updates", "1") != "0")
         self.chk_updates.toggled.connect(
-            lambda on: QSettings("ServeOne", "ForgePix").setValue("check_updates", "1" if on else "0"))
+            lambda on: app_settings().setValue("check_updates", "1" if on else "0"))
         self._settings_lay.addWidget(self.chk_updates)
 
         # Externe Tools (optional) — Pfade frei einstellbar; leer = automatisch suchen
@@ -240,6 +242,9 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         pg = QVBoxLayout(g_paths)
         self.in_edit = QLineEdit()
         self.in_edit.setPlaceholderText(tr("Ordner mit den Aufnahmen …"))
+        # Ordnerwechsel = neues Projekt → Zusatz-Sessions verwerfen (klebten sonst bis App-Neustart
+        # an JEDEM weiteren Astro-Lauf)
+        self.in_edit.textChanged.connect(self._clear_extra_sessions)
         in_btn = QPushButton(tr("Wählen…")); in_btn.clicked.connect(self.pick_input)
         ih = _row(tr("Eingabe-Ordner"), self.in_edit); ih.addWidget(in_btn)
         pg.addLayout(ih)
@@ -955,12 +960,12 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         note.setWordWrap(True); note.setObjectName("hint")
         vg.addWidget(note)
         self.vlm_provider = QComboBox()
-        # (Anzeige, Endpoint, Modell-Vorschlag, braucht_key)
+        # (Anzeige → Endpoint, Modell-Vorschlag)
         self._providers = {
-            "Lokal / eigener Server": ("http://localhost:8000/v1", "", False),
-            "OpenAI (API-Key)": ("https://api.openai.com/v1", "gpt-4o-mini", True),
-            "OpenRouter (API-Key)": ("https://openrouter.ai/api/v1", "google/gemini-2.0-flash-exp", True),
-            "Eigene Adresse": ("", "", False),
+            "Lokal / eigener Server": ("http://localhost:8000/v1", ""),
+            "OpenAI (API-Key)": ("https://api.openai.com/v1", "gpt-4o-mini"),
+            "OpenRouter (API-Key)": ("https://openrouter.ai/api/v1", "google/gemini-2.0-flash-exp"),
+            "Eigene Adresse": ("", ""),
         }
         self.vlm_provider.addItems(list(self._providers.keys()))
         self.vlm_provider.currentTextChanged.connect(self._on_provider)
@@ -1168,7 +1173,7 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
 
     def _maybe_check_updates(self):
         """Beim Start einmal leise auf eine neuere Version prüfen (wenn nicht abgeschaltet)."""
-        if QSettings("ServeOne", "ForgePix").value("check_updates", "1") == "0":
+        if app_settings().value("check_updates", "1") == "0":
             return
         self._updchk = _UpdateChecker()
         self._updchk.found.connect(self._on_update_found)
@@ -1185,7 +1190,7 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
 
     def _on_language(self, _i):
         code = self._lang_codes[self.lang_box.currentIndex()]
-        QSettings("ServeOne", "ForgePix").setValue("language", code)
+        app_settings().setValue("language", code)
         QMessageBox.information(self, tr("Sprache:"),
                                 "Die Sprache wird beim nächsten Start angewendet.\n"
                                 "Language will be applied on next start.")
@@ -1254,7 +1259,7 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         ("Ctrl+Shift+Return", "Manuell starten (Profi)"),
         ("Ctrl+E", "Exportieren"),
         ("Esc", "Stop / zurück zur Modul-Auswahl"),
-        ("Ctrl+1 … Ctrl+4", "Modul: Makro / Astro / Hybrid / Langzeit"),
+        ("Ctrl+1 … Ctrl+5", "Modul: Makro / Astro / Hybrid / Langzeit / HDR"),
         ("Ctrl+B", "Anfänger ⟷ Profi umschalten"),
         ("Ctrl+M", "Zur Modul-Auswahl"),
         ("Ctrl+,", "Setup-Menü"),
@@ -1275,14 +1280,13 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         sc("Ctrl+B", lambda: self.mode_box.setCurrentIndex(1 - self.mode_box.currentIndex()))
         sc("Ctrl+M", lambda: self.top_stack.setCurrentIndex(0))
         sc("Ctrl+E", self.export_result)
-        sc("Ctrl+Shift+A", lambda: self.analyze_series() if not self.is_astro and not self.is_hybrid
-           and not self.is_longexp else None)
+        sc("Ctrl+Shift+A", lambda: self.analyze_series() if self._is_makro() else None)
         sc("Ctrl+D", self.open_dof)
         sc("Ctrl+]", lambda: self._go_step(1))
         sc("Ctrl+[", lambda: self._go_step(-1))
         sc("F1", self._show_shortcuts)
         sc("Ctrl+/", self._show_shortcuts)
-        for n in range(4):
+        for n in range(self.task_box.count()):    # Ctrl+1…5 — inkl. HDR (Modul 5)
             sc(f"Ctrl+{n + 1}", lambda i=n: self._choose_module(i))
         sc("Esc", self._on_escape)
 
@@ -1327,6 +1331,12 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
             self.auto_btn.setText(tr("🌃  Fokus+Astro stacken") if fa
                                   else tr("🌗  Mosaik erstellen"))
 
+    def _is_makro(self):
+        """Makro (Fokus) = keines der Spezialmodule aktiv. Eine Stelle statt fünf
+        kopierter Ausdrücke — die Kopien hatten teils `is_hdr` vergessen."""
+        return not (getattr(self, "is_astro", False) or getattr(self, "is_hybrid", False)
+                    or getattr(self, "is_longexp", False) or getattr(self, "is_hdr", False))
+
     def _apply_visibility(self):
         """Eine zentrale Stelle: zeigt nur, was zu Modus (Anfänger/Profi) UND
         Aufgabe (Makro/Astro) passt. Das jeweils andere ist komplett ausgeblendet."""
@@ -1335,7 +1345,7 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         hybrid = getattr(self, "is_hybrid", False)
         longexp = getattr(self, "is_longexp", False)
         hdr = getattr(self, "is_hdr", False)
-        makro = not astro and not hybrid and not longexp and not hdr
+        makro = self._is_makro()
         self._set_step(0)
         self.astro_group.setVisible(astro)
         self.mosaic_group.setVisible(hybrid)
@@ -1405,9 +1415,7 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
                     self._append(tr("⚡ Anfänger-Modus: starte Automatik …") + "\n")
                     QTimer.singleShot(200, lambda: self.run(auto=True))
                 else:
-                    makro = not (getattr(self, "is_astro", False) or getattr(self, "is_hybrid", False)
-                                 or getattr(self, "is_longexp", False))
-                    if makro:  # Profi-Makro: gleich Reihen-Analyse
+                    if self._is_makro():  # Profi-Makro: gleich Reihen-Analyse
                         self.analyze_series()
                 break
 
@@ -1428,28 +1436,28 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
 
     # ---------- Ordnerauswahl ----------
     def pick_input(self):
-        d = QFileDialog.getExistingDirectory(self, "Eingabe-Ordner wählen", self.in_edit.text() or os.path.expanduser("~"))
+        d = QFileDialog.getExistingDirectory(self, tr("Eingabe-Ordner wählen"), self.in_edit.text() or os.path.expanduser("~"))
         if d:
             self.in_edit.setText(d)
             self._set_status(tr("Ordner geladen: ") + os.path.basename(d), color="#58a6ff", bg="#14202e")
 
     def pick_work(self):
-        d = QFileDialog.getExistingDirectory(self, "Arbeits-Ordner wählen", self.work_edit.text() or os.path.expanduser("~"))
+        d = QFileDialog.getExistingDirectory(self, tr("Arbeits-Ordner wählen"), self.work_edit.text() or os.path.expanduser("~"))
         if d:
             self.work_edit.setText(d)
 
     def _pick_into(self, edit):
-        d = QFileDialog.getExistingDirectory(self, "Ordner wählen", edit.text() or os.path.expanduser("~"))
+        d = QFileDialog.getExistingDirectory(self, tr("Ordner wählen"), edit.text() or os.path.expanduser("~"))
         if d:
             edit.setText(d)
 
     def _pick_file_into(self, edit):
-        f, _ = QFileDialog.getOpenFileName(self, "Datei wählen", edit.text() or os.path.expanduser("~"))
+        f, _ = QFileDialog.getOpenFileName(self, tr("Datei wählen"), edit.text() or os.path.expanduser("~"))
         if f:
             edit.setText(f)
 
     def _on_provider(self, name):
-        ep, model, _needs = self._providers.get(name, ("", "", False))
+        ep, model = self._providers.get(name, ("", ""))
         if name != "Eigene Adresse":
             self.vlm_ep.setText(ep)
             self.vlm_model.setText(model)
@@ -1667,7 +1675,7 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
             return
         inp = self.in_edit.text().strip()
         if not inp or not os.path.isdir(inp):
-            QMessageBox.warning(self, "Fehler", "Bitte einen gültigen Eingabe-Ordner wählen.")
+            QMessageBox.warning(self, tr("Fehler"), tr("Bitte einen gültigen Eingabe-Ordner wählen."))
             return
         # Vorab-Check: genug Bilder vorhanden? (Astro/Langzeit/Mosaik brauchen ≥2)
         try:
@@ -1676,8 +1684,8 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
             if n == 0:  # evtl. Batch/Hybrid mit Unterordnern
                 n = sum(len(F.list_images(os.path.join(inp, d)))
                         for d in os.listdir(inp) if os.path.isdir(os.path.join(inp, d)))
-            need = 1 if (getattr(self, "is_longexp", False) is False and not getattr(self, "is_astro", False)
-                         and not getattr(self, "is_hybrid", False)) else 2
+            # Astro/Langzeit/Mosaik/HDR brauchen ≥2 Aufnahmen (HDR fehlte hier früher)
+            need = 1 if self._is_makro() else 2
             if n < max(need, 1) or (need == 2 and n < 2):
                 if QMessageBox.question(
                         self, tr("Wenige Bilder"),
@@ -1688,7 +1696,8 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
             pass
         args = self._build_args(auto)
         self.log.clear()
-        self.preview.setText("— läuft —"); self.preview.setPixmap(QPixmap())
+        # erst Pixmap leeren, DANN Text setzen — umgekehrt löscht setPixmap den Text sofort wieder
+        self.preview.setPixmap(QPixmap()); self.preview.setText(tr("— läuft —"))
         self.open_btn.setEnabled(False); self.retouch_btn.setEnabled(False)
         self.cmp_btn.setEnabled(False); self.openfolder_btn.setEnabled(False)
         self.export_btn.setEnabled(False); self.tools_btn.setEnabled(False)
@@ -1696,8 +1705,16 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         self.progress.setRange(0, 0); self.progress.show()  # erst „beschäftigt“
         if auto:
             self._append("⚡ AUTOMATIK — die KI bestimmt alle Einstellungen, max. Qualität.\n")
-        self._append(f"$ python3 {' '.join(args)}\n")
+        # API-Schlüssel im Log-Echo maskieren (Nutzer teilen Logs bei Bugreports)
+        shown = list(args)
+        for flag in ("--vlm-key", "--astrometry-key"):
+            if flag in shown and shown.index(flag) + 1 < len(shown):
+                shown[shown.index(flag) + 1] = "***"
+        self._append(f"$ python3 {' '.join(shown)}\n")
 
+        if self.proc is not None:
+            self.proc.deleteLater()   # alte QProcess-Instanz freigeben (akkumulierte sonst)
+        self._pending_out = b""       # Rest-Bytes einer evtl. zerteilten UTF-8-Sequenz
         self.proc = QProcess(self)
         self.proc.setProcessChannelMode(QProcess.MergedChannels)
         self.proc.readyReadStandardOutput.connect(self._on_output)
@@ -1718,11 +1735,11 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
     def suggest(self):
         inp = self.in_edit.text().strip()
         if not inp or not os.path.isdir(inp):
-            QMessageBox.warning(self, "Fehler", "Bitte zuerst einen gültigen Eingabe-Ordner wählen.")
+            QMessageBox.warning(self, tr("Fehler"), tr("Bitte zuerst einen gültigen Eingabe-Ordner wählen."))
             return
         ep = self.vlm_ep.text().strip()
         if not ep:
-            QMessageBox.warning(self, "Fehler", "Für den Vorschlag wird der VLM-Endpoint benötigt.")
+            QMessageBox.warning(self, tr("Fehler"), tr("Für den Vorschlag wird der VLM-Endpoint benötigt."))
             return
         args = [SCRIPT, "--input", os.path.abspath(inp), "--suggest",
                 "--vlm-endpoint", ep, "--vlm-model", self.vlm_model.text().strip() or "gpt-4o-mini",
@@ -1733,6 +1750,8 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
             args += ["--wish", self.vlm_wish.text().strip()]
         self._append("\n🤖 Hole KI-Vorschlag …\n")
         self.suggest_btn.setEnabled(False); self.run_btn.setEnabled(False); self.auto_btn.setEnabled(False)
+        if getattr(self, "sug_proc", None) is not None:
+            self.sug_proc.deleteLater()   # alte Instanz freigeben
         self.sug_proc = QProcess(self)
         self.sug_proc.readyReadStandardError.connect(
             lambda: self._append(ANSI.sub("", bytes(self.sug_proc.readAllStandardError()).decode(errors="replace"))))
@@ -1747,10 +1766,10 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
             sug = _json.loads(out)
         except Exception:
             self._append(f"\n[Vorschlag fehlgeschlagen] {out[:300]}\n")
-            QMessageBox.warning(self, "Vorschlag fehlgeschlagen", out[:500] or "keine Antwort")
+            QMessageBox.warning(self, tr("Vorschlag fehlgeschlagen"), out[:500] or tr("keine Antwort"))
             return
         if "error" in sug:
-            QMessageBox.warning(self, "Vorschlag fehlgeschlagen", str(sug["error"]))
+            QMessageBox.warning(self, tr("Vorschlag fehlgeschlagen"), str(sug["error"]))
             return
         self._show_suggestion(sug)
 
@@ -1773,8 +1792,8 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         box.setIcon(QMessageBox.Information)
         box.setText(tr("Vorgeschlagene Einstellungen:"))
         box.setInformativeText(summary)
-        apply_b = box.addButton("Übernehmen", QMessageBox.AcceptRole)
-        box.addButton("Verwerfen", QMessageBox.RejectRole)
+        apply_b = box.addButton(tr("Übernehmen"), QMessageBox.AcceptRole)
+        box.addButton(tr("Verwerfen"), QMessageBox.RejectRole)
         box.exec()
         if box.clickedButton() is apply_b:
             self._apply_suggestion(s)
@@ -1798,7 +1817,7 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
                 self.sharpen.setValue(float(s["sharpen"]))
             self.reverse.setChecked(bool(s.get("reverse")))
         except (TypeError, ValueError) as e:
-            QMessageBox.warning(self, "Hinweis", f"Konnte nicht alle Werte übernehmen: {e}")
+            QMessageBox.warning(self, tr("Hinweis"), tr("Konnte nicht alle Werte übernehmen: ") + str(e))
 
     def _append(self, text):
         sb = self.log.verticalScrollBar()
@@ -1813,7 +1832,16 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         self.status_dot.setStyleSheet(f"color:{color};font-size:13px;")
         self.status_bar.setStyleSheet(f"QFrame{{background:{bg};border-bottom:2px solid {color};}}")
 
-    # Schlüsselwörter aus dem Log → menschenlesbare Statusphase
+    # Maschinenlesbare Marker der Pipeline (PHASE:<key>) → Statuszeilen-Label.
+    # Primärweg — unabhängig von Log-Formulierungen/Übersetzungen (das PREVIEW:-Prinzip).
+    _PHASE_LABELS = {
+        "raw": "RAW entwickeln …", "analyze": "Analysiere Fotos …", "grade": "Subs bewerten …",
+        "cull": "Aussortieren …", "register": "Ausrichten …", "stack": "Stacke …",
+        "merge": "Verschmelzen …", "background": "Hintergrund …", "mosaic": "Mosaik …",
+        "longexp": "Langzeit …", "quality": "Qualität prüfen …", "export": "Exportieren …",
+    }
+    # Fallback: Schlüsselwörter aus dem (deutschen) Log → Statusphase.
+    # Nur noch für alte Pipeline-Versionen ohne PHASE:-Marker.
     _STATUS_PHASES = [
         ("RAW-Entwicklung", "RAW entwickeln …"), ("analysieren", "Analysiere Fotos …"),
         ("Sub-Bewertung", "Subs bewerten …"), ("Verwackelt-Filter", "Aussortieren …"),
@@ -1824,7 +1852,19 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
     ]
 
     def _on_output(self):
-        raw = bytes(self.proc.readAllStandardOutput()).decode(errors="replace")
+        data = getattr(self, "_pending_out", b"") + bytes(self.proc.readAllStandardOutput())
+        # An Chunk-Grenzen zerteilte UTF-8-Mehrbyte-Zeichen (Umlaute!) nicht zu „�" zerhacken:
+        # unvollständigen Sequenz-Rest puffern und mit dem nächsten Chunk dekodieren.
+        try:
+            raw = data.decode()
+            self._pending_out = b""
+        except UnicodeDecodeError as err:
+            if len(data) - err.start < 4:   # unvollständige Sequenz am Chunk-Ende
+                self._pending_out = data[err.start:]
+                raw = data[:err.start].decode(errors="replace")
+            else:                            # echt kaputte Bytes mitten im Strom
+                self._pending_out = b""
+                raw = data.decode(errors="replace")
         clean = ANSI.sub("", raw).replace("\r", "\n")
         self._append(clean)
         # Live-Vorschau: die Engine meldet Zwischenstände als „PREVIEW:<pfad>" → sofort anzeigen
@@ -1835,6 +1875,10 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
                 if p and os.path.isfile(p):
                     pix = QPixmap(p)
                     if not pix.isNull():
+                        # Quelle+Cache mitführen, sonst springt das nächste resizeEvent
+                        # auf das alte Bild zurück
+                        self._preview_src = p
+                        self._preview_pix = pix
                         self.preview.setPixmap(pix.scaled(self.preview.size(), Qt.KeepAspectRatio,
                                                           Qt.SmoothTransformation))
         # Fortschritt aus "i/N" ableiten (letzter Treffer im Chunk)
@@ -1845,17 +1889,31 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
             i, n = int(m.group(1)), int(m.group(2))
             if 0 < i <= n:
                 self.progress.setRange(0, 100); self.progress.setValue(int(i / n * 100))
-        # Statusphase aktualisieren (gelb = arbeitet)
-        for key, label in self._STATUS_PHASES:
-            if key in clean:
-                self._set_status(tr(label), color="#d4a72c", bg="#2a2510")
-        # „Warum?"-Begründung aus dem Log mitschneiden (Motiv/Begründung/Vorschlag) fürs Panel
+        # Statusphase/Begründung/Ergebnis: primär über maschinenlesbare Marker
+        # (PHASE:/RATIONALE:/RESULT: — robust gegen Log-Umformulierung/Übersetzung)
+        saw_phase = saw_result = False
+        for line in clean.splitlines():
+            s = line.strip()
+            if s.startswith("PHASE:"):
+                label = self._PHASE_LABELS.get(s[len("PHASE:"):].strip())
+                if label:
+                    saw_phase = True
+                    self._set_status(tr(label), color="#d4a72c", bg="#2a2510")
+            elif s.startswith("RATIONALE:"):
+                self._last_rationale = s[len("RATIONALE:"):].strip() or self._last_rationale
+            elif s.startswith("RESULT:"):
+                saw_result = True
+        # Fallback für alte Pipeline-Versionen ohne Marker: deutsche Log-Schlüsselwörter
+        if not saw_phase:
+            for key, label in self._STATUS_PHASES:
+                if key in clean:
+                    self._set_status(tr(label), color="#d4a72c", bg="#2a2510")
         for line in clean.splitlines():
             s = line.strip()
             for key in ("Begründung:", "Vorschlag:", "Motiv:"):
                 if key in s:
                     self._last_rationale = s.split(key, 1)[1].strip() or self._last_rationale
-        if "Fertig. Ergebnis in:" in clean:  # auch im Watch-/Batch-Modus laufend aktualisieren
+        if saw_result or "Fertig. Ergebnis in:" in clean:  # auch im Watch-/Batch-Modus laufend
             self._show_result()
 
     def _on_finished(self, code, _status):
@@ -1879,7 +1937,7 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         after = self._preview_png(self.result_path)
         before = self._preview_png(self.before_path)
         if not (after and before):
-            QMessageBox.information(self, "Vergleich", "Vorschau nicht verfügbar.")
+            QMessageBox.information(self, tr("Vergleich"), tr("Vorschau nicht verfügbar."))
             return
         dlg = QDialog(self)
         dlg.setWindowTitle(tr("Vorher / Nachher — Trennstrich ziehen"))
@@ -1910,7 +1968,7 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         shown = frames[:80]
         self._strip_paths = [fr.get("path") for fr in shown if fr.get("path")]
         self._strip_idx = 0
-        for fr in shown:
+        for idx, fr in enumerate(shown):
             thumb = self._thumb_png(fr.get("path"))
             btn = QToolButton()
             btn.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
@@ -1927,25 +1985,30 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
                 tip += "\n" + "; ".join(fr["reasons"])
             btn.setToolTip(tip)
             path = fr.get("path")
-            btn.clicked.connect(lambda _=False, p=path: self._set_preview(p))
+            # Index mitsetzen, damit ←/→ danach von der geklickten Position weiterlaufen
+            strip_i = self._strip_paths.index(path) if path in self._strip_paths else 0
+            btn.clicked.connect(lambda _=False, p=path, i=strip_i:
+                                (setattr(self, "_strip_idx", i), self._set_preview(p)))
             self.strip_lay.addWidget(btn)
-        self.strip_label.setText(f"Bilder ({sum(1 for f in shown if f.get('keep'))} verwendet, "
-                                 f"{sum(1 for f in shown if not f.get('keep'))} aussortiert) — "
-                                 f"grün = verwendet, rot = raus, klicken zum Ansehen:")
+        self.strip_label.setText(tr("Bilder ({k} verwendet, {r} aussortiert) — "
+                                    "grün = verwendet, rot = raus, klicken zum Ansehen:")
+                                 .format(k=sum(1 for f in shown if f.get("keep")),
+                                         r=sum(1 for f in shown if not f.get("keep"))))
         self.strip_label.show(); self.strip_scroll.show()
 
     def _thumb_png(self, src):
         if not src or not os.path.isfile(src) or cv2 is None:
             return None
+        out = _cache_path("sf_th_", src)
+        if os.path.isfile(out):        # Cache-Pfad ist deterministisch (Pfad+mtime) → nicht neu rechnen
+            return out
         img = cv2.imread(src, cv2.IMREAD_UNCHANGED)
         if img is None:
             return None
-        if img.dtype != "uint8":
-            img = (img / 256).astype("uint8") if img.max() > 255 else img.astype("uint8")
+        img = to_uint8(img)
         h, w = img.shape[:2]
         f = 90 / h
         img = cv2.resize(img, (max(1, int(w * f)), 90), interpolation=cv2.INTER_AREA)
-        out = _cache_path("sf_th_", src)
         cv2.imwrite(out, img)
         return out
 
@@ -2045,6 +2108,13 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         except Exception as e:
             self._append(f"(Palette-Vorschau: {e})\n")
 
+    def _clear_extra_sessions(self, *_a):
+        """Zusatz-Sessions zurücksetzen (bei Eingabe-Ordner-Wechsel)."""
+        if getattr(self, "_extra_sessions", None):
+            self._extra_sessions = []
+            self.astro_sessions_lbl.setText("")
+            self.astro_sessions_lbl.setToolTip("")
+
     def _add_session_folder(self):
         """Weiteren Aufnahme-Ordner (Nacht/Session) zum selben Stack hinzufügen."""
         start = self.in_edit.text().strip() or os.path.expanduser("~")
@@ -2058,6 +2128,40 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         self.astro_sessions_lbl.setToolTip("\n".join(self._extra_sessions))
         self._append(tr("➕ Session hinzugefügt: {d} (insgesamt {n} zusätzlich)\n")
                      .format(d=os.path.basename(d.rstrip("/")), n=n))
+
+    def _adopt_result(self, out, before):
+        """Extern bearbeitetes Ergebnis übernehmen: Vorschau + Buttons scharfschalten
+        (eine Stelle statt drei kopierter Blöcke)."""
+        self.result_path = out; self.before_path = before
+        self._set_preview(out)
+        self.cmp_btn.setEnabled(True); self.adjust_btn.setEnabled(True)
+        self.open_btn.setEnabled(True); self.openfolder_btn.setEnabled(True)
+
+    def _run_tool_async(self, title, fn, on_ok):
+        """Lang laufendes Extern-Tool im Hintergrund-Thread ausführen (GUI friert nicht ein).
+        `fn(log)` läuft im Worker; `on_ok(out)` wird bei Erfolg im GUI-Thread aufgerufen."""
+        busy = QDialog(self); busy.setWindowTitle(title)
+        bl = QVBoxLayout(busy)
+        lbl = QLabel(tr("Läuft … Details erscheinen im Log."))
+        lbl.setWordWrap(True); bl.addWidget(lbl)
+        bar = QProgressBar(); bar.setRange(0, 0); bl.addWidget(bar)
+
+        def ok(out):
+            busy.accept()
+            on_ok(out)
+
+        def fail(msg):
+            busy.accept()
+            QMessageBox.warning(self, title, msg)
+            self._append(f"\n⚠️ {title} fehlgeschlagen: {msg}\n")
+
+        wk = _ToolWorker(fn)
+        wk.log.connect(self._append)          # queued → threadsicher ins Log
+        wk.done.connect(ok)
+        wk.failed.connect(fail)
+        self._tool_worker = wk                # Referenz halten (GC)
+        wk.start()
+        busy.exec()
 
     def enhance_result(self):
         """One-Click „Veredeln". **Anfänger** (+ StarNet installiert): voller Starless-Workflow
@@ -2086,17 +2190,15 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         if not beginner and tools_engine.find_starnet(sn):
             self._append(tr("   Tipp: Für den vollen Starless-Workflow → Werkzeuge → "
                             "Starless-Workflow.\n"))
-        QApplication.processEvents()
-        try:
-            out = tools_engine.run_graxpert_enhance(f, path=cfg, denoise=True, log=self._append)
-        except Exception as e:
-            QMessageBox.warning(self, tr("Veredeln"), f"GraXpert: {e}")
-            self._append(f"\n⚠️ Veredeln fehlgeschlagen: {e}\n"); return
-        self.result_path = out; self.before_path = f
-        self._set_preview(out)
-        self.cmp_btn.setEnabled(True); self.adjust_btn.setEnabled(True)
-        self.open_btn.setEnabled(True); self.openfolder_btn.setEnabled(True)
-        self._append(f"\n✅ Veredelt & reimportiert: {os.path.basename(out)}\n")
+
+        def ok(out):
+            self._adopt_result(out, f)
+            self._append(f"\n✅ Veredelt & reimportiert: {os.path.basename(out)}\n")
+
+        self._run_tool_async(tr("Veredeln"),
+                             lambda log: tools_engine.run_graxpert_enhance(f, path=cfg,
+                                                                           denoise=True, log=log),
+                             ok)
 
     def _run_starless_workflow(self, linear=None):
         """Voller Starless-Workflow (GraXpert-Gradient → Palette/Strecken → StarNet → Nebel
@@ -2118,26 +2220,24 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         palette = self.astro_palette.currentData() if dual else None
         work = os.path.join(os.path.dirname(f), "starless")
         self._append(tr("\n⭐ Starless-Workflow startet … (StarNet rechnet ~½–1 min)\n"))
-        QApplication.processEvents()
-        try:
-            out = starless.run(f, palette, work, broadband=not dual,
-                               graxpert_path=self.graxpert_path.text().strip() or None,
-                               starnet_path=sn,
-                               cosmicclarity_path=self.cosmicclarity_path.text().strip() or None,
-                               log=self._append)
-        except Exception as e:
-            QMessageBox.warning(self, tr("Starless-Workflow"), f"{e}")
-            self._append(f"\n⚠️ Starless-Workflow fehlgeschlagen: {e}\n"); return
-        self.result_path = out; self.before_path = f
-        self._set_preview(out)
-        self.cmp_btn.setEnabled(True); self.adjust_btn.setEnabled(True)
-        self.open_btn.setEnabled(True); self.openfolder_btn.setEnabled(True)
-        # Regler scharfschalten: Nebel-/Stern-Stärke ab jetzt sofort nachregelbar
-        self._starless_dir = work
-        for s in (self.starless_neb, self.starless_stars):
-            s.blockSignals(True); s.setValue(1.0); s.setEnabled(True); s.blockSignals(False)
-        self._append(f"\n✅ Starless-Workflow fertig: {os.path.basename(out)}\n"
-                     + tr("   Tipp: die Regler Starless Nebel/Sterne (links) passen die Stärke sofort an.\n"))
+        gx = self.graxpert_path.text().strip() or None
+        cc = self.cosmicclarity_path.text().strip() or None
+
+        def job(log):
+            return starless.run(f, palette, work, broadband=not dual,
+                                graxpert_path=gx, starnet_path=sn,
+                                cosmicclarity_path=cc, log=log)
+
+        def ok(out):
+            self._adopt_result(out, f)
+            # Regler scharfschalten: Nebel-/Stern-Stärke ab jetzt sofort nachregelbar
+            self._starless_dir = work
+            for s in (self.starless_neb, self.starless_stars):
+                s.blockSignals(True); s.setValue(1.0); s.setEnabled(True); s.blockSignals(False)
+            self._append(f"\n✅ Starless-Workflow fertig: {os.path.basename(out)}\n"
+                         + tr("   Tipp: die Regler Starless Nebel/Sterne (links) passen die Stärke sofort an.\n"))
+
+        self._run_tool_async(tr("Starless-Workflow"), job, ok)
 
     def _recombine_starless(self):
         """Nebel-Boost + Stern-Stärke aus den gecachten Ebenen sofort neu mischen (kein neues StarNet)."""
@@ -2176,23 +2276,16 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
             return
         runner = tools_engine.run_graxpert if which == "graxpert" else tools_engine.run_starnet
         self._append(f"\n⏳ {name} läuft … (kann dauern)\n")
-        QApplication.processEvents()
-        try:
-            out = runner(f, path=cfg_path, log=self._append)
-        except Exception as e:
-            QMessageBox.warning(self, name, f"{name}: {e}")
-            self._append(f"\n⚠️ {name} fehlgeschlagen: {e}\n")
-            return
-        self.result_path = out
-        self.before_path = f          # „Vorher“ = Eingang, „Nachher“ = bearbeitet
-        self._set_preview(out)
-        self.cmp_btn.setEnabled(True); self.adjust_btn.setEnabled(True)
-        self.open_btn.setEnabled(True); self.openfolder_btn.setEnabled(True)
-        self._append(f"\n✅ {name} fertig & reimportiert: {os.path.basename(out)}\n")
+
+        def ok(out):
+            self._adopt_result(out, f)    # „Vorher" = Eingang, „Nachher" = bearbeitet
+            self._append(f"\n✅ {name} fertig & reimportiert: {os.path.basename(out)}\n")
+
+        self._run_tool_async(name, lambda log: runner(f, path=cfg_path, log=log), ok)
 
     def reimport_result(self):
         start = os.path.dirname(self.result_path) if self.result_path else os.path.expanduser("~")
-        f, _ = QFileDialog.getOpenFileName(self, "Bearbeitetes Bild wählen", start,
+        f, _ = QFileDialog.getOpenFileName(self, tr("Bearbeitetes Bild wählen"), start,
                                            "Bilder (*.tif *.tiff *.png *.jpg *.jpeg *.fit *.fits)")
         if not f:
             return
@@ -2208,7 +2301,9 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         """Fokusreihe analysieren (Hintergrund-Thread): Verwackler, redundante Frames,
         Abdeckung, optimale Bildanzahl. Read-only, blockiert die GUI nicht."""
         if getattr(self, "_analyze_worker", None) and self._analyze_worker.isRunning():
-            return  # läuft schon
+            # läuft noch (z.B. nach „Abbrechen": der Thread rechnet sauber zu Ende) → Feedback
+            self._set_status(tr("Analyse läuft noch — bitte kurz warten."), color="#d4a72c", bg="#2a2510")
+            return
         folder = self.in_edit.text().strip()
         if not folder or not os.path.isdir(folder):
             QMessageBox.information(self, tr("Reihe analysieren"),
@@ -2227,7 +2322,6 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         bl.addWidget(QLabel(tr("Analysiere %d Aufnahmen …") % len(paths)))
         bar = QProgressBar(); bar.setRange(0, 0); bl.addWidget(bar)
         cancel = QPushButton(tr("Abbrechen")); bl.addWidget(cancel)
-        self._analyze_busy = busy
         self._analyze_worker = _AnalyzeWorker(paths)
 
         self._analyze_cancelled = False
@@ -2308,7 +2402,7 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         try:
             import focus_analysis as fa
             fmap = fa.focus_map(paths, M=getattr(self, "_analyze_M", None))
-            p = os.path.join("/tmp", "sf_focusmap.png")
+            p = os.path.join(tempfile.gettempdir(), "sf_focusmap.png")   # /tmp gibt's unter Windows nicht
             cv2.imwrite(p, fmap)
         except Exception as e:
             QMessageBox.warning(self, tr("Fokus-Map"), f"{e}"); return
@@ -2403,16 +2497,6 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         btn = QPushButton(tr("Schließen")); btn.clicked.connect(dlg.accept); lay.addWidget(btn)
         dlg.show(); self._dof_dlg = dlg
 
-    def _retouch_file(self):
-        """Bevorzugt die Mehrschicht-TIFF, sonst das Stack-Ergebnis."""
-        ml_dir = os.path.join(self._work_dir(), "multilayer")
-        if os.path.isdir(ml_dir):
-            tifs = [os.path.join(ml_dir, f) for f in os.listdir(ml_dir)
-                    if f.lower().endswith((".tif", ".tiff"))]
-            if tifs:
-                return max(tifs, key=os.path.getmtime)
-        return self.result_path
-
     def _ghostmap_path(self):
         if not self.result_path:
             return None
@@ -2426,8 +2510,8 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
             self._append("\n👻 Geister-Karte angezeigt (rot = Bewegung/Ghosting-Verdacht). "
                          "Mit dem Retusche-Pinsel korrigierbar.\n")
         else:
-            QMessageBox.information(self, "Keine Geister-Karte",
-                                    "Beim Lauf war „Geister-Karte erzeugen“ nicht aktiv.")
+            QMessageBox.information(self, tr("Keine Geister-Karte"),
+                                    tr("Beim Lauf war „Geister-Karte erzeugen“ nicht aktiv."))
 
     def open_adjust(self):
         """Camera-Raw-Editor. Mit Ergebnis: bearbeitet das Ergebnis. Ohne Ergebnis: öffnet einen
@@ -2436,7 +2520,7 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
             return
         path = self.result_path
         if not path or not os.path.isfile(path):
-            raw = "*.arw *.cr2 *.cr3 *.nef *.raf *.rw2 *.dng *.orf *.pef *.srw"
+            raw = " ".join(f"*{e}" for e in sorted(RAW_EXTS))   # eine Quelle statt Drift
             flt = tr("Bilder") + f" (*.jpg *.jpeg *.png *.tif *.tiff {raw})"
             path, _ = QFileDialog.getOpenFileName(
                 self, tr("Bild zum Bearbeiten wählen"),
@@ -2447,9 +2531,8 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
 
     def _open_adjust_path(self, path):
         ext = os.path.splitext(path)[1].lower()
-        raw_exts = {".arw", ".cr2", ".cr3", ".nef", ".raf", ".rw2", ".dng", ".orf", ".pef", ".srw"}
         try:
-            if ext in raw_exts:
+            if ext in RAW_EXTS:
                 import rawpy
                 self._append(tr("📷 RAW entwickeln zum Bearbeiten …\n")); QApplication.processEvents()
                 rgb = rawpy.imread(path).postprocess(use_camera_wb=True, no_auto_bright=False, output_bps=8)
@@ -2503,9 +2586,7 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
                 pass
         if len(srcs) >= 2:
             try:
-                import sys as _sys
-                _sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(__file__)), "core"))
-                import stacker
+                import stacker   # core/ ist beim App-Start bereits auf sys.path
                 res = cv2.imread(self.result_path, cv2.IMREAD_UNCHANGED)
                 if res is not None:
                     h, w = res.shape[:2]
@@ -2520,11 +2601,11 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
 
     def open_retouch(self):
         if not self.result_path or cv2 is None:
-            QMessageBox.warning(self, "Kein Ergebnis", "Erst ein Bild erzeugen.")
+            QMessageBox.warning(self, tr("Kein Ergebnis"), tr("Erst ein Bild erzeugen."))
             return
         res = cv2.imread(self.result_path, cv2.IMREAD_UNCHANGED)
         if res is None:
-            QMessageBox.warning(self, "Fehler", "Ergebnis konnte nicht geladen werden.")
+            QMessageBox.warning(self, tr("Fehler"), tr("Ergebnis konnte nicht geladen werden."))
             return
         srcs, names = self._gather_sources()
         # Quellen auf Ergebnisgröße bringen
@@ -2532,8 +2613,8 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         srcs = [cv2.resize(s, (res.shape[1], res.shape[0])) if s.shape[:2] != res.shape[:2] else s
                 for s in srcs]
         if not srcs:
-            QMessageBox.warning(self, "Keine Quellfotos",
-                                "Keine Quellfotos gefunden. Tipp: „Ebenen-Datei“ aktivieren.")
+            QMessageBox.warning(self, tr("Keine Quellfotos"),
+                                tr("Keine Quellfotos gefunden. Tipp: „Ebenen-Datei“ aktivieren."))
             return
         d = os.path.dirname(self.result_path)
         b, e = os.path.splitext(os.path.basename(self.result_path))
@@ -2559,7 +2640,7 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         a = cv2.imread(files[0], cv2.IMREAD_COLOR)
         b = cv2.imread(files[1], cv2.IMREAD_COLOR)
         if a is None or b is None:
-            QMessageBox.warning(self, "Fehler", "Bilder konnten nicht geladen werden.")
+            QMessageBox.warning(self, tr("Fehler"), tr("Bilder konnten nicht geladen werden."))
             return
         save_path = os.path.join(os.path.dirname(files[0]), "panorama_kontrollpunkte.jpg")
         dlg = ControlPointDialog(a, b, save_path, self)
@@ -2572,8 +2653,7 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         if self.top_stack.currentIndex() != 1 or (e.modifiers() & ~Qt.KeypadModifier):
             return super().keyPressEvent(e)
         k = e.key()
-        makro = not (getattr(self, "is_astro", False) or getattr(self, "is_hybrid", False)
-                     or getattr(self, "is_longexp", False))
+        makro = self._is_makro()
         if k == Qt.Key_Space and self.cmp_btn.isEnabled():
             self.open_compare()
         elif k == Qt.Key_A and makro:
@@ -2602,12 +2682,15 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
 
     def resizeEvent(self, e):
         super().resizeEvent(e)
-        src = getattr(self, "_preview_src", None)
-        if src:
-            pix = QPixmap(src)
-            if not pix.isNull():
-                self.preview.setPixmap(pix.scaled(self.preview.size(), Qt.KeepAspectRatio,
-                                                  Qt.SmoothTransformation))
+        # Ungescaltes Pixmap ist gecacht (_set_preview) — beim Resize-Drag nicht bei jedem
+        # Tick die PNG neu von Platte lesen, nur neu skalieren.
+        pix = getattr(self, "_preview_pix", None)
+        if pix is None or pix.isNull():
+            src = getattr(self, "_preview_src", None)
+            pix = QPixmap(src) if src else None
+        if pix and not pix.isNull():
+            self.preview.setPixmap(pix.scaled(self.preview.size(), Qt.KeepAspectRatio,
+                                              Qt.SmoothTransformation))
 
     # ---------- Einstellungen merken ----------
     def closeEvent(self, e):
@@ -2618,17 +2701,17 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
                 self.proc.kill()
         wk = getattr(self, "_analyze_worker", None)
         if wk and wk.isRunning():
-            wk.wait(4000)
+            wk.wait()   # unbegrenzt: nach Timeout würde der QThread „destroyed while running" crashen
         # _updchk läuft als Daemon-Thread (kein QThread) -> stirbt mit dem Prozess, kein Wait nötig
         self._save_settings()
-        QSettings("ServeOne", "ForgePix").setValue("geometry", self.saveGeometry())
+        app_settings().setValue("geometry", self.saveGeometry())
         super().closeEvent(e)
 
 
 def main():
     app = QApplication(sys.argv)
     # Sprache aus den Einstellungen laden, BEVOR die Oberfläche gebaut wird
-    set_language(QSettings("ServeOne", "ForgePix").value("language", "de"))
+    set_language(app_settings().value("language", "de"))
     app.setApplicationName(APP_NAME)
     app.setApplicationDisplayName(APP_NAME)
     app.setStyleSheet(THEME)

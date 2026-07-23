@@ -21,6 +21,16 @@ from PySide6.QtWidgets import (
 )
 
 from i18n import tr
+from constants import to_uint8
+
+
+def save_image(path, img):
+    """JPG (Qualität 95) oder TIFF (unkomprimiert) speichern — EINE Stelle statt drei Kopien."""
+    if path.lower().endswith((".jpg", ".jpeg")):
+        cv2.imwrite(path, img, [int(cv2.IMWRITE_JPEG_QUALITY), 95])
+    else:
+        cv2.imwrite(path, img, [int(cv2.IMWRITE_TIFF_COMPRESSION), 1])
+
 
 class CompareSlider(QWidget):
     """Vorher/Nachher mit ziehbarem Trennstrich."""
@@ -55,8 +65,8 @@ class CompareSlider(QWidget):
         p.setPen(QPen(QColor("#5cc85c"), 3))
         p.drawLine(divx, r.y(), divx, r.bottom())
         p.setPen(QColor("white"))
-        p.drawText(r.x() + 10, r.y() + 22, "VORHER (schärfster Einzel-Frame)")
-        t = "NACHHER (Stack)"
+        p.drawText(r.x() + 10, r.y() + 22, tr("VORHER (schärfster Einzel-Frame)"))
+        t = tr("NACHHER (Stack)")
         p.drawText(r.right() - p.fontMetrics().horizontalAdvance(t) - 10, r.y() + 22, t)
 
     def _set_from_x(self, x):
@@ -77,8 +87,7 @@ def _bgr_to_pixmap(bgr, max_w=900):
     scale = min(1.0, max_w / bgr.shape[1])
     small = cv2.resize(bgr, (int(bgr.shape[1] * scale), int(bgr.shape[0] * scale)),
                        interpolation=cv2.INTER_AREA) if scale < 1.0 else bgr
-    if small.dtype != np.uint8:
-        small = (small / 256).astype(np.uint8) if small.max() > 255 else small.astype(np.uint8)
+    small = to_uint8(small)
     rgb = np.ascontiguousarray(cv2.cvtColor(small, cv2.COLOR_BGR2RGB))
     qimg = QImage(rgb.data, rgb.shape[1], rgb.shape[0], rgb.strides[0], QImage.Format_RGB888)
     return QPixmap.fromImage(qimg.copy()), scale
@@ -138,9 +147,7 @@ def adjust_image(img, p):
         f = np.clip(cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR), 0, 1)
     if p.get("clarity"):  # lokaler Kontrast-Equalizer (multiskalig, halo-arm) — darktable/RT-Stil
         try:
-            import sys as _sys, os as _os
-            _sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.dirname(__file__)), "core"))
-            import develop as _dev
+            import develop as _dev   # core/ ist beim App-Start auf sys.path
             f = np.clip(_dev.local_contrast(f.astype(np.float32), amount=p["clarity"] / 100.0), 0, 1)
         except Exception:                                # Fallback: einfaches Großradius-Unsharp
             r = max(3.0, min(f.shape[0], f.shape[1]) / 90.0)
@@ -148,16 +155,12 @@ def adjust_image(img, p):
             f = np.clip(f + (p["clarity"] / 100.0) * (f - blur), 0, 1)
     if p.get("dehaze"):                                  # Dark-Channel-Prior Dunst-Entfernung
         try:
-            import sys as _sys, os as _os
-            _sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.dirname(__file__)), "core"))
             import develop as _dev
             f = np.clip(_dev.dehaze(f.astype(np.float32), strength=p["dehaze"] / 100.0), 0, 1)
         except Exception:
             pass
     if p.get("capture_sharpen"):                         # RL-Capture-Sharpening (Aufnahme-Unschärfe)
         try:
-            import sys as _sys, os as _os
-            _sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.dirname(__file__)), "core"))
             import develop as _dev
             it = int(6 + 0.2 * p["capture_sharpen"])     # Stärke → Iterationen
             f = np.clip(_dev.capture_sharpen(f.astype(np.float32), sigma=0.8, iterations=it), 0, 1)
@@ -177,7 +180,7 @@ def adjust_image(img, p):
 
 def histogram_pixmap(img, w=256, h=90):
     """Kleines RGB-Histogramm als QPixmap."""
-    im = (img / 256).astype(np.uint8) if img.dtype != np.uint8 else img
+    im = to_uint8(img)
     canvas = np.full((h, w, 3), 22, np.uint8)
     for ch, col in [(0, (255, 90, 90)), (1, (90, 255, 90)), (2, (90, 90, 255))]:
         hist = cv2.calcHist([im], [ch], None, [w], [0, 256]).flatten()
@@ -317,6 +320,7 @@ class AdjustDialog(QDialog):
         scroll = QScrollArea(); scroll.setWidgetResizable(True); scroll.setFrameShape(QFrame.NoFrame)
         inner = QWidget(); side = QVBoxLayout(inner)
         self.value_labels = {}
+        self._slider_widgets = {}
         last_group = None
         for key, lbl, group in self.SLIDERS:
             if group != last_group:
@@ -328,6 +332,7 @@ class AdjustDialog(QDialog):
             self.value_labels[key] = val
             sld = QSlider(Qt.Horizontal); sld.setRange(-100, 100); sld.setValue(0)
             sld.valueChanged.connect(lambda v, k=key: self._on_slider(k, v))
+            self._slider_widgets[key] = sld              # stabil per Key (statt findChildren-Index)
             row.addWidget(name); row.addWidget(sld, 1); row.addWidget(val)
             side.addLayout(row)
 
@@ -341,8 +346,10 @@ class AdjustDialog(QDialog):
         # --- HSL pro Farbe ---
         hl = QLabel(tr("Farben (HSL)")); hl.setObjectName("sectionHeader")
         side.addWidget(hl)
-        self.hsl_band = QComboBox(); self.hsl_band.addItems(list(HSL_BANDS.keys()))
-        self.hsl_band.currentTextChanged.connect(self._load_hsl_band)
+        self.hsl_band = QComboBox()
+        for _band in HSL_BANDS:                         # Anzeige übersetzt, Daten-Key stabil
+            self.hsl_band.addItem(tr(_band), _band)
+        self.hsl_band.currentIndexChanged.connect(lambda _i: self._load_hsl_band())
         side.addWidget(self.hsl_band)
         self.hsl_sliders = {}
         for sub in ("Farbton", "Sättigung", "Luminanz"):
@@ -407,7 +414,6 @@ class AdjustDialog(QDialog):
         note.setStyleSheet("color:#9aa09a;"); pv.addWidget(note)
         lay.addWidget(panel)
         self.resize(1200, 800)
-        self._sliders = inner.findChildren(QSlider)
         self._update()
 
     def _on_slider(self, key, v):
@@ -419,14 +425,14 @@ class AdjustDialog(QDialog):
         self.curve = [list(p) for p in points] if points else None
         self._update()
 
-    def _load_hsl_band(self, band):
-        vals = self.hsl.get(band, [0, 0, 0])
+    def _load_hsl_band(self):
+        vals = self.hsl.get(self.hsl_band.currentData(), [0, 0, 0])
         for sub, v in zip(("Farbton", "Sättigung", "Luminanz"), vals):
             sld = self.hsl_sliders[sub]
             sld.blockSignals(True); sld.setValue(int(v)); sld.blockSignals(False)
 
     def _on_hsl(self, sub, v):
-        band = self.hsl_band.currentText()
+        band = self.hsl_band.currentData()
         cur = self.hsl.setdefault(band, [0, 0, 0])
         cur[("Farbton", "Sättigung", "Luminanz").index(sub)] = v
         self.hsl[band] = cur
@@ -578,10 +584,10 @@ class AdjustDialog(QDialog):
 
     def _sync_sliders(self):
         # Slider-Positionen an self.vals angleichen (ohne erneutes _update je Slider)
-        for idx, (key, _, _) in enumerate(self.SLIDERS):
-            self._sliders[idx].blockSignals(True)
-            self._sliders[idx].setValue(int(self.vals.get(key, 0)))
-            self._sliders[idx].blockSignals(False)
+        for key, sld in self._slider_widgets.items():
+            sld.blockSignals(True)
+            sld.setValue(int(self.vals.get(key, 0)))
+            sld.blockSignals(False)
 
     def _reset(self):
         for k in self.vals:
@@ -601,12 +607,8 @@ class AdjustDialog(QDialog):
     def _save(self):
         g = self._geometry(self.full)
         out = self._masked(g, adjust_image(g, self._params()))
-        ext = os.path.splitext(self.save_path)[1].lower()
-        if ext in (".jpg", ".jpeg"):
-            cv2.imwrite(self.save_path, out, [int(cv2.IMWRITE_JPEG_QUALITY), 95])
-        else:
-            cv2.imwrite(self.save_path, out, [int(cv2.IMWRITE_TIFF_COMPRESSION), 1])
-        QMessageBox.information(self, "Gespeichert", f"Gespeichert:\n{self.save_path}")
+        save_image(self.save_path, out)
+        QMessageBox.information(self, tr("Gespeichert"), tr("Gespeichert:") + f"\n{self.save_path}")
 
 
 class _Canvas(QLabel):
@@ -711,12 +713,8 @@ class RetouchDialog(QDialog):
             self.canvas.set_image(self.work)
 
     def _save(self):
-        ext = os.path.splitext(self.save_path)[1].lower()
-        if ext in (".jpg", ".jpeg"):
-            cv2.imwrite(self.save_path, self.work, [int(cv2.IMWRITE_JPEG_QUALITY), 95])
-        else:
-            cv2.imwrite(self.save_path, self.work, [int(cv2.IMWRITE_TIFF_COMPRESSION), 1])
-        QMessageBox.information(self, "Gespeichert", f"Gespeichert:\n{self.save_path}")
+        save_image(self.save_path, self.work)
+        QMessageBox.information(self, tr("Gespeichert"), tr("Gespeichert:") + f"\n{self.save_path}")
 
 
 class ControlPointDialog(QDialog):
@@ -783,15 +781,13 @@ class ControlPointDialog(QDialog):
         self.cv_a.set_image(self._markers(self.a, self.pts_a))
         self.cv_b.set_image(self._markers(self.b, self.pts_b))
         n = min(len(self.pts_a), len(self.pts_b))
-        nxt = "rechts" if len(self.pts_a) > len(self.pts_b) else "links"
+        nxt = tr("rechts") if len(self.pts_a) > len(self.pts_b) else tr("links")
         self.status.setText(tr("%d Punktpaar(e) · als Nächstes %s klicken") % (n, nxt))
         self.stitch_btn.setEnabled(n >= 4)
 
     def _stitch(self):
-        import sys as _sys
-        _sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(__file__)), "core"))
         try:
-            import mosaic
+            import mosaic   # core/ ist beim App-Start auf sys.path
             n = min(len(self.pts_a), len(self.pts_b))
             self.result = mosaic.stitch_from_points(self.a, self.b, self.pts_a[:n], self.pts_b[:n],
                                                     log=lambda *a: None)
@@ -804,9 +800,7 @@ class ControlPointDialog(QDialog):
     def _save(self):
         if self.result is None:
             return
-        cv2.imwrite(self.save_path, self.result, [int(cv2.IMWRITE_JPEG_QUALITY), 95]
-                    if self.save_path.lower().endswith((".jpg", ".jpeg"))
-                    else [int(cv2.IMWRITE_TIFF_COMPRESSION), 1])
+        save_image(self.save_path, self.result)
         QMessageBox.information(self, tr("Gespeichert"), f"{self.save_path}")
 
 
@@ -829,7 +823,7 @@ def reveal_in_files(path):
         if sys.platform == "darwin":
             subprocess.run(["open", "-R", path])
         elif sys.platform.startswith("win"):
-            subprocess.run(["explorer", "/select,", os.path.normpath(path)])
+            subprocess.run(["explorer", f"/select,{os.path.normpath(path)}"])
         else:
             subprocess.run(["xdg-open", os.path.dirname(path)])
     except Exception:
@@ -853,8 +847,10 @@ def notify(title, msg):
     """Desktop-Benachrichtigung (best effort, plattformübergreifend)."""
     try:
         if sys.platform == "darwin":
+            m = str(msg).replace("\\", "\\\\").replace('"', '\\"')
+            t = str(title).replace("\\", "\\\\").replace('"', '\\"')
             subprocess.Popen(["osascript", "-e",
-                              f'display notification "{msg}" with title "{title}"'])
+                              f'display notification "{m}" with title "{t}"'])
         elif sys.platform.startswith("linux"):
             subprocess.Popen(["notify-send", title, msg])
         # Windows: still über das fertige Bild / Log; keine externe Abhängigkeit

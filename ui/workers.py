@@ -25,6 +25,28 @@ class _AnalyzeWorker(QThread):
             self.failed.emit(str(e))
 
 
+class _ToolWorker(QThread):
+    """Extern-Tool (GraXpert/StarNet/Starless-Workflow …) im Hintergrund-Thread.
+
+    Vorher liefen diese subprocess-Aufrufe (bis 30 min Timeout!) synchron im GUI-Thread
+    → Beachball, kein Repaint. `fn(log)` bekommt einen Log-Callback, dessen Meldungen als
+    Signal queued im GUI-Thread ankommen (direktes Anfassen von Widgets aus dem Worker
+    wäre nicht threadsicher)."""
+    done = Signal(object)
+    failed = Signal(str)
+    log = Signal(str)
+
+    def __init__(self, fn):
+        super().__init__()
+        self._fn = fn
+
+    def run(self):
+        try:
+            self.done.emit(self._fn(self.log.emit))
+        except Exception as e:  # noqa: BLE001
+            self.failed.emit(str(e))
+
+
 class _UpdateChecker(QObject):
     """Fragt einmalig die neueste GitHub-Release-Version ab (nur lesen, leise bei Offline/Fehler).
 

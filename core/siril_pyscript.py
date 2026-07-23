@@ -12,12 +12,10 @@ NICHT headless (reine GUI): SCUNet_Denoise, DeepSNR & Co. — die brauchen Siril
 """
 import os
 import glob
-import shutil
 import subprocess
 import numpy as np
-import cv2
 
-import siril_engine   # für find_siril
+import siril_engine   # für find_siril + gemeinsame TIFF-/FITS-Helper
 
 
 def _scripts_dir():
@@ -53,50 +51,38 @@ def run(bgr01, script, args=None, work_dir=None, siril_path=None, timeout=1800, 
         raise RuntimeError(f"Siril-Skript {script} nicht gefunden")
     work_dir = work_dir or os.path.join(os.path.dirname(spath), "_forgepix_tmp")
     os.makedirs(work_dir, exist_ok=True)
-    import tifffile
-    rgb16 = (np.clip(cv2.cvtColor(np.asarray(bgr01, np.float32), cv2.COLOR_BGR2RGB), 0, 1)
-             * 65535).astype(np.uint16)
-    tifffile.imwrite(os.path.join(work_dir, "in.tif"), rgb16, photometric="rgb")
-    for f in glob.glob(os.path.join(work_dir, "out.*")):
-        os.remove(f)
-    argstr = " ".join(str(a) for a in (args or []))
+    inp = os.path.join(work_dir, "in.tif")
     ssf = os.path.join(work_dir, "fp_bridge.ssf")
-    with open(ssf, "w") as fh:
-        fh.write(f'requires 1.4.0\ncd "{work_dir}"\nload in\npyscript "{spath}" {argstr}\nsave out\n')
-    log(f"    Siril-pyscript: {script} {argstr} …")
-    subprocess.run([cli, "-s", ssf], capture_output=True, text=True, timeout=timeout)
-    outs = sorted(glob.glob(os.path.join(work_dir, "out.*")))
-    if not outs:
-        raise RuntimeError(f"Siril-pyscript {script}: keine Ausgabe")
-    from astropy.io import fits
-    d = fits.getdata(outs[0]).astype(np.float32)
-    if d.ndim == 3 and d.shape[0] == 3:
-        d = np.transpose(d, (1, 2, 0))
-    if d.ndim == 3 and d.shape[2] == 3:
-        d = d[..., ::-1]                                    # RGB→BGR
-    elif d.ndim == 2:
-        d = cv2.cvtColor(d, cv2.COLOR_GRAY2BGR)
-    mx = float(d.max())
-    if mx > 1.5:
-        d = d / mx
-    return np.clip(d, 0, 1)
+    try:
+        siril_engine.write_tiff16(inp, bgr01)               # gemeinsamer 16-bit-Writer
+        for f in glob.glob(os.path.join(work_dir, "out.*")):
+            os.remove(f)                                     # Reste eines abgebrochenen Laufs
+        argstr = " ".join(str(a) for a in (args or []))
+        with open(ssf, "w") as fh:
+            fh.write(f'requires 1.4.0\ncd "{work_dir}"\nload in\npyscript "{spath}" {argstr}\nsave out\n')
+        log(f"    Siril-pyscript: {script} {argstr} …")
+        proc = subprocess.run([cli, "-s", ssf], capture_output=True, text=True, timeout=timeout)
+        outs = sorted(glob.glob(os.path.join(work_dir, "out.*")))
+        if not outs:
+            # Log-Ende mit in die Fehlermeldung — sonst bleibt der eigentliche Grund unsichtbar
+            tail = "\n".join(((proc.stdout or "") + "\n" + (proc.stderr or "")).splitlines()[-6:])
+            raise RuntimeError(f"Siril-pyscript {script}: keine Ausgabe (rc={proc.returncode})."
+                               + (f" Log-Ende:\n{tail}" if tail.strip() else ""))
+        # gemeinsamer FITS-Reader mit FESTER Normierung (kein Reskalieren auf Peak=1)
+        return np.clip(siril_engine.read_fits_bgr(outs[0]), 0, 1)
+    finally:
+        # Tempdateien (Eingabe-TIFF, SSF, Ausgaben) in jedem Fall aus dem work_dir räumen
+        for f in [inp, ssf] + glob.glob(os.path.join(work_dir, "out.*")):
+            try:
+                os.remove(f)
+            except OSError:
+                pass
 
 
-# --- bequeme Wrapper für die headless-tauglichen Skripte ----------------------------------------
-def autobge(bgr01, npoints=120, polydegree=2, rbfsmooth=0.1, **kw):
-    """Hintergrund-/Gradienten-Extraktion (Siril AutoBGE, RBF/Polynom-DBE)."""
-    return run(bgr01, "AutoBGE.py", ["-npoints", npoints, "-polydegree", polydegree,
-                                     "-rbfsmooth", rbfsmooth], **kw)
-
-
+# --- bequemer Wrapper für das headless-taugliche Skript -----------------------------------------
 def aberration_remover(bgr01, strength=0.7, protect_background=True, **kw):
     """KI-Stern-/Aberrationskorrektur (verzogene Rand-Sterne runden)."""
     a = ["-strength", strength]
     if protect_background:
         a += ["-protect_background"]
     return run(bgr01, "AberrationRemover.py", a, **kw)
-
-
-def statistical_stretch(bgr01, median=0.25, sigma=3.0, **kw):
-    """Statistischer Stretch (alternativer Auto-Stretch)."""
-    return run(bgr01, "Statistical_Stretch.py", ["-median", median, "-sigma", sigma], **kw)

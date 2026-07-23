@@ -295,8 +295,8 @@ class TestStacker(TmpCase):
             self.assertEqual(out.shape, base.shape)
             self.assertEqual(out.dtype, np.uint8)
         # color_reassign liefert nur echte Quellfarben (keine erfundenen)
-        merged = stacker.focus_stack_average(imgs, log=lambda *a: None)
-        cr = stacker.color_reassign(imgs, merged)
+        # (Signatur ohne toten `merged`-Parameter — wurde nie benutzt)
+        cr = stacker.color_reassign(imgs)
         self.assertEqual(cr.shape, base.shape)
 
     def test_focus_stack_depthmap(self):

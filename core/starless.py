@@ -20,6 +20,7 @@ import numpy as np
 import cv2
 
 import astro
+import siril_engine
 import tools_engine
 
 
@@ -103,9 +104,7 @@ def run(linear_path, palette, work_dir, broadband=False, graxpert_path=None, sta
     #    die Sterne (`stars`) bleiben bis zum Schluss komplett unangetastet.
     log("  2/5 StarNet++: Sterne entfernen …")
     in16 = os.path.join(work_dir, "starnet_in.tif")
-    rgb16 = (np.clip(cv2.cvtColor(stretched.astype(np.float32), cv2.COLOR_BGR2RGB), 0, 1)
-             * 65535).astype(np.uint16)
-    tifffile.imwrite(in16, rgb16, photometric="rgb")
+    siril_engine.write_tiff16(in16, stretched)               # gemeinsamer 16-bit-Writer
     starless_path = tools_engine.run_starnet(in16, path=starnet_path, log=log)
     sl = tifffile.imread(starless_path).astype(np.float32) / 65535.0
     if sl.ndim == 2:
@@ -122,8 +121,7 @@ def run(linear_path, palette, work_dir, broadband=False, graxpert_path=None, sta
         try:
             log("  3/5 GraXpert (Hintergrund + Entrauschen) — nur sternenlos …")
             sl_tif = os.path.join(work_dir, "starless_for_graxpert.tif")
-            tifffile.imwrite(sl_tif, (np.clip(starless_rgb, 0, 1) * 65535).astype(np.uint16),
-                             photometric="rgb")
+            siril_engine.write_tiff16(sl_tif, starless_rgb, bgr=False)   # Daten sind schon RGB
             gx_out = tools_engine.run_graxpert_enhance(sl_tif, path=graxpert_path, denoise=True, log=log)
             g = tifffile.imread(gx_out).astype(np.float32)
             g = g / 65535.0 if g.max() > 1.5 else g
@@ -154,10 +152,8 @@ def run(linear_path, palette, work_dir, broadband=False, graxpert_path=None, sta
     nebula = _boost_nebula(starless_rgb) if boost else starless_rgb
 
     # Ebenen cachen (16-bit), damit Nebel-/Stern-Stärke SPÄTER ohne neues StarNet einstellbar sind.
-    import tifffile as _tf
     def _save16(name, rgb):
-        _tf.imwrite(os.path.join(work_dir, name),
-                    (np.clip(rgb, 0, 1) * 65535).astype(np.uint16), photometric="rgb")
+        siril_engine.write_tiff16(os.path.join(work_dir, name), rgb, bgr=False)
     _save16("layer_starless.tif", starless_rgb)   # roh (ohne Boost) — für „dezenter"
     _save16("layer_nebula.tif", nebula)           # mit Boost
     _save16("layer_stars.tif", stars)             # Sternebene

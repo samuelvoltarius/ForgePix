@@ -8,16 +8,18 @@ Aufnahmen vom Mond/Sonne, die zusammen die ganze Scheibe ergeben. Reine OpenCV-L
 import cv2
 import numpy as np
 from scipy.optimize import least_squares
+from constants import to_uint8
 
 
 def _to8(img):
+    """uint8 für die Stitching-Pipeline (Kern = constants.to_uint8, inkl. None-Guard).
+    Float-[0,1]-Eingaben werden vorher auf 0..255 skaliert — sonst würde astype(uint8)
+    das Bild praktisch schwarz machen."""
     if img is None:
         return None
-    if img.dtype == np.uint16:
-        return (img / 256).astype(np.uint8)
-    if img.dtype != np.uint8:
-        return np.clip(img, 0, 255).astype(np.uint8)
-    return img
+    if img.dtype not in (np.uint8, np.uint16) and img.size and float(img.max()) <= 1.0 + 1e-6:
+        img = np.clip(img * 255.0, 0, 255)
+    return to_uint8(img)
 
 
 def stitch_from_points(img_a, img_b, pts_a, pts_b, log=print):
@@ -128,11 +130,15 @@ def stitch_detail(imgs, projection="spherical", log=print, masks=None):
     dst_sz = cv2.detail.resultRoi(corners, sizes)
     blender.prepare(dst_sz)
     for idx in range(len(imgs_w)):
-        comp.apply(idx, corners[idx], imgs_w[idx].astype(np.uint8), masks_w[idx])
+        # apply() korrigiert IN-PLACE — auf einer benannten uint8-Kopie arbeiten und GENAU DIESE
+        # an den Blender füttern. (Vorher ging die Korrektur auf einer anonymen astype-Kopie
+        # verloren → der Belichtungsausgleich war ein No-Op.)
+        u8 = imgs_w[idx].astype(np.uint8)
+        comp.apply(idx, corners[idx], u8, masks_w[idx])
         sm = cv2.resize(seam_masks[idx].get() if hasattr(seam_masks[idx], "get") else seam_masks[idx],
                         (masks_w[idx].shape[1], masks_w[idx].shape[0]), interpolation=cv2.INTER_NEAREST)
         m = cv2.bitwise_and(sm, masks_w[idx])
-        blender.feed(imgs_w[idx].astype(np.int16), m, corners[idx])
+        blender.feed(u8.astype(np.int16), m, corners[idx])
     pano, _ = blender.blend(None, None)
     return _to8(np.clip(pano, 0, 255))
 
@@ -335,8 +341,9 @@ def optimize_photometric(images, overlaps, log=print, max_nfev=120):
 
     Rückgabe
     --------
-    (corrected_images, params) — Liste korrigierter Bilder (gleiche dtype wie Eingabe,
-    uint8 geclippt) und dict mit ``gain`` (Liste je Bild), ``Vb``, ``Vc``."""
+    (corrected_images, params) — Liste korrigierter Bilder (gleiche dtype wie Eingabe;
+    uint8/uint16 geclippt, Float bleibt Float) und dict mit ``gain`` (Liste je Bild),
+    ``Vb``, ``Vc``."""
     imgs = [im if im.ndim == 2 else cv2.cvtColor(im, cv2.COLOR_BGR2GRAY) for im in images]
     imgs = [im.astype(np.float64) for im in imgs]
     n = len(imgs)
@@ -391,7 +398,15 @@ def optimize_photometric(images, overlaps, log=print, max_nfev=120):
         if src.ndim == 3:
             f = f[..., None]
         out = src.astype(np.float32) * f
-        corrected.append(np.clip(out, 0, 255).astype(np.uint8))
+        # dtype der EINGABE erhalten (wie im Docstring versprochen) — Float-Kacheln [0,1]
+        # würden durch erzwungenes uint8 zerstört.
+        if src.dtype == np.uint8:
+            out = np.clip(out, 0, 255).astype(np.uint8)
+        elif src.dtype == np.uint16:
+            out = np.clip(out, 0, 65535).astype(np.uint16)
+        else:
+            out = out.astype(src.dtype, copy=False)
+        corrected.append(out)
     log(f"    Photometrie: Gains {np.round(gains, 3).tolist()}  Vb={Vb:.4f} Vc={Vc:.4f}")
     return corrected, {"gain": gains.tolist(), "Vb": Vb, "Vc": Vc}
 

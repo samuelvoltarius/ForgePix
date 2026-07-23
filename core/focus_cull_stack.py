@@ -26,7 +26,21 @@ from dataclasses import dataclass, field, asdict
 import cv2
 import numpy as np
 
-from constants import RAW_EXTS, STD_EXTS, FITS_EXTS
+from constants import RAW_EXTS, STD_EXTS, FITS_EXTS, to_uint8
+
+
+def phase(key):
+    """Maschinenlesbarer Phasen-Marker für die GUI (PHASE:<key> — Prinzip wie PREVIEW:).
+    Robust gegen Umformulierung/Übersetzung der menschenlesbaren Logzeilen."""
+    print(f"PHASE:{key}")
+    sys.stdout.flush()
+
+
+def done(out):
+    """Abschluss-Meldung: RESULT:-Marker für die GUI + menschenlesbare Zeile."""
+    print(f"RESULT:{out}")
+    print(f"\nFertig. Ergebnis in: {out}")
+    sys.stdout.flush()
 
 
 def list_images(folder):
@@ -181,18 +195,50 @@ class Frame:
     vlm_verdict: str = ""
 
 
-def analyze(paths, max_side):
+def analyze(paths, max_side, sharp_grid=None):
+    """Schärfe-Analyse aller Frames (ein Decode pro Bild).
+
+    sharp_grid: optional — zusätzlich pro Frame die Kachel-Schärfezeile (focus_analysis.
+    tile_sharpness, grid×grid) auf dem BEREITS geladenen Gray mitrechnen (auf max_side 1000
+    heruntergerechnet wie in focus_analysis._load_gray). Spart die zweite Volldecodierung
+    aller Frames, die vorher fa.sharpness_matrix direkt nach analyze() machte.
+    Rückgabe dann (frames, grays, M) statt (frames, grays). Der Disk-Cache von
+    sharpness_matrix wird hier bewusst NICHT beschrieben (leicht anderer Resample-Pfad
+    1600→1000 statt direkt→1000 — Metrik ist relativ und dafür egal, aber der Cache
+    bliebe sonst nicht konsistent zum Original-Pfad)."""
     from parallel import pmap
+    if sharp_grid:
+        import focus_analysis as fa
 
     def _one(p):
-        g = load_gray(p, max_side=max_side)
+        try:
+            g = load_gray(p, max_side=max_side)
+        except Exception as e:
+            # Ein korruptes/unlesbares Bild darf nicht die ganze Analyse (pmap) abbrechen:
+            # Frame mit peak 0 markieren und aussortieren, Rest der Serie läuft weiter.
+            frame = Frame(path=p, name=os.path.basename(p), keep=False)
+            frame.reasons.append(f"nicht lesbar ({e})")
+            row = np.zeros(sharp_grid * sharp_grid, np.float32) if sharp_grid else None
+            return frame, np.zeros((64, 64), np.uint8), row  # Nullzeile wie sharpness_matrix
         peak, mean = peak_local_sharpness(g)
         frame = Frame(path=p, name=os.path.basename(p), peak_sharp=peak, mean_sharp=mean)
-        return frame, cv2.resize(g, (64, 64), interpolation=cv2.INTER_AREA)
+        row = None
+        if sharp_grid:
+            g2, s = g, max(g.shape)
+            if s > 1000:                    # gleiche Arbeitsgröße wie focus_analysis._load_gray
+                f2 = 1000 / s
+                g2 = cv2.resize(g, (int(g.shape[1] * f2), int(g.shape[0] * f2)),
+                                interpolation=cv2.INTER_AREA)
+            row = fa.tile_sharpness(g2, sharp_grid)
+        return frame, cv2.resize(g, (64, 64), interpolation=cv2.INTER_AREA), row
 
     results = pmap(_one, paths)  # geordnet -> Aufnahmereihenfolge bleibt
     frames = [r[0] for r in results]
     grays = [r[1] for r in results]
+    if sharp_grid:
+        M = (np.vstack([r[2] for r in results]) if results
+             else np.zeros((0, sharp_grid * sharp_grid), np.float32))
+        return frames, grays, M
     return frames, grays
 
 
@@ -211,6 +257,8 @@ def cull(frames, grays, dip_ratio, abs_min, dedup, dup_thresh):
     med = float(np.median(peaks)) if peaks else 0.0
     n = len(frames)
     for i, f in enumerate(frames):
+        if not f.keep:
+            continue  # schon vorher aussortiert (z.B. nicht lesbar) — nicht doppelt begründen
         if f.peak_sharp < abs_min:
             f.keep = False
             f.reasons.append(f"strukturlos (peak {f.peak_sharp:.0f} < {abs_min})")
@@ -238,6 +286,8 @@ def cull(frames, grays, dip_ratio, abs_min, dedup, dup_thresh):
                     other = j if weaker == i else i
                     frames[weaker].keep = False
                     frames[weaker].reasons.append(f"near-duplicate zu {frames[other].name}")
+                    if weaker == i:
+                        break  # Anker i selbst verworfen — nicht weiter gegen einen toten Anker vergleichen
     return med
 
 
@@ -306,12 +356,16 @@ def _encode_jpeg_dataurl(path, max_side=768):
         img = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
     else:
         img = cv2.imread(path, cv2.IMREAD_COLOR)
+    if img is None:
+        raise RuntimeError(f"Konnte Bild nicht lesen: {path}")
     h, w = img.shape[:2]
     s = max(h, w)
     if s > max_side:
         f = max_side / s
         img = cv2.resize(img, (int(w * f), int(h * f)), interpolation=cv2.INTER_AREA)
     ok, buf = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, 85])
+    if not ok:
+        raise RuntimeError(f"JPEG-Kodierung fehlgeschlagen: {path}")
     return "data:image/jpeg;base64," + base64.b64encode(buf.tobytes()).decode()
 
 
@@ -442,10 +496,8 @@ def heuristic_settings(frames):
         "dip_ratio": 0.4,
         "abs_min": float(min(40.0, max(8.0, med * 0.05))),
         "dedup": False,
-        "bunch": 12 if n > 24 else 0,
         "vlm_qc": False,
-        "algo": "pyramid", "transform": "rigid", "detector": "ORB",
-        "balance_channel": "LUMI", "balance_map": "LINEAR",
+        "transform": "rigid", "detector": "ORB",
         "sharpen": 12.0, "reverse": False,
         "subject": "(heuristisch)",
         "rationale": f"Aus dem Schärfeprofil bestimmt (ohne KI): {n} Fotos, "
@@ -485,11 +537,15 @@ def copy_exif(src, targets):
         return
     if shutil.which("exiftool"):
         try:
-            subprocess.run(["exiftool", "-overwrite_original", "-TagsFromFile", src, "-all:all",
-                            "-CommonIFD0", "-ICC_Profile", *tg],
-                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=120)
-            print(f"  EXIF übernommen von {os.path.basename(src)} -> {len(tg)} Datei(en)")
-            return
+            r = subprocess.run(["exiftool", "-overwrite_original", "-TagsFromFile", src, "-all:all",
+                                "-CommonIFD0", "-ICC_Profile", *tg],
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=120)
+            if r.returncode == 0:
+                print(f"  EXIF übernommen von {os.path.basename(src)} -> {len(tg)} Datei(en)")
+                return
+            # Exit-Code != 0 = exiftool konnte nicht schreiben — nicht fälschlich Erfolg melden
+            print(f"  exiftool-Übernahme fehlgeschlagen (Exit-Code {r.returncode}) — versuche eingebauten Weg",
+                  file=sys.stderr)
         except Exception as e:
             print(f"  exiftool-Übernahme fehlgeschlagen ({e}) — versuche eingebauten Weg", file=sys.stderr)
     _copy_exif_piexif(src, tg)
@@ -665,8 +721,7 @@ def export_web_jpg(stack_dir, export_dir):
         img = cv2.imread(os.path.join(stack_dir, f), cv2.IMREAD_UNCHANGED)
         if img is None:
             continue
-        if img.dtype != "uint8":
-            img = (img / 256).astype("uint8") if img.max() > 255 else img.astype("uint8")
+        img = to_uint8(img)
         out = os.path.join(export_dir, os.path.splitext(f)[0] + ".jpg")
         cv2.imwrite(out, img, [int(cv2.IMWRITE_JPEG_QUALITY), 92])
         print(f"  Web-JPG: {out}")
@@ -675,9 +730,7 @@ def export_web_jpg(stack_dir, export_dir):
 def ai_enhance_params(result_bgr, endpoint, model, api_key=None, ghostmap_path=None):
     """KI beurteilt das fertige Bild und schlägt TREUE Nachbearbeitung vor.
     Optional: Geister-Karte (ghostmap_path) mitgeben -> KI nennt Bewegungsartefakte/Retusche-Stellen."""
-    img = result_bgr
-    if img.dtype != np.uint8:
-        img = (img / 256).astype(np.uint8) if img.max() > 255 else img.astype(np.uint8)
+    img = to_uint8(result_bgr)
     h, w = img.shape[:2]
     if max(h, w) > 1024:
         f = 1024 / max(h, w)
@@ -951,7 +1004,9 @@ def run_own_engine(selected_dir, work_dir, args):
                 gm_path = None
     if getattr(args, "denoise", 0) and args.denoise > 0:
         result = stacker.denoise(result, args.denoise)
-    if args.sharpen > 0:
+    # Bei aktivem KI-Feinschliff schärft apply_ai_enhance selbst — args.sharpen zusätzlich
+    # anzuwenden hieße doppeltes Schärfen (gleiches Prinzip wie beim Lucky-Imaging-Fix).
+    if args.sharpen > 0 and not getattr(args, "ai_enhance", False):
         result = stacker.unsharp_mask(result, args.sharpen, args.sharpen_radius)
     if getattr(args, "ai_enhance", False):
         result = apply_ai_enhance(result, args, ghostmap_path=gm_path)
@@ -1345,7 +1400,7 @@ def main():
     if getattr(args, "lucky", False):
         out = run_lucky(input_dir, work_dir, args)
         if out:
-            print(f"\nFertig. Ergebnis in: {out}")
+            done(out)
         return
 
     # Automatik erkennt selbst, ob der Ordner mehrere Serien (Unterordner) enthält.
@@ -1444,6 +1499,7 @@ def run_astro(input_dir, work_dir, args):
     # Sub-Qualität bewerten + schlechte aussortieren (FWHM/Sterne/Guiding/Wolken/Spuren)
     if not getattr(args, "no_astro_qc", False):
         import astro_quality
+        phase("grade")
         print("  Sub-Bewertung (erklärbar, klassisch) …")
         _frames, kept = astro_quality.select_subs(paths)
         # Optional: KI fasst in Klartext zusammen, welche Subs warum rausfliegen (nur Text, datensparsam)
@@ -1490,6 +1546,19 @@ def run_astro(input_dir, work_dir, args):
 
     dark = load_master(getattr(args, "dark", None), "Dark")
     flat = load_master(getattr(args, "flat", None), "Flat")
+    bias = load_master(getattr(args, "bias", None), "Bias")
+    if bias is not None:
+        # Bias verrechnen (astro.calibrate kennt nur Dark/Flat, wurde bisher still ignoriert):
+        # - Flat VOR der Normierung bias-korrigieren, sonst verfälscht der Offset die
+        #   Vignettierungs-Korrektur (Flat-Signal = Flat − Bias).
+        # - Ohne Dark den Bias direkt vom Licht abziehen (als „Dark“ durchreichen).
+        #   MIT Dark enthält der Dark-Master den Bias bereits → nicht doppelt abziehen.
+        if flat is not None and flat.shape == bias.shape:
+            flat = np.clip(flat - bias, 1e-6, None)
+        if dark is None:
+            dark = bias
+        else:
+            print("  (Bias steckt im Dark-Master — nur das Flat wird bias-korrigiert)")
 
     reg_dir = os.path.join(work_dir, "registered")
     if os.path.isdir(reg_dir):
@@ -1505,6 +1574,7 @@ def run_astro(input_dir, work_dir, args):
     drizzle_true = getattr(args, "astro_drizzle_true", False) and drizzle > 1
     if drizzle_true:
         extras.append(f"echtes Drizzle (pixfrac {getattr(args, 'astro_pixfrac', 0.7)})")
+    phase("register")
     print(f"  Registrieren … ({', '.join(extras)})")
     pv_path = os.path.join(work_dir, "_live_preview.jpg")
 
@@ -1533,6 +1603,7 @@ def run_astro(input_dir, work_dir, args):
                                            align_mode=align_mode, cosmetic=cosmetic,
                                            drizzle=drizzle, detector=getattr(args, "detector", "ORB"),
                                            tps=getattr(args, "astro_tps", False))
+        phase("stack")
         print(f"  Stacken ({args.astro_method}, kappa={args.astro_kappa}) …")
         result = astro.stack(aligned, method=args.astro_method, kappa=args.astro_kappa, normalize=True,
                              local_norm=getattr(args, "astro_local_norm", False),
@@ -1603,6 +1674,7 @@ def _astro_write(result, work_dir, paths, args, astro):
     """Astro-Ergebnis schreiben: optional Hintergrund-Extraktion, dann 16-bit-Linear +
     32-bit-Linear (GraXpert/StarNet/PixInsight) + gestreckte Vorschau-JPG."""
     if getattr(args, "bg_extract", False):
+        phase("background")
         backend = getattr(args, "astro_bg_backend", "own")
         gx_path = getattr(args, "graxpert_path", None)
         if backend == "graxpert":
@@ -1728,11 +1800,8 @@ def _astro_write(result, work_dir, paths, args, astro):
             except Exception as e:
                 print(f"  (KI-Aufbereitung übersprungen: {e})", file=sys.stderr)
         # Dual-Band: Hα/OIII trennen → HOO (rot+teal), SHO (gold+blau) oder Foraxx (dynamisch).
-        # Breitband: Farbkalibrierung (optional PCC-lite, stern-photometrisch) + SCNR.
-        def _broadband(res):
-            cal = (astro.photometric_balance(res, color_s) if getattr(args, "astro_pcc", False)
-                   else astro.color_balance(res, color_s))
-            return astro.neutralize_background(astro.remove_green_cast(cal))
+        # Breitband läuft über _broadband (oben) — inkl. echtem PCC-Pfad bei --astro-pcc.
+        # (Hier stand eine zweite _broadband-Definition, die die echte PCC-Variante überschrieb.)
         if dualband:
             base_view = _dualband_view(result, getattr(args, "palette", "hoo"), astro)
         else:
@@ -1853,6 +1922,7 @@ def run_longexp(input_dir, work_dir, args):
     except Exception as e:
         print(f"  (Modus-Vorschlag übersprungen: {e})", file=sys.stderr)
     strength = max(0, min(100, getattr(args, "longexp_strength", 100))) / 100.0
+    phase("longexp")
     print(f"== Langzeitbelichtung: {len(paths)} Aufnahmen, Modus={mode}, "
           f"Ausrichten={eff_align}, virtuelle Belichtung={int(strength*100)} % ==")
     if mode == "stars":
@@ -1894,6 +1964,7 @@ def run_mosaic(input_dir, work_dir, args):
     paths = list_images(input_dir)
     if len(paths) < 2:
         print("Zu wenige Kacheln fürs Mosaik.", file=sys.stderr); return None
+    phase("mosaic")
     print(f"== Hybrid: Mosaik aus {len(paths)} Kacheln ({args.mosaic_mode}) ==")
     pano, _ = mosaic.stitch(paths, mode=args.mosaic_mode, autocrop=getattr(args, "autocrop", True))
     pano = _maybe_upscale(pano, args)
@@ -1951,7 +2022,7 @@ def run_lucky(input_path, work_dir, args):
         # 1) IMMER: das schärfste Einzelbild herausziehen (zuverlässig, schlägt den Stack bei
         #    strukturarmen/niedrig aufgelösten Zielen wie einer glatten Sonnenscheibe).
         try:
-            sc, _ = lucky.grade_video(v, max_frames=2000, log=_pv and (lambda *a: None) or print)
+            sc, _ = lucky.grade_video(v, max_frames=2000, log=lambda *a: None)
             cap0 = cv2.VideoCapture(v); cap0.set(cv2.CAP_PROP_POS_FRAMES, sc[0][1])
             ok0, bf = cap0.read(); cap0.release()
             if ok0 and bf is not None:
@@ -2009,6 +2080,7 @@ def run_hdr(input_dir, work_dir, args):
         return cv2.imread(p, cv2.IMREAD_UNCHANGED)
 
     groups = hdr.split_brackets(paths, size=getattr(args, "hdr_bracket", 0))
+    phase("merge")
     print(f"== HDR-Modus: {len(paths)} Aufnahmen → {len(groups)} Belichtungsreihe(n) ==")
     stack_dir = os.path.join(work_dir, "stack")
     if os.path.isdir(stack_dir):
@@ -2059,27 +2131,27 @@ def process(args, input_dir, work_dir):
     if getattr(args, "hdr", False):
         out = run_hdr(input_dir, work_dir, args)
         if out:
-            print(f"\nFertig. Ergebnis in: {out}")
+            done(out)
         return out
     if getattr(args, "longexp", False):
         out = run_longexp(input_dir, work_dir, args)
         if out:
-            print(f"\nFertig. Ergebnis in: {out}")
+            done(out)
         return out
     if getattr(args, "hybrid_fa", False):
         out = run_hybrid_focus_astro(input_dir, work_dir, args)
         if out:
-            print(f"\nFertig. Ergebnis in: {out}")
+            done(out)
         return out
     if getattr(args, "mosaic", False):
         out = run_mosaic(input_dir, work_dir, args)
         if out:
-            print(f"\nFertig. Ergebnis in: {out}")
+            done(out)
         return out
     if getattr(args, "astro", False):
         out = run_astro(input_dir, work_dir, args)
         if out:
-            print(f"\nFertig. Ergebnis in: {out}")
+            done(out)
         return out
     paths = list_images(input_dir)
     if not paths:
@@ -2090,6 +2162,7 @@ def process(args, input_dir, work_dir):
     raws = [p for p in paths if os.path.splitext(p)[1].lower() in RAW_EXTS]
     if raws and not args.no_raw_develop:
         dev_dir = os.path.join(work_dir, "developed")
+        phase("raw")
         print(f"== RAW-Entwicklung: {len(raws)} RAW(s) -> {args.raw_bps}-bit TIFF "
               f"(WB={args.raw_wb}, auto-bright={'an' if args.raw_auto_bright else 'aus'}"
               f"{', halbe Auflösung' if args.raw_half else ''}) ==")
@@ -2097,8 +2170,11 @@ def process(args, input_dir, work_dir):
         input_dir = dev_dir
         paths = list_images(input_dir)
 
+    phase("analyze")
     print(f"== {len(paths)} Bilder analysieren ==")
-    frames, grays = analyze(paths, args.max_side)
+    # sharp_grid=12: Kachel-Schärfematrix gleich mitrechnen (ein Decode statt zwei) —
+    # genutzt vom Verwackelt-Filter und der Fokus-Abdeckung nach dem Stacking.
+    frames, grays, M_sharp = analyze(paths, args.max_side, sharp_grid=12)
 
     # Auto-Modus: KI bestimmt alle Settings, Qualität wird erzwungen
     if getattr(args, "auto", False):
@@ -2119,20 +2195,22 @@ def process(args, input_dir, work_dir):
             print("== Automatik (ohne KI): Einstellungen aus dem Schärfeprofil ==")
             sug = heuristic_settings(frames)
         apply_suggestion_to_args(args, sug)
-        show = {k: sug.get(k) for k in ("dip_ratio", "abs_min", "algo", "transform",
-                                        "detector", "balance_channel", "sharpen",
-                                        "bunch", "reverse", "vlm_qc")}
+        show = {k: sug.get(k) for k in ("dip_ratio", "abs_min", "transform",
+                                        "detector", "sharpen", "reverse", "vlm_qc")}
         print(f"  Motiv: {sug.get('subject', '?')}")
         print(f"  -> {json.dumps(show, ensure_ascii=False)}")
         print(f"  Begründung: {sug.get('rationale', '')}")
+        print(f"RATIONALE:{sug.get('rationale', '')}"); sys.stdout.flush()
 
+    phase("cull")
     median = cull(frames, grays, args.dip_ratio, args.abs_min, args.dedup, args.dup_thresh)
 
     # Verwackelte / global unscharfe Frames zusätzlich aussortieren (klassisch, erklärbar)
     if getattr(args, "reject_blurry", False):
         try:
             import focus_analysis as fa
-            M = fa.sharpness_matrix([f.path for f in frames], grid=12, log=lambda *a: None)
+            # Kachel-Schärfematrix kam schon aus analyze() mit — kein zweites Voll-Decode.
+            M = M_sharp
             bad = dict((i, r) for i, _n, r in fa.detect_blurry(M, [f.path for f in frames],
                                                                rel=getattr(args, "blurry_rel", 0.45)))
             for i, f in enumerate(frames):
@@ -2179,6 +2257,7 @@ def process(args, input_dir, work_dir):
     if len(kept) < 2:
         print("Zu wenige Frames zum Stacken.", file=sys.stderr); return None
 
+    phase("stack")
     print("\n== Stacking ==")
     out = run_own_engine(selected_dir, work_dir, args)
 
@@ -2203,7 +2282,8 @@ def process(args, input_dir, work_dir):
                                  subject_aligned=getattr(args, "_subject_aligned", False))
             # Fokus-Abdeckung der verwendeten Frames -> "Fokusbereich vollständig?"
             try:
-                M = fa.sharpness_matrix([f.path for f in kept], grid=12, log=lambda *a: None)
+                # Zeilen der behaltenen Frames aus der schon berechneten Matrix (kein Re-Decode)
+                M = M_sharp[[i for i, f in enumerate(frames) if f.keep]]
                 tp = M.max(axis=0); posv = tp[tp > 0]
                 if posv.size:
                     ref = float(np.median(np.sort(posv)[-max(1, len(posv) // 4):]))
@@ -2217,6 +2297,7 @@ def process(args, input_dir, work_dir):
                         q["score"] = max(0, q["score"] - 8)
             except Exception:
                 pass
+            phase("quality")
             print(f"\n== Stack-Konfidenz: {q['score']}/100 ==")
             for r in q["findings"]:
                 print(f"   • {r}")
@@ -2225,7 +2306,7 @@ def process(args, input_dir, work_dir):
     except Exception as e:
         print(f"  (Qualitätsbewertung übersprungen: {e})", file=sys.stderr)
 
-    print(f"\nFertig. Ergebnis in: {out}")
+    done(out)
     return out
 
 
