@@ -253,5 +253,84 @@ class TestFokusLueckenBewertung(unittest.TestCase):
         self.assertLess(lueckenhaft, 85, f"lueckenhafte Serie bekaeme {lueckenhaft}/100")
 
 
+class TestGhostingStaffelung(unittest.TestCase):
+    """F7 — die Ghosting-Heuristik darf statische Serien nicht als bewegt verurteilen.
+
+    Gemessen: eine Serie MIT echter Bewegung liegt bei ~2.7 % Geisterfläche, eine VÖLLIG
+    statische Fokusreihe je nach Motiv und Unschärfegrad zwischen 0.0 % und 0.8 % — die
+    Frames sind bei starker Defokussierung konstruktionsbedingt uneins. Die alte einstufige
+    Schwelle (0.2 %) verurteilte solche Serien als „Ghosting erkannt" und zog 15 Punkte ab."""
+
+    def _reihe(self, n=9, blur=6.0, bewegung=False):
+        h, w = 200, 260
+        rng = np.random.RandomState(17)
+        base = cv2.GaussianBlur((rng.rand(h, w, 3) * 255).astype(np.uint8), (0, 0), 0.7)
+        for i in range(8):                       # harte Kanten -> der kritische Fall
+            x, y = int(rng.randint(20, w - 40)), int(rng.randint(20, h - 40))
+            cv2.rectangle(base, (x, y), (x + 26, y + 26),
+                          tuple(int(v) for v in rng.randint(0, 255, 3)), -1)
+        tiefe = np.tile(np.linspace(0, 1, w, dtype=np.float32), (h, 1))
+        frames = []
+        for i in range(n):
+            d = np.abs(tiefe - i / (n - 1)) * blur
+            f = np.zeros_like(base, np.float32)
+            stufen = np.linspace(0, blur, 8)
+            for s_ in stufen:
+                b = base.astype(np.float32) if s_ < 0.05 else cv2.GaussianBlur(base.astype(np.float32), (0, 0), s_)
+                halb = (stufen[1] - stufen[0]) / 2
+                f += b * ((d >= s_ - halb) & (d < s_ + halb)).astype(np.float32)[..., None]
+            f = np.clip(f, 0, 255).astype(np.uint8)
+            if bewegung:
+                cv2.circle(f, (30 + i * 22, 60), 14, (255, 40, 40), -1)
+            frames.append(f)
+        return frames
+
+    def test_f7_befund_wird_nicht_als_tatsache_behauptet(self):
+        """Die Heuristik KANN statisch und bewegt nicht trennen (gemessene Bereiche
+        ueberlappen: statisch 0.00-0.81 %, bewegt 0.56-2.67 %). Darum darf der Befund nur
+        eine Moeglichkeit benennen und den Nutzer auf die Geister-Karte verweisen —
+        nicht behaupten, es sei Ghosting."""
+        import focus_analysis as fa
+        frames = self._reihe(bewegung=False)
+        res = stacker.focus_stack_pyramid_consistent([f.copy() for f in frames], log=lambda *a: None)
+        q = fa.stack_quality(np.asarray(res, np.uint8), frames)
+        text = " ".join(q["findings"])
+        self.assertNotIn("Ghosting/Bewegungszonen erkannt", text,
+                         "Heuristik behauptet Ghosting als Tatsache")
+        if "Geisterbilder" in text:
+            self.assertIn("Geister-Karte", text, "Hinweis ohne Handlungsmoeglichkeit")
+
+    def test_f7_empfindlichkeit_bleibt_erhalten(self):
+        """Gegenprobe: die Umformulierung darf den Detektor NICHT unempfindlicher machen.
+        Ein Versuch mit hoeherer Warnschwelle machte ihn fuer kleine Geister blind —
+        deshalb wird hier festgehalten, dass bewegte Serien weiter ansprechen."""
+        import focus_analysis as fa
+        statisch = self._reihe(bewegung=False)
+        bewegt = self._reihe(bewegung=True)
+        def flaeche(fr):
+            res = stacker.focus_stack_pyramid_consistent([f.copy() for f in fr], log=lambda *a: None)
+            return fa.stack_quality(np.asarray(res, np.uint8), fr)["ghost_area_pct"]
+        self.assertGreater(flaeche(bewegt), flaeche(statisch),
+                           "bewegte Serie muss mehr Streuung zeigen als die statische")
+        self.assertGreater(flaeche(bewegt), fa.GHOST_HINWEIS * 100,
+                           "echte Bewegung spricht nicht mehr an — Detektor blind geworden")
+
+    def test_f7_abzug_ist_massvoll(self):
+        """Bei einer Heuristik mit ueberlappenden Bereichen waeren 15 Punkte Abzug
+        ueberheblich — eine Fokusluecke (nicht behebbar) muss schwerer wiegen."""
+        import focus_analysis as fa
+        frames = self._reihe(bewegung=True)
+        res = stacker.focus_stack_pyramid_consistent([f.copy() for f in frames], log=lambda *a: None)
+        q = fa.stack_quality(np.asarray(res, np.uint8), frames)
+        self.assertGreaterEqual(q["score"], 75,
+                                "unsichere Heuristik wertet zu hart ab")
+        self.assertGreater(fa.focus_gap_penalty(0.70), 8,
+                           "die nicht behebbare Fokusluecke muss schwerer wiegen als der Ghosting-Verdacht")
+
+    def test_f7_schwelle_vorhanden(self):
+        import focus_analysis as fa
+        self.assertGreater(fa.GHOST_HINWEIS, 0)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -466,6 +466,22 @@ def _exif_expo_iso(paths):
 
 # -------------------------------------------------------- Qualität des Stacks ----
 
+
+# Ansprechschwelle der Ghosting-Heuristik (Anteil stark abweichender Pixel).
+#
+# WICHTIG, gemessen: die Werte statischer und bewegter Serien UEBERLAPPEN.
+#   voellig statische Fokusreihe : 0.00 % .. 0.81 %  (je staerker defokussiert und je haerter
+#                                  die Kanten, desto hoeher — die Frames sind konstruktions-
+#                                  bedingt uneins, ohne dass sich etwas bewegt haette)
+#   Serie mit echter Bewegung    : 0.56 % .. 2.67 %  (je nach Groesse des bewegten Objekts)
+# Eine Flaechenschwelle kann die beiden Faelle darum NICHT zuverlaessig trennen. Ein Versuch
+# mit einer hoeheren Warnschwelle (1.2 %) machte den Detektor fuer kleine Geister blind.
+#
+# Konsequenz: Empfindlichkeit unveraendert lassen (lieber erwaehnen als verpassen), aber den
+# Befund als MOEGLICHKEIT formulieren statt als Diagnose, und nur massvoll abwerten. Die
+# Geister-Karte, die der Nutzer ansehen kann, ist die eigentliche Antwort — nicht die Zahl.
+GHOST_HINWEIS = 0.002
+
 def stack_quality(result_bgr, sources=None, subject_aligned=False):
     """Bewertet das fertige Stack-Ergebnis (0–100) + menschenlesbare Befunde:
     Schärfe (Laplace-Varianz), Halos (Überschwinger an Kanten), Ghosting (Quell-Streuung).
@@ -498,15 +514,17 @@ def stack_quality(result_bgr, sources=None, subject_aligned=False):
             import stacker
             dm = stacker.disagreement_map(sources)
             ghost_area = float((dm > (dm.mean() + 4 * dm.std())).mean())
-            if ghost_area > 0.002:
+            if ghost_area > GHOST_HINWEIS:
                 if subject_aligned:
                     findings.append("Motiv-Ausrichtung aktiv: Motiv ist sauber zusammengeführt. Der "
                                     "unscharfe Hintergrund kann in der Geister-Karte markiert sein — "
                                     "das ist normal (bewegtes Motiv) und stört das Ergebnis nicht.")
                     score -= 3
                 else:
-                    findings.append("Ghosting/Bewegungszonen erkannt — Retusche oder Deghost prüfen")
-                    score -= 15
+                    findings.append("mögliche Geisterbilder/Bewegungszonen — Geister-Karte ansehen; "
+                                    "bei stark unscharfen Serien ist das oft harmlos, sonst hilft "
+                                    "Deghost oder Retusche")
+                    score -= 8
         except Exception:
             pass
 
