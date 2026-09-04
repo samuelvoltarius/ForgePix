@@ -212,5 +212,46 @@ class TestF5DeghostSharpest(unittest.TestCase):
         self.assertEqual(smoothed.shape, a.shape)
 
 
+class TestFokusLueckenBewertung(unittest.TestCase):
+    """F6 — der Punktabzug für eine Fokuslücke muss mit der fehlenden Abdeckung wachsen.
+
+    Vorher pauschal −8. Folge (gemessen, nicht geschätzt): eine Serie aus 3 Aufnahmen mit
+    Lücken (70 % Abdeckung, nur 45 % der Originalschärfe gerettet) bekam 92/100, eine
+    lückenlose Serie aus 9 Aufnahmen (144 % Schärfe) nur 85/100 — die Note war der
+    tatsächlichen Qualität entgegengesetzt."""
+
+    def test_f6_lueckenlos_kostet_nichts(self):
+        import focus_analysis as fa
+        self.assertEqual(fa.focus_gap_penalty(1.0), 0)
+        self.assertEqual(fa.focus_gap_penalty(fa.FOKUS_ABDECKUNG_OK), 0)
+
+    def test_f6_abzug_waechst_monoton_mit_der_luecke(self):
+        import focus_analysis as fa
+        werte = [fa.focus_gap_penalty(c) for c in (0.90, 0.80, 0.70, 0.60, 0.50)]
+        self.assertEqual(werte, sorted(werte), f"nicht monoton: {werte}")
+        self.assertLess(werte[0], werte[-1], "eine groessere Luecke muss mehr kosten")
+
+    def test_f6_luecke_wiegt_schwerer_als_ghosting_und_halo(self):
+        """Ghosting kostet 15, Halos 12 — beides ist nachtraeglich behebbar. Eine deutliche
+        Fokusluecke ist es nicht und muss darum schwerer wiegen."""
+        import focus_analysis as fa
+        self.assertGreater(fa.focus_gap_penalty(0.70), 15,
+                           "eine 70-%-Abdeckung muss mehr kosten als der Ghosting-Abzug")
+
+    def test_f6_abzug_ist_gedeckelt_und_nie_negativ(self):
+        import focus_analysis as fa
+        for c in (-1.0, 0.0, 0.3, 0.5, 1.0, 2.0):
+            p = fa.focus_gap_penalty(c)
+            self.assertGreaterEqual(p, 0)
+            self.assertLessEqual(p, 45, f"Abzug ausser Rand und Band bei coverage={c}")
+
+    def test_f6_note_ordnet_lueckenlos_ueber_lueckenhaft(self):
+        """Der konkrete gemessene Fall: 100−Abzug muss die lueckenhafte Serie unter die
+        lueckenlose (dort 85 durch die Ghosting-Heuristik) schieben."""
+        import focus_analysis as fa
+        lueckenhaft = 100 - fa.focus_gap_penalty(0.70)
+        self.assertLess(lueckenhaft, 85, f"lueckenhafte Serie bekaeme {lueckenhaft}/100")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

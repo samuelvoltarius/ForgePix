@@ -2305,11 +2305,23 @@ def process(args, input_dir, work_dir):
                     valid = tp > 0.15 * float(np.median(posv))
                     cov = float(((tp >= 0.25 * ref) & valid).sum() / max(1, valid.sum()))
                     q["focus_coverage"] = round(100 * cov, 1)
-                    q["focus_complete"] = cov >= 0.92
-                    q["findings"].insert(0, "Fokusbereich vollständig" if cov >= 0.92
-                                         else f"Fokusbereich evtl. mit Lücken ({cov*100:.0f} % abgedeckt)")
-                    if cov < 0.92:
-                        q["score"] = max(0, q["score"] - 8)
+                    q["focus_complete"] = cov >= fa.FOKUS_ABDECKUNG_OK
+                    # Abzug PROPORTIONAL zur fehlenden Abdeckung — und als schwerster Mangel.
+                    # Vorher pauschal -8: eine Serie mit 70 % Abdeckung bekam damit eine BESSERE
+                    # Note als eine lueckenlose, an der die Ghosting-Heuristik (-15) angeschlagen
+                    # hatte. Gemessen: 3 Aufnahmen mit Luecken 92/100 bei nur 45 % der Original-
+                    # schaerfe, 9 lueckenlose Aufnahmen 85/100 bei 144 %. Genau verkehrt herum.
+                    # Eine Fokusluecke ist der einzige Mangel, den man NICHT nachtraeglich
+                    # reparieren kann (Halos = Schaerferegler, Ghosting = Retusche/Deghost) —
+                    # dort fehlt schlicht eine Aufnahme. Darum wiegt sie am schwersten.
+                    abzug = fa.focus_gap_penalty(cov)
+                    if not abzug:
+                        q["findings"].insert(0, "Fokusbereich vollständig")
+                    else:
+                        q["findings"].insert(
+                            0, f"Fokusbereich mit Lücken ({cov*100:.0f} % abgedeckt) — "
+                               f"kleinere Fokusschritte oder mehr Aufnahmen nötig")
+                        q["score"] = max(0, q["score"] - abzug)
             except Exception:
                 pass
             phase("quality")

@@ -515,3 +515,24 @@ def stack_quality(result_bgr, sources=None, subject_aligned=False):
     return {"score": int(max(0, min(100, round(score)))),
             "sharpness": round(sharp, 1), "halo": round(halo, 2),
             "ghost_area_pct": round(100 * ghost_area, 3), "findings": findings}
+
+
+FOKUS_ABDECKUNG_OK = 0.92          # ab hier gilt der Fokusbereich als lueckenlos
+
+
+def focus_gap_penalty(coverage):
+    """Punktabzug fuer eine Fokusluecke — PROPORTIONAL zur fehlenden Abdeckung.
+
+    `coverage` ist der Anteil des Motivs, der in mindestens einer Aufnahme scharf war (0..1).
+    Rueckgabe: 0 bei lueckenloser Serie, sonst bis zu 45 Punkte.
+
+    Warum so schwer: eine Fokusluecke ist der EINZIGE Mangel, den man nachtraeglich nicht
+    beheben kann — Halos sind ein Schaerferegler, Ghosting ist Retusche/Deghost, aber an einer
+    Luecke fehlt schlicht eine Aufnahme. Der frueher pauschale Abzug von 8 Punkten fuehrte dazu,
+    dass eine Serie mit 70 % Abdeckung (nur 45 % der Originalschaerfe gerettet) mit 92/100
+    BESSER bewertet wurde als eine lueckenlose mit 85/100. Gemessen, nicht geschaetzt.
+    """
+    cov = max(0.0, min(1.0, float(coverage)))
+    if cov >= FOKUS_ABDECKUNG_OK:
+        return 0
+    return int(min(45, round((FOKUS_ABDECKUNG_OK - cov) * 150)))
