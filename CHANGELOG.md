@@ -6,6 +6,60 @@ All notable changes to ForgePix. Format based on
 [Keep a Changelog](https://keepachangelog.com/), versioning per
 [SemVer](https://semver.org/).
 
+## [Unreleased]
+### Windows portability pass — ForgePix was practically unusable on Windows
+ForgePix was built on a Mac, where paths and the console are UTF-8. On Windows the locale
+code page applies (cp1252 on German systems). Every finding below was reproduced, fixed and
+re-verified — none of it was inferred from reading the code.
+
+**Images were never loaded / results silently lost:**
+- **`cv2.imread` returned `None` for EVERY non-ASCII path** — even a German `Blüte_01.jpg`
+  or a user folder `C:\Users\Jürgen\`. The pipeline ran with zero images and still reported
+  success.
+- **`cv2.imwrite` returned `True` but wrote NO file** when the target path contained an
+  umlaut. ForgePix said "done" and the finished stack was gone. The most dangerous finding.
+- Fix: `constants.imread`/`imwrite` read and write the bytes themselves
+  (`np.fromfile`/`imdecode` and `imencode`/`tofile`); OpenCV only decodes. The originals'
+  `None`/`False` semantics are preserved. 75 call sites migrated.
+
+**The pipeline crashed on its own log output:**
+- The code contains 1134 characters cp1252 cannot encode (`→` 378×, `─` 462×, `σ`, `α` …).
+  Every `print` of those raised `UnicodeEncodeError` and aborted the run. Measured: `--help`
+  crashed; the HDR run died on its first log line with exit code 1.
+- Fix: `constants.force_utf8_stdio()` in both entry points; the GUI child process also gets
+  `PYTHONIOENCODING=utf-8` (which also covers the PyInstaller binary). `constants.log_print()`
+  replaces `log=print` as the default in 62 engine signatures — a log line must never abort a
+  running computation.
+- 15 `subprocess` calls decoded the UTF-8 output of Siril/GraXpert/exiftool with the locale
+  code page (`Frühling→` arrived as `FrÃ¼hlingâ†'`) → `encoding="utf-8"` set.
+
+**External tools were never found on Windows:**
+- All four finders knew macOS paths only (`/Applications`, `/usr/local/bin`). Evidence:
+  Siril 1.4.2 sat in `C:\Program Files\Siril\bin\siril-cli.exe` and `find_siril()` returned
+  `None`. Windows installers typically do not add themselves to PATH.
+- New: `siril_engine._windows_cands()` (Program Files, Program Files (x86),
+  `%LOCALAPPDATA%\Programs`, `%ProgramData%`) for Siril, GraXpert, StarNet++ (including the
+  v2.5 names) and Cosmic Clarity. Nothing changes on macOS/Linux.
+- `graxpert_engine.find_cli()` had a SECOND, divergent candidate list and now delegates to
+  `tools_engine.find_graxpert()` — maintaining one of them only fixed half the code.
+
+**Being honest with the user:**
+- **A run that produced nothing exited with code 0** → the GUI showed a green "Done ✓" and
+  announced "Stack finished 🎉" although every frame had been culled and nothing was written.
+  Now exit code 1; `--no-stack` remains an intentional success. Batch mode counts the stacks
+  actually produced ("3/5" instead of "5").
+- **A missing astropy produced a 20-line traceback wall.** `constants.require_astropy()` now
+  states the cause, the fix (`pip install astropy`) and the reassurance (JPG/TIFF/PNG/RAW keep
+  working). Four previously unguarded sites covered — including the GraXpert backend, which
+  required astropy without that being documented anywhere.
+- `constants.ForgePixFehler` separates expected, user-fixable errors (one plain-text line) from
+  genuine program errors (full traceback for bug reports). Ctrl-C now ends with "Abgebrochen.".
+
+**Tests:** new file `tests/test_windows_gaps.py` (16 tests). Two of the six failing tests were
+test defects, not code defects: the i18n tests read UTF-8 sources without `encoding=`, and the
+FITS tests reported the missing OPTIONAL astropy as a failure instead of skipping.
+Before: 165 tests / 6 errors → now: 181 tests / 0 errors (6 skipped: optional deps).
+
 ## [1.27.1] – 2026-07-22
 ### Big cleanup/correctness pass — 4 review + 3 fix agents across the whole codebase
 No new features; ~70 verified findings fixed (bugs > leaks > dead code > duplication).

@@ -6,6 +6,61 @@ Alle nennenswerten Änderungen an ForgePix. Format orientiert an
 [Keep a Changelog](https://keepachangelog.com/de/), Versionierung nach
 [SemVer](https://semver.org/lang/de/).
 
+## [Unreleased]
+### Windows-Portierungs-Pass — ForgePix war auf Windows praktisch unbenutzbar
+ForgePix wurde auf einem Mac gebaut (Pfade und Konsole sind dort UTF-8). Unter Windows gilt
+die Locale-Codepage (deutsch: cp1252). Jeder Befund unten wurde reproduziert, behoben und
+gegengeprüft — nicht aus dem Code abgeleitet.
+
+**Bilder wurden nicht geladen / Ergebnisse still verloren:**
+- **`cv2.imread` gab bei JEDEM Nicht-ASCII-Pfad `None` zurück** — schon bei einem deutschen
+  `Blüte_01.jpg` oder einem Nutzerordner `C:\Users\Jürgen\`. Die Pipeline lief mit null
+  Bildern durch und meldete trotzdem Erfolg.
+- **`cv2.imwrite` meldete `True`, schrieb aber KEINE Datei**, wenn der Zielpfad einen Umlaut
+  enthielt. ForgePix sagte „Fertig", und das fertige Stack-Ergebnis war weg. Der gefährlichste
+  der Befunde.
+- Behebung: `constants.imread`/`imwrite` lesen und schreiben die Bytes selbst
+  (`np.fromfile`/`imdecode` bzw. `imencode`/`tofile`); OpenCV dekodiert nur noch. Die `None`-
+  bzw. `False`-Semantik der Originale bleibt erhalten. 75 Aufrufstellen umgestellt.
+
+**Die Pipeline stürzte an ihrer eigenen Logausgabe ab:**
+- Im Code stehen 1134 Zeichen, die cp1252 nicht kodieren kann (`→` 378×, `─` 462×, `σ`, `α` …).
+  Jedes `print` damit warf `UnicodeEncodeError` und riss den Lauf ab. Gemessen: `--help`
+  stürzte ab; der HDR-Lauf starb an seiner ersten Logzeile mit Exit-Code 1.
+- Behebung: `constants.force_utf8_stdio()` in beiden Einstiegspunkten; der GUI-Kindprozess
+  bekommt zusätzlich `PYTHONIOENCODING=utf-8` (greift auch im PyInstaller-Binary).
+  `constants.log_print()` ersetzt `log=print` als Vorgabe in 62 Engine-Signaturen — eine
+  Logzeile darf eine laufende Berechnung nie abbrechen.
+- 15 `subprocess`-Aufrufe dekodierten die UTF-8-Ausgabe von Siril/GraXpert/exiftool mit der
+  Locale-Codepage (`Frühling→` kam als `FrÃ¼hlingâ†'` an) → `encoding="utf-8"` gesetzt.
+
+**Fremdtools wurden unter Windows nie gefunden:**
+- Alle vier Sucher kannten nur macOS-Pfade (`/Applications`, `/usr/local/bin`). Belegt:
+  Siril 1.4.2 lag unter `C:\Program Files\Siril\bin\siril-cli.exe` und `find_siril()` lieferte
+  `None`. Windows-Installer tragen sich üblicherweise nicht in den PATH ein.
+- Neu: `siril_engine._windows_cands()` (Program Files, Program Files (x86),
+  `%LOCALAPPDATA%\Programs`, `%ProgramData%`) für Siril, GraXpert, StarNet++ (inkl. der
+  v2.5-Namen) und Cosmic Clarity. Auf macOS/Linux ändert sich nichts.
+- `graxpert_engine.find_cli()` hatte eine ZWEITE, abweichende Kandidatenliste und delegiert
+  jetzt an `tools_engine.find_graxpert()` — wer eine pflegte, reparierte nur die Hälfte.
+
+**Ehrlichkeit gegenüber dem Nutzer:**
+- **Ein Lauf ohne Ergebnis endete mit Exit-Code 0** → die GUI zeigte grün „Fertig ✓" und
+  meldete „Stack fertig 🎉", obwohl alle Frames aussortiert waren und nichts entstand.
+  Jetzt Exit-Code 1; `--no-stack` bleibt ein gewollter Erfolg. Der Batch-Modus zählt die
+  tatsächlich erzeugten Stacks („3/5" statt „5").
+- **Fehlendes astropy warf eine 20-zeilige Traceback-Wand.** `constants.require_astropy()`
+  nennt jetzt Grund, Lösung (`pip install astropy`) und Entwarnung (JPG/TIFF/PNG/RAW laufen
+  weiter). Vier bisher ungeschützte Stellen abgesichert — darunter das GraXpert-Backend, das
+  astropy brauchte, ohne dass das irgendwo dokumentiert war.
+- `constants.ForgePixFehler` trennt erwartete, behebbare Fehler (eine Klartextzeile) von
+  echten Programmfehlern (voller Traceback für Bugreports). Strg-C endet mit „Abgebrochen.".
+
+**Tests:** neue Datei `tests/test_windows_gaps.py` (16 Tests). Zwei der sechs roten Tests waren
+Testfehler, keine Codefehler: die i18n-Tests lasen UTF-8-Quellen ohne `encoding=`, die
+FITS-Tests meldeten das fehlende OPTIONALE astropy als Fehlschlag statt zu überspringen.
+Vorher 165 Tests / 6 Fehler → jetzt 181 Tests / 0 Fehler (6 übersprungen: optionale Deps).
+
 ## [1.27.1] – 2026-07-22
 ### Großer Aufräum-/Korrektheits-Pass — 4 Review- + 3 Fix-Agenten über die ganze Codebasis
 Kein neues Feature, dafür ~70 verifizierte Befunde gefixt (Bugs > Leaks > toter Code > Duplikate).
