@@ -13,6 +13,7 @@ Ist ein Tool nicht installiert, fällt die GUI auf „im Dateimanager zeigen“ 
 import os
 import shutil
 import subprocess
+import siril_engine                      # nur fuer _windows_cands (kein Zyklus)
 from constants import imread, imwrite, log_print
 
 
@@ -47,8 +48,13 @@ def find_graxpert(explicit=None):
     cands = [explicit] if explicit else []
     cands += [shutil.which("graxpert"), shutil.which("GraXpert"),
               "/Applications/GraXpert.app/Contents/MacOS/GraXpert",
+              os.path.expanduser("~/Applications/GraXpert.app/Contents/MacOS/GraXpert"),
+              "/opt/GraXpert/GraXpert",
               "/usr/local/bin/graxpert", "/usr/bin/graxpert",
-              os.path.expanduser("~/.local/bin/graxpert")]
+              os.path.expanduser("~/.local/bin/graxpert"),
+              # Windows: der Installer legt GraXpert.exe unter %LOCALAPPDATA%\Programs ab
+              # (auf dem Testrechner genau dort) und traegt nichts in den PATH ein.
+              *siril_engine._windows_cands("GraXpert", ("GraXpert.exe",))]
     for c in cands:
         if c and os.path.isfile(c):
             return c
@@ -61,11 +67,15 @@ def find_starnet(explicit=None):
     cands = [explicit] if explicit else []
     cands += [shutil.which("starnet++"), shutil.which("StarNetv2CLI"),
               shutil.which("starnet2"), shutil.which("StarNet++"),
-              "/usr/local/bin/starnet++", "/Applications/StarNet/StarNetv2CLI"]
+              "/usr/local/bin/starnet++", "/Applications/StarNet/StarNetv2CLI",
+              *siril_engine._windows_cands("StarNet", ("StarNetv2CLI.exe", "starnet++.exe",
+                                                       "starnet2.exe")),
+              r"C:\StarNet\StarNetv2CLI.exe"]
     # Häufige Installationsorte (auch der von Siril mitgelieferte/verlinkte StarNet-Ordner)
     for d in ("~/siril/starnet", "~/Documents/starnet", "~/StarNet", "~/starnet",
               "/Applications/Siril.app/Contents/Resources/starnet"):
-        for name in ("starnet++", "StarNetv2CLI", "starnet2"):
+        for name in ("starnet++", "StarNetv2CLI", "starnet2",
+                     "StarNetv2CLI.exe", "starnet++.exe", "starnet2.exe"):
             cands.append(os.path.join(os.path.expanduser(d), name))
     for c in cands:
         if c and os.path.isfile(c):

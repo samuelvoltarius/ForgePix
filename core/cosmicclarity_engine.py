@@ -17,15 +17,20 @@ import numpy as np
 import cv2
 from constants import log_print
 
+import siril_engine                      # nur fuer _windows_cands (kein Zyklus)
+
 _CANDIDATES = [
     os.path.expanduser("~/cosmicclarity/SetiAstroCosmicClaritymac"),
     os.path.expanduser("~/cosmicclarity/SetiAstroCosmicClarity"),
     "/Applications/CosmicClarity/SetiAstroCosmicClaritymac",
+    # Windows: .exe-Namen; ohne sie war Cosmic Clarity dort grundsaetzlich unauffindbar.
+    os.path.expanduser("~/cosmicclarity/SetiAstroCosmicClarity.exe"),
+    *siril_engine._windows_cands("CosmicClarity", ("SetiAstroCosmicClarity.exe",)),
 ]
 
 
 def find_cli(path=None):
-    for c in ([path] if path else []) + _CANDIDATES + [shutil.which("SetiAstroCosmicClaritymac")]:
+    for c in ([path] if path else []) + _CANDIDATES + [shutil.which("SetiAstroCosmicClaritymac"), shutil.which("SetiAstroCosmicClarity")]:
         if c and os.path.exists(c):
             return c
     return None

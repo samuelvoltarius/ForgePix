@@ -14,19 +14,14 @@ import subprocess
 import numpy as np
 from constants import log_print
 
-_CANDIDATES = [
-    "/Applications/GraXpert.app/Contents/MacOS/GraXpert",
-    os.path.expanduser("~/Applications/GraXpert.app/Contents/MacOS/GraXpert"),
-    "/opt/GraXpert/GraXpert",
-]
-
-
 def find_cli(path=None):
-    """Pfad zur GraXpert-CLI finden (übergebener Pfad, App-Bundle, oder im PATH), sonst None."""
-    for c in ([path] if path else []) + _CANDIDATES + [shutil.which("graxpert"), shutil.which("GraXpert")]:
-        if c and os.path.exists(c):
-            return c
-    return None
+    """Pfad zur GraXpert-CLI finden (übergebener Pfad, App-Bundle, oder im PATH), sonst None.
+
+    Delegiert bewusst an tools_engine.find_graxpert: hier stand frueher eine ZWEITE,
+    kuerzere Kandidatenliste. Wer eine der beiden ergaenzte, reparierte nur den halben
+    Code — auf Windows fand die eine GraXpert und die andere nicht."""
+    import tools_engine
+    return tools_engine.find_graxpert(path)
 
 
 def available(path=None):

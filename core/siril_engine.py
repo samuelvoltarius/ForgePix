@@ -17,15 +17,45 @@ import cv2
 from constants import log_print
 
 
+def _windows_cands(ordner, relpfade):
+    r"""Windows-Installationsorte durchspielen: Program Files, Program Files (x86),
+    %LOCALAPPDATA%\Programs und %ProgramData%. Auf Nicht-Windows leere Liste.
+
+    Hintergrund: ForgePix entstand auf macOS, die Sucher kannten nur /Applications
+    und /usr/local/bin. Windows-Installer tragen ihre Tools ueblicherweise NICHT in
+    den PATH ein — `shutil.which` allein findet sie also nicht."""
+    if os.name != "nt":
+        return []
+    basen = [os.environ.get("ProgramFiles", r"C:\Program Files"),
+             os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)"),
+             os.path.join(os.environ.get("LOCALAPPDATA", ""), "Programs"),
+             os.environ.get("ProgramData", r"C:\ProgramData"),
+             os.path.expanduser("~")]
+    out = []
+    for b in basen:
+        if not b:
+            continue
+        for rel in relpfade:
+            out.append(os.path.join(b, ordner, *rel.split("/")))
+    return out
+
+
 def find_siril(explicit=None):
     """Pfad zu siril-cli finden (explizit, PATH, oder macOS-App-Bundle).
     Zentrale Kandidatenliste für ALLE Module (photometric importiert von hier) — der
     GUI-Binary-Kandidat (…/MacOS/Siril) stammt aus der früheren photometric-Kopie."""
     cands = [explicit] if explicit else []
     cands += [shutil.which("siril-cli"), shutil.which("siril"),
+              # macOS
               "/Applications/Siril.app/Contents/MacOS/siril-cli",
               "/Applications/Siril.app/Contents/MacOS/Siril",
-              "/usr/bin/siril-cli", "/usr/local/bin/siril-cli"]
+              # Linux
+              "/usr/bin/siril-cli", "/usr/local/bin/siril-cli",
+              # Windows — der Installer legt siril-cli.exe unter bin/ ab und traegt
+              # NICHTS in den PATH ein. Ohne diese Kandidaten fand ForgePix ein
+              # installiertes Siril auf Windows nie (gepruefte Installation 1.4.2).
+              *_windows_cands("Siril", ("bin/siril-cli.exe", "bin/siril.exe",
+                                        "siril-cli.exe", "siril.exe"))]
     for c in cands:
         if c and os.path.isfile(c):
             return c

@@ -146,5 +146,46 @@ class TestSubprozessDekodierung(unittest.TestCase):
         self.assertEqual(nackt, [], "subprocess ohne encoding='utf-8': " + ", ".join(nackt))
 
 
+class TestFremdtoolSuche(unittest.TestCase):
+    """W5 — die Sucher für Siril/GraXpert/StarNet kannten NUR macOS-Pfade.
+
+    Auf dem Testrechner war Siril 1.4.2 unter „C:\Program Files\Siril\bin" installiert und
+    ForgePix fand es trotzdem nie: Windows-Installer tragen sich üblicherweise nicht in den
+    PATH ein, und /Applications gibt es dort nicht."""
+
+    def test_w5_windows_kandidaten_nur_unter_windows(self):
+        import siril_engine
+        c = siril_engine._windows_cands("Siril", ("bin/siril-cli.exe",))
+        if os.name == "nt":
+            self.assertTrue(c, "unter Windows müssen Kandidaten entstehen")
+            self.assertTrue(all(x.endswith(".exe") for x in c))
+            self.assertTrue(any("Program Files" in x or "Programs" in x for x in c))
+        else:
+            self.assertEqual(c, [], "auf macOS/Linux darf nichts erzeugt werden")
+
+    def test_w5_alle_sucher_liefern_pfad_oder_none(self):
+        """Zugesicherte Semantik: existierender Dateipfad oder None — nie ein Ordner,
+        nie ein Pfad, der gar nicht da ist."""
+        import siril_engine
+        import tools_engine
+        import graxpert_engine
+        import cosmicclarity_engine
+        for name, fn in [("siril", siril_engine.find_siril),
+                         ("graxpert", tools_engine.find_graxpert),
+                         ("starnet", tools_engine.find_starnet),
+                         ("graxpert_engine", graxpert_engine.find_cli),
+                         ("cosmicclarity", cosmicclarity_engine.find_cli)]:
+            r = fn()
+            with self.subTest(tool=name):
+                self.assertTrue(r is None or os.path.isfile(r), f"{name}: {r!r}")
+
+    def test_w5_graxpert_sucher_sind_deckungsgleich(self):
+        """Es gab zwei getrennte GraXpert-Kandidatenlisten mit verschiedenem Inhalt —
+        wer eine ergänzte, reparierte nur die Hälfte."""
+        import tools_engine
+        import graxpert_engine
+        self.assertEqual(graxpert_engine.find_cli(), tools_engine.find_graxpert())
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
