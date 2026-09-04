@@ -14,7 +14,7 @@ import subprocess
 
 import numpy as np
 import cv2
-from constants import log_print
+from constants import log_print, require_astropy
 
 
 def _windows_cands(ordner, relpfade):
@@ -94,7 +94,7 @@ def read_fits_bgr(path, gray2bgr=True):
     """Ergebnis-FITS (RGB-Cube oder 2D) als float-BGR mit fester Normierung lesen — gemeinsamer
     Helper für die Siril-/GraXpert-/PCC-Brücken (statt dreier leicht verschiedener Kopien).
     gray2bgr=False lässt 2D-Daten zweidimensional (GraXpert-Verhalten)."""
-    from astropy.io import fits
+    fits = require_astropy("FITS-Ergebnisse der Engine-Bruecken lesen")
     d = fits_scale01(fits.getdata(path))
     if d.ndim == 3 and d.shape[0] == 3:                     # (C,H,W) → (H,W,C)
         d = np.transpose(d, (1, 2, 0))

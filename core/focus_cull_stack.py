@@ -26,7 +26,8 @@ from dataclasses import dataclass, field, asdict
 import cv2
 import numpy as np
 
-from constants import RAW_EXTS, STD_EXTS, FITS_EXTS, to_uint8, force_utf8_stdio, imread, imwrite, log_print
+from constants import (RAW_EXTS, STD_EXTS, FITS_EXTS, to_uint8, force_utf8_stdio,
+                       imread, imwrite, log_print, ForgePixFehler)
 
 
 def phase(key):
@@ -2367,4 +2368,12 @@ def watch_loop(args, input_dir, work_dir):
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except ForgePixFehler as e:
+        # Erwarteter, behebbarer Fall -> eine verstaendliche Zeile statt einer Traceback-Wand.
+        print(f"\nFehler: {e}", file=sys.stderr)
+        sys.exit(1)
+    except KeyboardInterrupt:
+        print("\nAbgebrochen.", file=sys.stderr)
+        sys.exit(130)

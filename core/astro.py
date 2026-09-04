@@ -19,7 +19,7 @@ import os
 import numpy as np
 import cv2
 
-from constants import RAW_EXTS, imread, imwrite, log_print
+from constants import RAW_EXTS, imread, imwrite, log_print, require_astropy
 from siril_engine import fits_scale01   # feste FITS-Normierung (gemeinsam mit den Engine-Brücken)
 
 # OSC-Bayer-Muster (FITS BAYERPAT) -> OpenCV-Debayer-Code. Achtung: OpenCVs Bayer-Benennung ist
@@ -62,7 +62,7 @@ def _read_float(path):
     """Bild als float32 [0..1] (BGR) lesen — TIFF/PNG/JPG/FITS; RAW via rawpy."""
     ext = os.path.splitext(path)[1].lower()
     if ext in (".fit", ".fits", ".fts"):
-        from astropy.io import fits
+        fits = require_astropy("FITS-Dateien lesen")
         with fits.open(path) as hdul:
             hdu = hdul[0]
             d = np.asarray(hdu.data).astype(np.float32)

@@ -206,5 +206,40 @@ class TestEhrlicherExitCode(unittest.TestCase):
                       "--no-stack muss weiterhin als Erfolg gelten")
 
 
+class TestVerstaendlicheFehler(unittest.TestCase):
+    """W7 — fehlende OPTIONALE Bibliotheken müssen eine Handlungsanweisung liefern.
+
+    Vorher: wer FITS-Dateien ohne astropy stackte, bekam eine 20-zeilige Traceback-Wand,
+    die mit „ModuleNotFoundError: No module named 'astropy'" endete — ohne Hinweis, dass
+    FITS die Ursache ist oder wie man es behebt."""
+
+    def test_w7_astropy_meldung_nennt_grund_und_loesung(self):
+        from constants import require_astropy, ForgePixFehler
+        try:
+            import astropy.io.fits  # noqa: F401
+            self.skipTest("astropy ist installiert — der Fehlerpfad ist hier nicht prüfbar")
+        except ImportError:
+            pass
+        with self.assertRaises(ForgePixFehler) as ctx:
+            require_astropy("FITS-Subs bewerten")
+        text = str(ctx.exception)
+        self.assertIn("FITS-Subs bewerten", text, "der Zweck fehlt")
+        self.assertIn("pip install astropy", text, "die Loesung fehlt")
+        self.assertIn("JPG", text, "der Hinweis auf die nicht betroffenen Formate fehlt")
+
+    def test_w7_forgepixfehler_ist_von_runtimeerror_abgeleitet(self):
+        """Bestehende `except RuntimeError`-Stellen (z. B. die Engine-Rueckfaelle) muessen
+        weiter greifen — sonst wuerde ein sauberer Fallback plötzlich durchschlagen."""
+        from constants import ForgePixFehler
+        self.assertTrue(issubclass(ForgePixFehler, RuntimeError))
+
+    def test_w7_cli_faengt_erwartete_fehler_klartextlich_ab(self):
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        with open(os.path.join(root, "core", "focus_cull_stack.py"), encoding="utf-8") as fh:
+            quelle = fh.read()
+        self.assertIn("except ForgePixFehler as e:", quelle)
+        self.assertIn("except KeyboardInterrupt:", quelle, "Strg-C soll nicht als Traceback enden")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

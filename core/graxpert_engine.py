@@ -12,7 +12,7 @@ import glob
 import shutil
 import subprocess
 import numpy as np
-from constants import log_print
+from constants import log_print, require_astropy
 
 def find_cli(path=None):
     """Pfad zur GraXpert-CLI finden (übergebener Pfad, App-Bundle, oder im PATH), sonst None.
@@ -83,7 +83,8 @@ def run(linear_bgr, work_dir, command="background-extraction", smoothing=0.2, gp
     Arbeitet über FITS (GraXperts natives Format) — verlustfrei linear.
     remote: optionaler GPU-Host {host, bin, pass} für Beschleunigung; None = lokal (Default).
     Lokal funktioniert IMMER ohne Remote — der Spark/Remote ist reine Kür mit Fallback."""
-    from astropy.io import fits
+    # GraXpert tauscht Daten ueber FITS aus -> ohne astropy ist das Backend nicht nutzbar.
+    fits = require_astropy("das GraXpert-Backend")
     os.makedirs(work_dir, exist_ok=True)
     inp = os.path.join(work_dir, "gx_input.fits")
     arr = np.clip(np.asarray(linear_bgr, np.float32), 0, None)

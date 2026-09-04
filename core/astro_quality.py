@@ -13,13 +13,13 @@ import os
 import numpy as np
 import cv2
 
-from constants import RAW_EXTS, imread, log_print
+from constants import RAW_EXTS, imread, log_print, require_astropy
 
 
 def _read_gray(path, max_side=1600):
     ext = os.path.splitext(path)[1].lower()
     if ext in (".fit", ".fits", ".fts"):
-        from astropy.io import fits
+        fits = require_astropy("FITS-Subs bewerten")
         d = np.asarray(fits.getdata(path)).astype(np.float32)
         if d.ndim == 3:
             d = d[0] if d.shape[0] in (3, 4) else d.mean(axis=2)

@@ -121,3 +121,32 @@ def log_print(*args, **kwargs):
         enc = getattr(sys.stdout, "encoding", None) or "ascii"
         safe = [str(a).encode(enc, "replace").decode(enc, "replace") for a in args]
         print(*safe, **kwargs)
+
+
+class ForgePixFehler(RuntimeError):
+    """Ein ERWARTETER, vom Nutzer behebbarer Fehler (fehlende Wahl-Abhaengigkeit, kein
+    Schreibrecht, unpassende Eingabe ...).
+
+    Zweck: die Pipeline kann solche Faelle als KLARTEXT-Zeile ausgeben, waehrend echte
+    Programmfehler weiterhin ihren vollen Traceback behalten — den braucht ein Bugreport.
+    Vorher bekam der Nutzer fuer beides dasselbe: eine Wand aus Python-Zeilen.
+    """
+
+
+def require_astropy(zweck):
+    """astropy importieren — oder mit einer Meldung scheitern, die dem Nutzer SAGT, was zu tun ist.
+
+    astropy ist eine bewusst OPTIONALE Abhaengigkeit (nur FITS). Ohne sie brach ForgePix
+    mit einem rohen Traceback ab: „ModuleNotFoundError: No module named 'astropy'" — kein
+    Hinweis, dass FITS die Ursache ist, keiner, wie man es behebt. `zweck` beschreibt, wofuer
+    es gebraucht wird, und landet in der Meldung.
+    """
+    try:
+        from astropy.io import fits
+        return fits
+    except ImportError:
+        raise ForgePixFehler(
+            f"{zweck} braucht die optionale Bibliothek astropy (FITS-Unterstuetzung). "
+            "Installieren mit:  python -m pip install astropy   "
+            "— ohne astropy funktionieren JPG/TIFF/PNG/RAW ganz normal weiter."
+        ) from None
