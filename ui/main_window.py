@@ -2583,13 +2583,22 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         if os.path.isfile(report):
             try:
                 import json as _json
-                for fr in _json.load(open(report)).get("frames", []):
-                    if fr.get("keep") and os.path.isfile(fr.get("path", "")):
-                        im = imread(fr["path"], cv2.IMREAD_UNCHANGED)
-                        if im is not None:
-                            srcs.append(im); names.append(fr.get("name", f"Foto {len(srcs)}"))
-                    if len(srcs) >= 16:                 # für die Retusche reicht eine Auswahl
-                        break
+                with open(report, encoding="utf-8") as _fh:
+                    behalten = [fr for fr in _json.load(_fh).get("frames", [])
+                                if fr.get("keep") and os.path.isfile(fr.get("path", ""))]
+                # Aus Speichergründen nur eine Auswahl laden — aber GLEICHMÄSSIG über die Serie
+                # verteilt, nicht die ersten 16. Die Frames stehen in Fokusreihenfolge: bei einer
+                # 150er-Makroserie lagen die ersten 16 alle in der vordersten Fokusebene, sodass
+                # sich in der hinteren Hälfte des Motivs gar nichts retuschieren ließ.
+                MAX_QUELLEN = 16
+                if len(behalten) > MAX_QUELLEN:
+                    idx = [round(i * (len(behalten) - 1) / (MAX_QUELLEN - 1))
+                           for i in range(MAX_QUELLEN)]
+                    behalten = [behalten[i] for i in sorted(set(idx))]
+                for fr in behalten:
+                    im = imread(fr["path"], cv2.IMREAD_UNCHANGED)
+                    if im is not None:
+                        srcs.append(im); names.append(fr.get("name", f"Foto {len(srcs)}"))
             except Exception:
                 pass
         if len(srcs) >= 2:
