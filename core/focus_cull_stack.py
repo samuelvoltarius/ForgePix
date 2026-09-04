@@ -1422,18 +1422,29 @@ def main():
         if not subs:
             print(f"Keine Unterordner mit Bildern in {input_dir}", file=sys.stderr); sys.exit(1)
         print(f"== BATCH: {len(subs)} Stacks ==")
+        geschafft = 0
         for s in subs:
             name = os.path.basename(s)
             print(f"\n######## Stack: {name} ########")
             try:
-                process(args, s, os.path.join(work_dir, name))
+                if process(args, s, os.path.join(work_dir, name)) is not None:
+                    geschafft += 1
             except Exception as e:
                 print(f"Fehler bei {name}: {e}", file=sys.stderr)
-        print(f"\n== BATCH fertig: {len(subs)} Stacks in {work_dir} ==")
+        print(f"\n== BATCH fertig: {geschafft}/{len(subs)} Stacks in {work_dir} ==")
+        # Ehrlicher Exit-Code: lieferte KEIN einziger Teilstapel ein Ergebnis, ist der
+        # Lauf gescheitert — sonst meldete die GUI gruen „Fertig ✓".
+        if geschafft == 0 and not getattr(args, "no_stack", False):
+            sys.exit(1)
     elif getattr(args, "watch", False):
         watch_loop(args, input_dir, work_dir)
     else:
-        process(args, input_dir, work_dir)
+        # process() liefert den Ergebnispfad oder None. None fuehrte bisher trotzdem zu
+        # Exit-Code 0 — die GUI zeigte dann „Fertig ✓" und meldete „Stack fertig 🎉",
+        # obwohl gar nichts entstanden war (z. B. alle Frames aussortiert).
+        # --no-stack ist der EINE Fall, in dem None ein gewollter Erfolg ist.
+        if process(args, input_dir, work_dir) is None and not getattr(args, "no_stack", False):
+            sys.exit(1)
 
 
 def _autodetect_calibration(input_dir):

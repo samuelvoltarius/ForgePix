@@ -187,5 +187,24 @@ class TestFremdtoolSuche(unittest.TestCase):
         self.assertEqual(graxpert_engine.find_cli(), tools_engine.find_graxpert())
 
 
+class TestEhrlicherExitCode(unittest.TestCase):
+    """W6 — ein Lauf ohne Ergebnis darf nicht als Erfolg enden.
+
+    `process()` gibt bei „alle Frames aussortiert" None zurück, `main()` wertete das nicht
+    aus → Exit-Code 0. Die GUI zeigt bei 0 grün „Fertig ✓" und meldet „Stack fertig 🎉",
+    obwohl nichts entstanden war."""
+
+    def test_w6_main_wertet_prozess_ergebnis_aus(self):
+        """Quelltext-Prüfung statt Vollstart: main() muss den Rückgabewert von process()
+        prüfen und bei None (ausser --no-stack) mit sys.exit(1) enden."""
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        with open(os.path.join(root, "core", "focus_cull_stack.py"), encoding="utf-8") as fh:
+            quelle = fh.read()
+        self.assertIn("if process(args, input_dir, work_dir) is None", quelle,
+                      "main() ignoriert wieder, ob process() ein Ergebnis lieferte")
+        self.assertIn('not getattr(args, "no_stack", False)', quelle,
+                      "--no-stack muss weiterhin als Erfolg gelten")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
