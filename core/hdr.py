@@ -11,7 +11,7 @@ Wichtig: HDR (Belichtungsreihe) ≠ Fokus-Stacking (Schärfereihe) — zwei vers
 """
 import numpy as np
 import cv2
-from constants import to_uint8
+from constants import to_uint8, log_print
 
 
 def _to8(img):
@@ -66,7 +66,7 @@ def _exposure_times_exiftool(paths):
         import subprocess
         import json
         out = subprocess.run(["exiftool", "-j", "-n", "-ExposureTime"] + list(paths),
-                             capture_output=True, text=True).stdout
+                             capture_output=True, text=True, encoding="utf-8", errors="replace").stdout
         recs = json.loads(out)
         by_src = {r.get("SourceFile"): r.get("ExposureTime") for r in recs}
         # exiftool meldet SourceFile wie übergeben — über den Pfad zuordnen, Reihenfolge sicher
@@ -108,7 +108,7 @@ def _denoise_chroma(bgr, strength=7):
     return cv2.cvtColor(cv2.merge([L, a, b]), cv2.COLOR_LAB2BGR)
 
 
-def merge_exposures(images, align=True, deghost="off", flow=False, log=print):
+def merge_exposures(images, align=True, deghost="off", flow=False, log=log_print):
     """Eine Belichtungsreihe (Liste BGR-Bilder mit unterschiedlicher Belichtung) zu einem
     durchgezeichneten 8-bit-Bild verschmelzen (Mertens Exposure Fusion).
     align=True richtet freihändige Reihen vorher rigide aus.
@@ -151,7 +151,7 @@ def merge_exposures(images, align=True, deghost="off", flow=False, log=print):
     return out
 
 
-def merge_radiance(images, times=None, tonemap="reinhard", log=print):
+def merge_radiance(images, times=None, tonemap="reinhard", log=log_print):
     """Echtes HDR über eine Radiance-Map (Debevec-CRF) + Tonemapping — **alternativer dramatischer
     Look** mit lokalem Kontrast (Exposure Fusion bleibt der Standard, halo-frei). Belichtungszeiten
     werden aus der mittleren Helligkeit geschätzt, wenn keine angegeben.
@@ -190,7 +190,7 @@ def merge_radiance(images, times=None, tonemap="reinhard", log=print):
     return out
 
 
-def tonemap_local(hdr_or_bgr, strength=1.0, base_contrast=3.5, log=print):
+def tonemap_local(hdr_or_bgr, strength=1.0, base_contrast=3.5, log=log_print):
     """Lokal-adaptives Tonemapping nach Durand & Dorsey 2002 (Fast Bilateral Filtering) — reiner
     OpenCV/NumPy-Weg, ohne ML. Liefert „Details-Enhancer"-Niveau (Photomatix-artig): der globale
     Kontrast wird komprimiert, das lokale Detail bleibt voll erhalten.
@@ -274,7 +274,7 @@ def _grad_mag(g):
     return cv2.magnitude(gx, gy)
 
 
-def _deghost(imgs, fused, aggressive=False, log=print):
+def _deghost(imgs, fused, aggressive=False, log=log_print):
     """In Bewegungszonen die Fusion durch das best-belichtete Referenzbild ersetzen.
     Referenz = Frame mit den meisten gut belichteten Pixeln.
 
@@ -309,7 +309,7 @@ def _deghost(imgs, fused, aggressive=False, log=print):
     return np.clip(res, 0, 255).astype(np.uint8)
 
 
-def _flow_align_exposures(imgs, log=print):
+def _flow_align_exposures(imgs, log=log_print):
     """Alle Belichtungen per dichtem optischem Fluss (Farnebäck) auf die best-belichtete Referenz
     warpen (HDR-Deghosting OHNE Verlust des Mehrbelichtungs-Vorteils). Der Fluss wird auf den
     helligkeits-angeglichenen Graustufen geschätzt (sonst „sieht" der Fluss nur den Belichtungs-
@@ -406,7 +406,7 @@ def apply_look(bgr, preset="natural"):
     return cv2.cvtColor(np.clip(lab, 0, 255).astype(np.uint8), cv2.COLOR_LAB2BGR)
 
 
-def split_brackets(paths, size=0, log=print):
+def split_brackets(paths, size=0, log=log_print):
     """Eine Dateiliste in einzelne Belichtungsreihen aufteilen.
     size>0: feste Gruppengröße (z. B. 3 für klassisches AEB).
     size=0: automatisch — neue Reihe, sobald die Belichtungszeit deutlich zurückspringt

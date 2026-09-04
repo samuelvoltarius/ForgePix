@@ -8,7 +8,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QPixmap
 
 from i18n import tr
-from constants import to_uint8
+from constants import to_uint8, imread, imwrite
 from ui.appinfo import _cache_path, IMG_EXTS
 
 try:
@@ -41,7 +41,7 @@ class ResultMixin:
         out = _cache_path("sf_prev_", src)
         if os.path.isfile(out):    # Cache-Pfad ist deterministisch (Pfad+mtime) → nicht neu rechnen
             return out
-        img = cv2.imread(src, cv2.IMREAD_UNCHANGED)
+        img = imread(src, cv2.IMREAD_UNCHANGED)
         if img is None:
             return src if QPixmap(src).isNull() is False else None
         img = to_uint8(img)
@@ -49,7 +49,7 @@ class ResultMixin:
         if max(h, w) > 1400:
             f = 1400 / max(h, w)
             img = cv2.resize(img, (int(w * f), int(h * f)), interpolation=cv2.INTER_AREA)
-        cv2.imwrite(out, img)
+        imwrite(out, img)
         return out
 
     def _set_preview(self, src):
@@ -168,7 +168,7 @@ class ResultMixin:
                 return None
             fm = fa.focus_map(paths)
             p = os.path.join(tempfile.gettempdir(), "fp_focusmap_view.png")   # /tmp fehlt unter Windows
-            cv2.imwrite(p, fm)
+            imwrite(p, fm)
             self._focusmap_cache = p
             return p
         except Exception:

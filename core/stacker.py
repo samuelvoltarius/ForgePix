@@ -11,7 +11,7 @@ Reine MIT-kompatible Abhängigkeiten (OpenCV, NumPy) — frei verwend-/verschenk
 import numpy as np
 import cv2
 
-from constants import to_uint8
+from constants import to_uint8, imread, log_print
 
 
 def _to_gray8(img):
@@ -58,7 +58,7 @@ def subject_motion_span(paths, sample=12):
     idx = np.linspace(0, len(paths) - 1, min(sample, len(paths))).astype(int)
     cents = []
     for i in idx:
-        im = cv2.imread(paths[int(i)], cv2.IMREAD_UNCHANGED)
+        im = imread(paths[int(i)], cv2.IMREAD_UNCHANGED)
         if im is None:
             continue
         if im.ndim == 2:
@@ -73,7 +73,7 @@ def subject_motion_span(paths, sample=12):
     return float(np.hypot(c[:, 0].max() - c[:, 0].min(), c[:, 1].max() - c[:, 1].min()))
 
 
-def align_on_subject(images, ref_idx=None, max_shift_frac=0.25, log=print):
+def align_on_subject(images, ref_idx=None, max_shift_frac=0.25, log=log_print):
     """Frames so verschieben, dass das **Motiv** (nicht das ganze Bild) deckungsgleich liegt —
     der robuste Weg bei bewegtem Motiv vor ruhigem Hintergrund (Wind-Schwanken etc.). Frames, in
     denen kein klares Motiv gefunden wird oder die zu weit verschoben sind, werden VERWORFEN
@@ -142,7 +142,7 @@ def _estimate_transform(src_img, dst_img, mode, det, matcher,
     return np.vstack([M, [0, 0, 1]]).astype(np.float32) if M is not None else None
 
 
-def align_sequential(images, ref_idx=None, sub_mode="rigid", detector="ORB", log=print):
+def align_sequential(images, ref_idx=None, sub_mode="rigid", detector="ORB", log=log_print):
     """Sequenzielle (paarweise) Ausrichtung: jedes Frame auf seinen NACHBARN ausrichten und die
     Transformationen Richtung Referenz **aufkumulieren** — statt alle auf ein globales Referenzbild.
     Benachbarte Frames im Fokus-Stack sind fast identisch → sehr robuste Schätzung; Frame 1 direkt
@@ -193,7 +193,7 @@ def align_sequential(images, ref_idx=None, sub_mode="rigid", detector="ORB", log
     return out
 
 
-def align_images_breathing(images, ref_idx=None, detector="ORB", smooth=True, log=print):
+def align_images_breathing(images, ref_idx=None, detector="ORB", smooth=True, log=log_print):
     """F2 — **Focus-Breathing-Korrektur** für tiefe High-Mag-Stacks. Beim Durchfahren des Fokus
     ändert sich der Abbildungsmaßstab leicht und **monoton** über die Serie (das „Atmen" des
     Objektivs). Schätzt man jeden Frame isoliert auf die Referenz, schwanken die Skalen-Schätzungen
@@ -269,7 +269,7 @@ def align_images_breathing(images, ref_idx=None, detector="ORB", smooth=True, lo
     return out
 
 
-def align_images(images, ref_idx=None, mode="rigid", detector="ORB", refine=True, log=print):
+def align_images(images, ref_idx=None, mode="rigid", detector="ORB", refine=True, log=log_print):
     """Richtet alle Bilder auf das Referenzbild aus. Gibt ausgerichtete Liste zurück.
     mode: 'rigid' (Verschiebung/Drehung/Skalierung), 'homography' (Perspektive),
     'subject' (auf das dominante Motiv — für bewegte Makro-Motive) oder
@@ -375,7 +375,7 @@ def disagreement_map(images, max_side=700):
 
 
 def disagreement_map_streamed(paths, max_side=700, align_mode="rigid", detector="ORB",
-                              do_align=True, log=print):
+                              do_align=True, log=log_print):
     """Wie disagreement_map, aber speicherschonend: lädt EIN Frame nach dem anderen (downscaled,
     grau, aufs erste ausgerichtet) und berechnet die Pro-Pixel-Streuung online (Welford).
     Für sehr große/gestreamte Stacks, wo nicht alle Frames in den RAM passen."""
@@ -383,7 +383,7 @@ def disagreement_map_streamed(paths, max_side=700, align_mode="rigid", detector=
     mean = m2 = None
     count = 0
     for p in paths:
-        im = cv2.imread(p, cv2.IMREAD_UNCHANGED)
+        im = imread(p, cv2.IMREAD_UNCHANGED)
         if im is None:
             continue
         g = _small_gray(im, max_side)
@@ -428,7 +428,7 @@ def ghost_overlay(result_bgr, images, thresh=0.35):
     return ghost_overlay_from_map(result_bgr, disagreement_map(images), thresh)
 
 
-def focus_stack_halofix(images, margin=0.02, soft=2.0, log=print):
+def focus_stack_halofix(images, margin=0.02, soft=2.0, log=log_print):
     """Dual-Output-Halo-Retusche (Helicon-Retusche-Gedanke, automatisch): die Laplace-Pyramide
     (PMax) ist am schärfsten, erzeugt aber an kontrastreichen Kanten helle/dunkle HALOS — das sind
     Über-/Unterschwinger, also Werte, die in KEINEM einzelnen Quellbild vorkommen (heller als das
@@ -467,7 +467,7 @@ def focus_stack_halofix(images, margin=0.02, soft=2.0, log=print):
     return np.clip(out, 0, maxval).astype(dtype)
 
 
-def focus_stack(images, min_size=32, deghost=False, deghost_thresh=0.35, log=print):
+def focus_stack(images, min_size=32, deghost=False, deghost_thresh=0.35, log=log_print):
     """Laplace-Pyramiden-Fusion: pro Pyramidenebene den schärfsten (energiereichsten)
     Koeffizienten je Bildpunkt wählen. Gibt das verschmolzene Bild im Eingabe-dtype zurück."""
     if not images:
@@ -524,7 +524,7 @@ def _window_energy(layer_abs, win=5):
 
 
 def focus_stack_pyramid_consistent(images, min_size=32, win=5, deghost=False,
-                                   deghost_thresh=0.35, log=print):
+                                   deghost_thresh=0.35, log=log_print):
     """F3 — **Cross-Scale-konsistente** Laplace-Pyramiden-Fusion (der eigentliche PMax-Trick).
 
     Die naive Pyramide wählt pro Ebene UNABHÄNGIG `argmax(|Laplace|)` je Bildpunkt. An kontrastreichen
@@ -594,7 +594,7 @@ def focus_stack_pyramid_consistent(images, min_size=32, win=5, deghost=False,
     return np.clip(img, 0, maxval).astype(dtype)
 
 
-def deghost_sharpest(images, merged, thresh=0.35, log=print):
+def deghost_sharpest(images, merged, thresh=0.35, log=log_print):
     """F5 — besseres Deghost: in **Streuzonen** (wo die Frames stark uneinig sind → Bewegung/Wind)
     nicht den globalen Median nehmen (der verwischt und kann unscharf sein), sondern den **schärfsten
     konsistenten Frame** je Region. So bleibt in Bewegungsbereichen ein *echtes, scharfes* Quellbild
@@ -649,7 +649,7 @@ def _guided_filter(guide, src, radius=8, eps=1e-3):
 
 
 def focus_stack_depthmap(images, sharp_blur=4, gamma=8.0, radius=None, smoothing=None,
-                         regularize=False, reg_sigma_spatial=8.0, reg_sigma_color=0.08, log=print):
+                         regularize=False, reg_sigma_spatial=8.0, reg_sigma_color=0.08, log=log_print):
     """Depth-Map-Fokus-Stacking (Helicon „DMap"/Zerene-Stil): pro Bildpunkt wird das **schärfste
     Frame** stark bevorzugt — über eine **potenzgewichtete Mischung** der Schärfekarten (Gewicht =
     Schärfe^gamma). Hohes gamma ≈ harte Auswahl des schärfsten Frames (volle Detailschärfe), bleibt
@@ -714,7 +714,7 @@ def _focus_measure(bgr):
     return np.abs(lx) + np.abs(ly)
 
 
-def focus_stack_average(images, radius=9, smoothing=0, log=print):
+def focus_stack_average(images, radius=9, smoothing=0, log=log_print):
     """Method A (Helicon): **gewichteter Mittelwert** nach lokalem Schärfemaß. Rauscharm und
     farbtreu — ideal für kurze/Freihand-Stacks und weiche Motive.
       • radius    = Fenster des Schärfemaßes (größer = ruhiger/weicher).
@@ -755,7 +755,7 @@ def color_reassign(images):
     return out
 
 
-def focus_stack_wavelet(images, levels=5, log=print):
+def focus_stack_wavelet(images, levels=5, log=log_print):
     """Wavelet-Merge (PetteriAimonen-Rezept, vereinfacht): pro Frame à-trous-Detailebenen, je Ebene
     den **betragsmäßig stärksten** Koeffizienten wählen, die Auswahl per **Konsistenz-Glättung**
     stabilisieren (gegen Rausch-/Fehlausrichtungs-Einrasten) → rekonstruieren; Farbe per
@@ -810,7 +810,7 @@ def _largest_rect(mask):
     return best[1], best[2], best[3], best[4]
 
 
-def crop_to_overlap(images, thresh=3, log=print):
+def crop_to_overlap(images, thresh=3, log=log_print):
     """Auf das **größte voll-überlappte Rechteck** ausgerichteter Frames zuschneiden — entfernt die
     schwarzen Warp-Ränder UND die gedrehten Frame-Kanten (die „komischen Striche"), sodass jeder
     Bildpunkt im Ergebnis von ALLEN Frames abgedeckt ist. Gibt die zugeschnittene Liste zurück."""
@@ -837,7 +837,7 @@ def crop_to_overlap(images, thresh=3, log=print):
     return [im[y0:y1, x0:x1] for im in images]
 
 
-def merge_tree(images, merge_fn, log=print):
+def merge_tree(images, merge_fn, log=log_print):
     """Hierarchische („Baum-") Verschmelzung: 1+2, 3+4, … dann die Ergebnisse paarweise weiter,
     bis ein Bild übrig ist. Jede Verschmelzung kombiniert nur **zwei sehr ähnliche** Bilder →
     gutmütiger als alle Frames auf einmal flach zu mischen. merge_fn(liste_aus_2) → ein Bild."""
@@ -856,7 +856,7 @@ def merge_tree(images, merge_fn, log=print):
 
 
 def focus_stack_streamed(paths, align_mode="rigid", detector="ORB", chunk=8,
-                         do_align=True, method="pyramid", tree=False, log=print, preview_cb=None):
+                         do_align=True, method="pyramid", tree=False, log=log_print, preview_cb=None):
     """Speicherschonendes Stacken: liest Frames in Bündeln von `chunk` von der Platte,
     richtet sie aufs (globale) Referenzbild aus, verschmilzt je Bündel, dann die
     Zwischenergebnisse. RAM ~ max(chunk, Anzahl Bündel) Frames statt alle gleichzeitig.
@@ -873,12 +873,12 @@ def focus_stack_streamed(paths, align_mode="rigid", detector="ORB", chunk=8,
         if method == "wavelet":
             return focus_stack_wavelet(grp, log=lambda *a: None)
         return focus_stack(grp, log=lambda *a: None)
-    ref = cv2.imread(paths[len(paths) // 2], cv2.IMREAD_UNCHANGED)
+    ref = imread(paths[len(paths) // 2], cv2.IMREAD_UNCHANGED)
     inters = []
     running = None
     n = len(paths)
     for i in range(0, n, chunk):
-        grp = [cv2.imread(p, cv2.IMREAD_UNCHANGED) for p in paths[i:i + chunk]]
+        grp = [imread(p, cv2.IMREAD_UNCHANGED) for p in paths[i:i + chunk]]
         grp = [g for g in grp if g is not None]
         if not grp:
             continue

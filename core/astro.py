@@ -19,7 +19,7 @@ import os
 import numpy as np
 import cv2
 
-from constants import RAW_EXTS
+from constants import RAW_EXTS, imread, imwrite, log_print
 from siril_engine import fits_scale01   # feste FITS-Normierung (gemeinsam mit den Engine-Brücken)
 
 # OSC-Bayer-Muster (FITS BAYERPAT) -> OpenCV-Debayer-Code. Achtung: OpenCVs Bayer-Benennung ist
@@ -95,7 +95,7 @@ def _read_float(path):
                                   output_color=rawpy.ColorSpace.sRGB)
         img = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR); maxv = 65535.0
     else:
-        img = cv2.imread(path, cv2.IMREAD_UNCHANGED)
+        img = imread(path, cv2.IMREAD_UNCHANGED)
         if img is None:
             raise RuntimeError(f"Bild nicht lesbar: {path}")
         maxv = 65535.0 if img.dtype == np.uint16 else 255.0
@@ -417,7 +417,7 @@ def _compose_affine(A, B):
     return (A3 @ B3)[:2].astype(np.float32)
 
 
-def _tps_refine(fw, refg_out, max_ctrl=150, min_resid=0.5, log=print):
+def _tps_refine(fw, refg_out, max_ctrl=150, min_resid=0.5, log=log_print):
     """Lokale (nicht-rigide) Feinregistrierung per Thin-Plate-Spline gegen RESTVERZEICHNUNG —
     Feldkrümmung bei Weitwinkel/Refraktor, atmosphärische Refraktion, leichtes Tilt. Nach der
     globalen Affin-Ausrichtung bleibende Restversätze der Sterne werden als glattes Warp-Feld
@@ -472,14 +472,14 @@ def _warp_and_save(f, M, out_size, op, drizzle, tps_refg=None):
         f = cv2.resize(f, out_size, interpolation=cv2.INTER_LANCZOS4)
     if tps_refg is not None:
         f = _tps_refine(f, tps_refg, log=lambda *a: None)
-    cv2.imwrite(op, np.clip(f * 65535, 0, 65535).astype(np.uint16),
+    imwrite(op, np.clip(f * 65535, 0, 65535).astype(np.uint16),
                 [int(cv2.IMWRITE_TIFF_COMPRESSION), 1])
     return op
 
 
 def register_and_cache(paths, out_dir, dark=None, flat=None, do_register=True,
                        align_mode="shift", cosmetic=False, drizzle=1, detector="ORB",
-                       tps=False, log=print):
+                       tps=False, log=log_print):
     """Frames kalibrieren + ausrichten, als 16-bit-TIFF in out_dir ablegen.
 
     align_mode: 'shift' = NUR Translation (Nachführung ohne Feldrotation, s. CLI --astro-align),
@@ -579,7 +579,7 @@ def register_and_cache(paths, out_dir, dark=None, flat=None, do_register=True,
 
 
 def drizzle_stack(paths, scale=2, pixfrac=0.7, dark=None, flat=None, cosmetic=False,
-                  detector="ORB", log=print):
+                  detector="ORB", log=log_print):
     """ECHTES Drizzle (Variable-Pixel Linear Reconstruction, Fruchter & Hook — Punktkernel,
     inverse Formulierung). Anders als „Drizzle-lite“ (jeden Frame einzeln hochskalieren und mitteln,
     was die Interpolation verschmiert) wird hier das Resampling AUFGESCHOBEN: jeder Roh-Frame wird
@@ -663,7 +663,7 @@ def _bg_sigma(f):
 
 
 def stack(paths, method="sigma", kappa=2.5, normalize=True, local_norm=False,
-          weight=False, sigma_iters=2, log=print, preview_cb=None):
+          weight=False, sigma_iters=2, log=log_print, preview_cb=None):
     """Speicherschonendes Stacken über die Platte (zweistufig bei sigma/winsor).
     Gibt float32-Ergebnis [0..1] (BGR) zurück.
 
@@ -866,7 +866,7 @@ def bin_image(f, factor=2):
     return f.astype(np.float32)
 
 
-def background_extract(f, strength=0.12, method="rbf", grid=12, log=print):
+def background_extract(f, strength=0.12, method="rbf", grid=12, log=log_print):
     """Hintergrund-/Gradienten-Entfernung (Lichtverschmutzung, Vignette).
 
     method='rbf' (Standard, DBE/GraXpert-Prinzip): das Bild kacheln, pro Kachel einen ROBUSTEN
@@ -1010,7 +1010,7 @@ def _detail_support(lum, thresh=2.5):
 
 
 def deconvolve(f, psf=None, iterations=15, star_protect=0.85, regularize=0.0,
-               deringing=True, tiled_psf=False, tiles=3, log=print):
+               deringing=True, tiled_psf=False, tiles=3, log=log_print):
     """Dekonvolution (PixInsight/Deconvolution-Stil) — schärft echtes Detail zurück, das Seeing/Optik
     verschmiert haben. Richardson-Lucy (für Poisson-Statistik korrekt) auf der LUMINANZ, mit aus den
     Sternen geschätzter PSF (oder übergebener PSF). Wirkt auf LINEARE Daten (vor dem Strecken).
@@ -1136,7 +1136,7 @@ def _star_desat(out, ha_n, oiii_n, strength=0.92):
     return np.clip(out * (1 - strength * mask) + gray * (strength * mask), 0, 1)
 
 
-def remove_stars(bgr, sensitivity=5.0, max_size=600, iterations=2, log=print):
+def remove_stars(bgr, sensitivity=5.0, max_size=600, iterations=2, log=log_print):
     """A6 — Klassisches (nicht-ML) Star-Removal: liefert ein (teilweise) STERNLOSES Nebelbild plus
     die Sternmaske. Reines OpenCV/NumPy.
 
@@ -1311,7 +1311,7 @@ def color_balance(f, strength=1.0):
     return out if s >= 1.0 else np.clip(src * (1 - s) + out * s, 0, None)
 
 
-def photometric_balance(f, strength=1.0, max_stars=300, log=print):
+def photometric_balance(f, strength=1.0, max_stars=300, log=log_print):
     """Photometrischer Farbabgleich (PCC-lite, OHNE Online-Sternkatalog): Anders als die einfache
     Quantil-Kalibrierung misst dies die ECHTEN Farben vieler einzelner, UNGESÄTTIGTER Sterne und
     gleicht die Kanäle so ab, dass die mittlere Sternfarbe neutral wird (Sterne sind im Mittel ~weiß).

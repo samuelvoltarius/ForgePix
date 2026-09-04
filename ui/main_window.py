@@ -12,11 +12,11 @@ import sys
 import tempfile
 
 from i18n import tr, set_language, available_languages, current_language
-from constants import to_uint8, RAW_EXTS
+from constants import to_uint8, RAW_EXTS, imread, imwrite
 
 
 
-from PySide6.QtCore import Qt, QProcess, QSize, QTimer
+from PySide6.QtCore import Qt, QProcess, QProcessEnvironment, QSize, QTimer
 from PySide6.QtGui import (QPixmap, QFont, QIcon, QShortcut, QKeySequence, QAction)
 from PySide6.QtWidgets import (
     QApplication, QWidget, QMainWindow, QVBoxLayout, QHBoxLayout, QGridLayout,
@@ -1662,7 +1662,15 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
 
     def _start_pipeline(self, proc, args):
         """Pipeline-Subprozess starten — im gebündelten Binary (PyInstaller) über den
-        `--cli`-Einstiegspunkt des Binaries selbst, sonst `python -u focus_cull_stack.py`."""
+        `--cli`-Einstiegspunkt des Binaries selbst, sonst `python -u focus_cull_stack.py`.
+
+        Das Kind bekommt PYTHONIOENCODING=utf-8 mit: `_on_output` dekodiert den Strom als
+        UTF-8, das Kind schrieb aber in der Locale-Codepage (Windows: cp1252). Ergebnis waren
+        Umlaut-Salat und — bei „→/σ" in der Logzeile — ein harter UnicodeEncodeError, der den
+        ganzen Lauf abbrach. Gilt auch fürs gebündelte Binary, das kein `-u`/kein main() sieht."""
+        env = QProcessEnvironment.systemEnvironment()
+        env.insert("PYTHONIOENCODING", "utf-8")
+        proc.setProcessEnvironment(env)
         if getattr(sys, "frozen", False):
             proc.start(sys.executable, ["--cli"] + args[1:])   # args[0] = SCRIPT-Pfad weglassen
         else:
@@ -2002,14 +2010,14 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         out = _cache_path("sf_th_", src)
         if os.path.isfile(out):        # Cache-Pfad ist deterministisch (Pfad+mtime) → nicht neu rechnen
             return out
-        img = cv2.imread(src, cv2.IMREAD_UNCHANGED)
+        img = imread(src, cv2.IMREAD_UNCHANGED)
         if img is None:
             return None
         img = to_uint8(img)
         h, w = img.shape[:2]
         f = 90 / h
         img = cv2.resize(img, (max(1, int(w * f)), 90), interpolation=cv2.INTER_AREA)
-        cv2.imwrite(out, img)
+        imwrite(out, img)
         return out
 
     def open_result(self):
@@ -2099,7 +2107,7 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
             else:
                 view = astro.autostretch(view)
             out = os.path.splitext(lin)[0].replace("_linear_32bit", "") + "_palette.jpg"
-            cv2.imwrite(out, np.clip(view * 255, 0, 255).astype(np.uint8),
+            imwrite(out, np.clip(view * 255, 0, 255).astype(np.uint8),
                         [int(cv2.IMWRITE_JPEG_QUALITY), 92])
             self.result_path = out
             self._set_preview(out)
@@ -2403,7 +2411,7 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
             import focus_analysis as fa
             fmap = fa.focus_map(paths, M=getattr(self, "_analyze_M", None))
             p = os.path.join(tempfile.gettempdir(), "sf_focusmap.png")   # /tmp gibt's unter Windows nicht
-            cv2.imwrite(p, fmap)
+            imwrite(p, fmap)
         except Exception as e:
             QMessageBox.warning(self, tr("Fokus-Map"), f"{e}"); return
         dlg = QDialog(self); dlg.setWindowTitle(tr("Fokus-Map — Herkunft der Schärfe")); dlg.resize(720, 600)
@@ -2538,7 +2546,7 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
                 rgb = rawpy.imread(path).postprocess(use_camera_wb=True, no_auto_bright=False, output_bps=8)
                 img = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
             else:
-                img = cv2.imread(path, cv2.IMREAD_UNCHANGED)
+                img = imread(path, cv2.IMREAD_UNCHANGED)
         except Exception as e:
             QMessageBox.warning(self, tr("Fehler"), f"{e}"); return
         if img is None:
@@ -2577,7 +2585,7 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
                 import json as _json
                 for fr in _json.load(open(report)).get("frames", []):
                     if fr.get("keep") and os.path.isfile(fr.get("path", "")):
-                        im = cv2.imread(fr["path"], cv2.IMREAD_UNCHANGED)
+                        im = imread(fr["path"], cv2.IMREAD_UNCHANGED)
                         if im is not None:
                             srcs.append(im); names.append(fr.get("name", f"Foto {len(srcs)}"))
                     if len(srcs) >= 16:                 # für die Retusche reicht eine Auswahl
@@ -2587,7 +2595,7 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         if len(srcs) >= 2:
             try:
                 import stacker   # core/ ist beim App-Start bereits auf sys.path
-                res = cv2.imread(self.result_path, cv2.IMREAD_UNCHANGED)
+                res = imread(self.result_path, cv2.IMREAD_UNCHANGED)
                 if res is not None:
                     h, w = res.shape[:2]
                     norm = [cv2.resize(s, (w, h)) if s.shape[:2] != (h, w) else s for s in srcs]
@@ -2603,7 +2611,7 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         if not self.result_path or cv2 is None:
             QMessageBox.warning(self, tr("Kein Ergebnis"), tr("Erst ein Bild erzeugen."))
             return
-        res = cv2.imread(self.result_path, cv2.IMREAD_UNCHANGED)
+        res = imread(self.result_path, cv2.IMREAD_UNCHANGED)
         if res is None:
             QMessageBox.warning(self, tr("Fehler"), tr("Ergebnis konnte nicht geladen werden."))
             return
@@ -2637,8 +2645,8 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
                 QMessageBox.information(self, tr("Zwei Bilder"),
                                        tr("Bitte genau zwei überlappende Bilder wählen."))
             return
-        a = cv2.imread(files[0], cv2.IMREAD_COLOR)
-        b = cv2.imread(files[1], cv2.IMREAD_COLOR)
+        a = imread(files[0], cv2.IMREAD_COLOR)
+        b = imread(files[1], cv2.IMREAD_COLOR)
         if a is None or b is None:
             QMessageBox.warning(self, tr("Fehler"), tr("Bilder konnten nicht geladen werden."))
             return

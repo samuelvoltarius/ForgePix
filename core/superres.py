@@ -11,6 +11,7 @@ Das x2plus-Modell hat einen festen 64×64-Eingang → wir kacheln mit Überlappu
 import os
 import numpy as np
 import cv2
+from constants import log_print
 
 _MODEL = os.path.expanduser("~/.forgepix/models/realesrgan_x2.onnx")
 _SCALE = 2
@@ -42,7 +43,7 @@ def _get_session(path=None):
     return _sessions[key]
 
 
-def upscale(bgr01, overlap=8, blend=0.65, path=None, log=print):
+def upscale(bgr01, overlap=8, blend=0.65, path=None, log=log_print):
     """`bgr01` (float 0..1 BGR) per Real-ESRGAN 2× hochskalieren. Gibt das 2×-Bild (BGR float 0..1).
     Gekachelt (64×64) mit Überlappung; die Kachel-Ausgaben werden gewichtet gemittelt (nahtlos).
     blend 0..1: Anteil des KI-Ergebnisses; der Rest kommt vom Lanczos-Upscale des Originals —

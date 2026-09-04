@@ -21,6 +21,16 @@ sys.path.insert(0, _ROOT)
 sys.path.insert(0, os.path.join(_ROOT, "core"))   # Engine-Module liegen in core/
 
 
+# astropy ist laut requirements.txt AUSDRUECKLICH optional ("Ohne astropy laufen JPG/TIFF/RAW
+# normal"). Fehlt es, sind die FITS-Tests zu ueberspringen — ein Fehlschlag wuerde eine fehlende
+# Wahl-Abhaengigkeit als Produktfehler ausgeben.
+try:
+    import astropy.io.fits  # noqa: F401
+    HAS_ASTROPY = True
+except ImportError:
+    HAS_ASTROPY = False
+
+
 def _rng():
     return np.random.RandomState(42)
 
@@ -569,14 +579,16 @@ class TestI18n(unittest.TestCase):
         root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         keys = set()
         for fn in ("ui/main_window.py", "ui/components.py"):
-            tree = ast.parse(open(os.path.join(root, fn)).read())
+            with open(os.path.join(root, fn), encoding="utf-8") as fh:   # Quellen sind UTF-8;
+                tree = ast.parse(fh.read())                  # ohne encoding=: cp1252 unter Windows
             for node in ast.walk(tree):
                 if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
                         and node.func.id in ("tr", "help_btn") and node.args
                         and isinstance(node.args[0], ast.Constant)
                         and isinstance(node.args[0].value, str)):
                     keys.add(node.args[0].value)
-        en = json.load(open(os.path.join(root, "lang", "en.json")))
+        with open(os.path.join(root, "lang", "en.json"), encoding="utf-8") as fh:
+            en = json.load(fh)
         missing = sorted(k for k in keys if k not in en and k.strip())
         self.assertEqual(missing, [], f"Ohne EN-Übersetzung: {missing[:5]}")
 
@@ -598,7 +610,8 @@ class TestI18n(unittest.TestCase):
             return (" " in s.strip()) and any(c.isalpha() for c in s)
 
         for fn in ("ui/main_window.py", "ui/components.py"):
-            tree = ast.parse(open(os.path.join(root, fn)).read())
+            with open(os.path.join(root, fn), encoding="utf-8") as fh:   # Quellen sind UTF-8;
+                tree = ast.parse(fh.read())                  # ohne encoding=: cp1252 unter Windows
             for node in ast.walk(tree):
                 if not (isinstance(node, ast.Call) and node.args
                         and isinstance(node.args[0], ast.Constant)
@@ -1414,6 +1427,7 @@ class TestPhotometric(TmpCase):
         self.assertTrue(r is None or os.path.isfile(r))
         self.assertIsInstance(photometric.siril_available(), bool)
 
+    @unittest.skipUnless(HAS_ASTROPY, "astropy nicht installiert (optional)")
     def test_fits_hints_liest_header(self):
         import photometric
         from astropy.io import fits
@@ -1453,6 +1467,7 @@ class TestPhotometric(TmpCase):
         self.assertIsNone(photometric._solve_wcs_astrometry(gray, None, tempfile.mkdtemp(),
                                                              log=lambda *a: None))
 
+    @unittest.skipUnless(HAS_ASTROPY, "astropy nicht installiert (optional)")
     def test_write_und_read_fits_roundtrip(self):
         import photometric
         bgr = (_rng().rand(20, 24, 3)).astype(np.float32)

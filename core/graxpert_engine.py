@@ -12,6 +12,7 @@ import glob
 import shutil
 import subprocess
 import numpy as np
+from constants import log_print
 
 _CANDIDATES = [
     "/Applications/GraXpert.app/Contents/MacOS/GraXpert",
@@ -56,7 +57,7 @@ def _run_remote(inp, out_base, command, smoothing, gpu, rem, timeout, log):
     host, gbin = rem["host"], rem["bin"]
     rdir = "~/.forgepix_graxpert"
     sp = _ssh_prefix(rem)
-    o = dict(capture_output=True, text=True, timeout=timeout)
+    o = dict(capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
     if rem.get("pass"):
         o["env"] = {**os.environ, "SSHPASS": rem["pass"]}   # Passwort NUR über die Umgebung
     log(f"    GraXpert {command} (Remote {host}, GPU) …")
@@ -81,7 +82,7 @@ def _run_remote(inp, out_base, command, smoothing, gpu, rem, timeout, log):
 
 
 def run(linear_bgr, work_dir, command="background-extraction", smoothing=0.2, gpu=False,
-        path=None, remote=None, timeout=900, log=print):
+        path=None, remote=None, timeout=900, log=log_print):
     """`linear_bgr` (float32, HWC BGR, ~0..1) durch GraXpert schicken und das Ergebnis-Array
     (gleiche Form/Reihenfolge) zurückgeben. command: 'background-extraction' | 'denoising'.
     Arbeitet über FITS (GraXperts natives Format) — verlustfrei linear.
@@ -119,7 +120,7 @@ def run(linear_bgr, work_dir, command="background-extraction", smoothing=0.2, gp
         if command == "background-extraction":
             cmd += ["-smoothing", str(smoothing)]
         log(f"    GraXpert {command} (lokal, GPU={gpu}) …")
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
         if not sorted(glob.glob(out_base + "*")):
             raise RuntimeError(f"GraXpert lieferte keine Ausgabe (rc={proc.returncode})")
     outs = sorted(glob.glob(out_base + "*"))

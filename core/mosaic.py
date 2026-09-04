@@ -8,7 +8,7 @@ Aufnahmen vom Mond/Sonne, die zusammen die ganze Scheibe ergeben. Reine OpenCV-L
 import cv2
 import numpy as np
 from scipy.optimize import least_squares
-from constants import to_uint8
+from constants import to_uint8, imread, log_print
 
 
 def _to8(img):
@@ -22,7 +22,7 @@ def _to8(img):
     return to_uint8(img)
 
 
-def stitch_from_points(img_a, img_b, pts_a, pts_b, log=print):
+def stitch_from_points(img_a, img_b, pts_a, pts_b, log=log_print):
     """MANUELLES Zusammensetzen über Kontrollpunkte (Hugin/PTGui-Prinzip): wenn die automatische
     Erkennung versagt (wenig Überlappung/Struktur, sich wiederholende Muster), gibt der/die Nutzer:in
     selbst zusammengehörige Punktpaare an (≥4) — daraus wird die Homographie B→A geschätzt, B in die
@@ -60,7 +60,7 @@ def stitch_from_points(img_a, img_b, pts_a, pts_b, log=print):
     return out
 
 
-def stitch_detail(imgs, projection="spherical", log=print, masks=None):
+def stitch_detail(imgs, projection="spherical", log=log_print, masks=None):
     """Explizite cv2.detail-Pipeline (statt Black-Box-Stitcher) mit Kontrolle über **Projektion**,
     **Belichtungsausgleich** (BlocksGain) und **MultiBand-Nahtmischung** (enblend-Äquivalent) +
     GraphCut-Nähte. Gibt das Panorama (uint8 BGR) zurück oder wirft bei Fehlschlag.
@@ -182,13 +182,13 @@ def _autocrop(img, thresh=8):
     return crop
 
 
-def stitch(paths, mode="panorama", projection="spherical", detail=True, autocrop=True, log=print):
+def stitch(paths, mode="panorama", projection="spherical", detail=True, autocrop=True, log=log_print):
     """Überlappende Kacheln zu einem Mosaik zusammensetzen.
     detail=True: explizite cv2.detail-Pipeline (Projektion/Belichtungsausgleich/MultiBand-Nähte),
     bei Fehlschlag Rückfall auf den klassischen cv2.Stitcher. Gibt (BGR-uint8, status) zurück.
     autocrop=True: schwarze Warp-Ränder auf das größte randvolle Rechteck zuschneiden (--no-autocrop = aus)."""
     _crop = _autocrop if autocrop else (lambda x: x)
-    imgs = [_to8(cv2.imread(p, cv2.IMREAD_UNCHANGED)) for p in paths]
+    imgs = [_to8(imread(p, cv2.IMREAD_UNCHANGED)) for p in paths]
     imgs = [im if (im is None or im.ndim == 3) else cv2.cvtColor(im, cv2.COLOR_GRAY2BGR)
             for im in imgs]
     imgs = [im for im in imgs if im is not None]
@@ -241,7 +241,7 @@ def _hugin_distort(xy, cx, cy, nrm, a, b, c):
     return np.column_stack([cx + dx * scale * nrm, cy + dy * scale * nrm])
 
 
-def bundle_adjust_distortion(point_pairs, image_shapes, f_init=None, log=print,
+def bundle_adjust_distortion(point_pairs, image_shapes, f_init=None, log=log_print,
                              max_nfev=200):
     """P1 — Eigener Bündelausgleich MIT Selbstkalibrierung der Linsen-Verzeichnung.
 
@@ -323,7 +323,7 @@ def bundle_adjust_distortion(point_pairs, image_shapes, f_init=None, log=print,
 # P2 — Photometrische Optimierung (Vignette + Belichtung) aus Überlappungen
 # ─────────────────────────────────────────────────────────────────────────────
 
-def optimize_photometric(images, overlaps, log=print, max_nfev=120):
+def optimize_photometric(images, overlaps, log=log_print, max_nfev=120):
     """P2 — Vignette- und Belichtungs-Selbstkalibrierung aus Überlappungspixeln.
 
     Schätzt je Bild einen Belichtungs-Offset (multiplikativer Gain) und ein gemeinsames
@@ -415,7 +415,7 @@ def optimize_photometric(images, overlaps, log=print, max_nfev=120):
 # P4 — Manuelle N-Bild-Kontrollpunkte (Kette von Homographien)
 # ─────────────────────────────────────────────────────────────────────────────
 
-def stitch_from_points_multi(images, points_per_pair, log=print):
+def stitch_from_points_multi(images, points_per_pair, log=log_print):
     """P4 — Manuelles Zusammensetzen von **N Bildern** über Kontrollpunkt-Paare.
 
     Erweiterung von ``stitch_from_points`` (nur 2 Bilder) auf beliebig viele Kacheln:

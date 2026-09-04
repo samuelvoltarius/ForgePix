@@ -13,7 +13,7 @@ import os
 import numpy as np
 import cv2
 
-from constants import RAW_EXTS
+from constants import RAW_EXTS, imread, log_print
 
 
 def _read_gray(path, max_side=1600):
@@ -33,7 +33,7 @@ def _read_gray(path, max_side=1600):
     else:
         # ANYDEPTH: 16-bit-TIFF/PNG in voller Tiefe laden (IMREAD_GRAYSCALE allein stutzt sofort
         # auf 8 bit — der uint16-Zweig unten war dadurch unerreichbar) und sauber wandeln.
-        g = cv2.imread(path, cv2.IMREAD_GRAYSCALE | cv2.IMREAD_ANYDEPTH)
+        g = imread(path, cv2.IMREAD_GRAYSCALE | cv2.IMREAD_ANYDEPTH)
     if g is None:
         return None
     if g.dtype == np.uint16:
@@ -112,7 +112,7 @@ def subs_summary_text(frames):
     return "\n".join(lines)
 
 
-def select_subs(paths, fwhm_factor=1.5, ecc_max=1.7, star_frac=0.5, bg_factor=1.6, log=print):
+def select_subs(paths, fwhm_factor=1.5, ecc_max=1.7, star_frac=0.5, bg_factor=1.6, log=log_print):
     """Alle Frames bewerten und schlechte aussortieren — mit Begründung je Frame.
     Schwellen relativ zum Median der Serie (robust gegen unterschiedliche Setups)."""
     frames = [analyze_frame(p) for p in paths]

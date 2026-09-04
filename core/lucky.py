@@ -15,6 +15,7 @@ Reine OpenCV/NumPy-Abhängigkeiten (MIT-kompatibel).
 """
 import numpy as np
 import cv2
+from constants import log_print
 
 
 def _gray(frame):
@@ -34,7 +35,7 @@ def _sharpness(frame):
     return lap_var / (mean * mean)                             # helligkeitsnormiert
 
 
-def grade_video(path, max_frames=3000, log=print):
+def grade_video(path, max_frames=3000, log=log_print):
     """Durchgang 1: Schärfe je (gesampeltem) Frame. Gibt sortierte Liste [(schärfe, frame_index)]
     (beste zuerst) + (gesamt_frames, breite, höhe) zurück."""
     cap = cv2.VideoCapture(path)
@@ -69,7 +70,7 @@ def grade_video(path, max_frames=3000, log=print):
 
 
 def lucky_stack(path, keep_pct=0.30, max_frames=3000, align=True, sharpen_amount=60,
-                ref_topn=1, log=print, preview_cb=None):
+                ref_topn=1, log=log_print, preview_cb=None):
     """Lucky-Imaging-Stack aus einem Video. keep_pct = Anteil der schärfsten Frames (0..1).
     Richtet die Scheibe (Sonne/Mond) aus und mittelt; danach optionales Nachschärfen (Unsharp).
     Gibt ein 8-bit-BGR-Bild zurück.
@@ -217,7 +218,7 @@ def _feature_homography(ref_u8, mov_u8, orb=None, kr=None, dr=None, min_inliers=
 def lucky_stack_map(path, keep_global=0.6, keep_local=0.3, max_load=200,
                     ap_step=50, box_half=22, patch_half=34, search_half=12,
                     sharpen=1.0, drizzle=1.0, refine_passes=0, adaptive_ap=False,
-                    pixfrac=0.6, log=print, preview_cb=None):
+                    pixfrac=0.6, log=log_print, preview_cb=None):
     """Multi-Point-(MAP)-Lucky-Imaging (AutoStakkert/PlanetarySystemStacker-Prinzip).
 
     1) Frames global nach Schärfe ranken, die besten `keep_global` laden + global ausrichten.

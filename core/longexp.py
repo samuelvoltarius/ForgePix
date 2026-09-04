@@ -18,6 +18,7 @@ import os
 import numpy as np
 import cv2
 import astro
+from constants import imread, imwrite, log_print
 
 MODES = ("smooth", "trails", "comet", "declutter", "bright")
 # Modus -> Kombinationsmethode in astro.stack (bright/comet werden hier separat gerechnet)
@@ -30,7 +31,7 @@ def _gap_fill_dilate(f, k=3):
     return cv2.dilate(f, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k, k)))
 
 
-def _auto_sky_mask(proc, out_shape, sample=12, log=print):
+def _auto_sky_mask(proc, out_shape, sample=12, log=log_print):
     """Himmel/Vordergrund AUTOMATISCH trennen (Sequator-Stil, ohne festen Höhen-Split): nutzt die
     Physik der Serie — bei nicht nachgeführten Nachtlandschaften BEWEGT sich der Himmel (Sterne/Wolken
     driften), der VORDERGRUND steht still. Pro Pixel die zeitliche Streuung über die Serie messen →
@@ -40,7 +41,7 @@ def _auto_sky_mask(proc, out_shape, sample=12, log=print):
     idx = np.linspace(0, len(proc) - 1, min(sample, len(proc))).astype(int)
     grays = []
     for i in idx:
-        f = cv2.imread(proc[int(i)], cv2.IMREAD_REDUCED_GRAYSCALE_4)
+        f = imread(proc[int(i)], cv2.IMREAD_REDUCED_GRAYSCALE_4)
         if f is None:
             g = astro._read_float(proc[int(i)])
             f = (cv2.cvtColor(g, cv2.COLOR_BGR2GRAY) if g.ndim == 3 else g)
@@ -97,7 +98,7 @@ def _auto_sky_mask(proc, out_shape, sample=12, log=print):
     return fg[..., None]
 
 
-def stack_stars_point(paths, work_dir=None, align="auto", sigma_clip=False, log=print):
+def stack_stars_point(paths, work_dir=None, align="auto", sigma_clip=False, log=log_print):
     """Punkt-Stern-Stacking mit Feldrotations-Ausgleich (Sequators Königsdisziplin) — gibt float32
     [0..1] (BGR) zurück.
 
@@ -168,7 +169,7 @@ def stack_stars_point(paths, work_dir=None, align="auto", sigma_clip=False, log=
             f = cv2.warpAffine(f, M, (W, H), flags=cv2.INTER_LANCZOS4, borderMode=cv2.BORDER_REFLECT)
             used_M += 1
         op = os.path.join(adir, f"s_{i:04d}.tif")
-        cv2.imwrite(op, np.clip(f * 65535, 0, 65535).astype(np.uint16),
+        imwrite(op, np.clip(f * 65535, 0, 65535).astype(np.uint16),
                     [int(cv2.IMWRITE_TIFF_COMPRESSION), 1])
         proc.append(op)
     if not proc:
@@ -196,7 +197,7 @@ def _star_affine(refg, img_g):
 
 def combine(paths, mode="smooth", align="none", strength=1.0, work_dir=None, detector="ORB",
             transform="rigid", gap_fill=False, comet_decay=0.9, sigma_clip=False,
-            freeze_below=None, freeze_auto=False, log=print):
+            freeze_below=None, freeze_auto=False, log=log_print):
     """Serie zu einer Langzeitbelichtung verrechnen. Gibt float32 [0..1] (BGR) zurück.
 
     strength = „virtuelle Belichtungszeit" (0..1): gewichtetes Teil-Mitteln zwischen einem
@@ -212,7 +213,7 @@ def combine(paths, mode="smooth", align="none", strength=1.0, work_dir=None, det
     # 1) Ausrichten (optional). Stativ -> 'none'. Sonst Shift (Phasenkorrelation) oder Feature.
     if align == "feature":
         import stacker
-        imgs = [cv2.imread(p, cv2.IMREAD_UNCHANGED) for p in paths]
+        imgs = [imread(p, cv2.IMREAD_UNCHANGED) for p in paths]
         imgs = [im for im in imgs if im is not None]
         if not imgs:
             raise RuntimeError("keine lesbaren Aufnahmen für die Ausrichtung")
@@ -226,7 +227,7 @@ def combine(paths, mode="smooth", align="none", strength=1.0, work_dir=None, det
         proc = []
         for i, im in enumerate(imgs):
             op = os.path.join(adir, f"a_{i:04d}.tif")
-            cv2.imwrite(op, im, [int(cv2.IMWRITE_TIFF_COMPRESSION), 1])
+            imwrite(op, im, [int(cv2.IMWRITE_TIFF_COMPRESSION), 1])
             proc.append(op)
     elif align == "shift":
         adir = os.path.join(work_dir, "_le_aligned")
@@ -320,9 +321,9 @@ def suggest_mode(paths, max_side=900, sample=8):
     idx = np.linspace(0, len(paths) - 1, min(sample, len(paths))).astype(int)
     grays, colors = [], []
     for i in idx:
-        im = cv2.imread(paths[int(i)], cv2.IMREAD_REDUCED_COLOR_2)
+        im = imread(paths[int(i)], cv2.IMREAD_REDUCED_COLOR_2)
         if im is None:
-            im = cv2.imread(paths[int(i)])
+            im = imread(paths[int(i)])
         if im is None:
             continue
         s = max(im.shape[:2])

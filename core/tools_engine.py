@@ -13,6 +13,7 @@ Ist ein Tool nicht installiert, fällt die GUI auf „im Dateimanager zeigen“ 
 import os
 import shutil
 import subprocess
+from constants import imread, imwrite, log_print
 
 
 def _ensure_uncompressed_tif(infile):
@@ -31,11 +32,11 @@ def _ensure_uncompressed_tif(infile):
         pass
     try:
         import cv2
-        img = cv2.imread(infile, cv2.IMREAD_UNCHANGED)
+        img = imread(infile, cv2.IMREAD_UNCHANGED)
         if img is None:
             return infile
         safe = os.path.splitext(infile)[0] + "_uc.tif"
-        cv2.imwrite(safe, img, [int(cv2.IMWRITE_TIFF_COMPRESSION), 1])
+        imwrite(safe, img, [int(cv2.IMWRITE_TIFF_COMPRESSION), 1])
         return safe
     except Exception:
         return infile
@@ -72,7 +73,7 @@ def find_starnet(explicit=None):
     return None
 
 
-def run_graxpert(infile, outfile=None, op="background-extraction", path=None, log=print):
+def run_graxpert(infile, outfile=None, op="background-extraction", path=None, log=log_print):
     """GraXpert headless auf eine Datei anwenden. Gibt den Ergebnis-Pfad zurück.
     op: 'background-extraction' (Standard) | 'denoising'."""
     exe = find_graxpert(path)
@@ -90,7 +91,7 @@ def run_graxpert(infile, outfile=None, op="background-extraction", path=None, lo
     cmd = [exe, "-cli", "-cmd", op, infile, "-output", outfile, "-gpu", "true"]  # GPU (CoreML/CUDA)
     log("  GraXpert: " + " ".join(cmd))
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=1800)
+        proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=1800)
     except subprocess.TimeoutExpired:
         raise RuntimeError("GraXpert: Zeitüberschreitung (30 min)")
     if proc.returncode != 0:                                # Fehl-Exit nicht stillschweigend schlucken
@@ -106,7 +107,7 @@ def run_graxpert(infile, outfile=None, op="background-extraction", path=None, lo
     raise RuntimeError("GraXpert lieferte kein Ergebnis. Log-Ende:\n" + tail)
 
 
-def run_starnet(infile, outfile=None, path=None, log=print):
+def run_starnet(infile, outfile=None, path=None, log=log_print):
     """StarNet++ headless: Sterne entfernen → starless-Bild. Gibt den Ergebnis-Pfad zurück.
 
     Wichtig: StarNet++ akzeptiert nur 16-bit-TIF und braucht seine Gewichte/Bibliotheken im
@@ -129,7 +130,7 @@ def run_starnet(infile, outfile=None, path=None, log=print):
     cmd = [exe, infile, outfile]
     log("  StarNet++: " + " ".join(cmd) + f"  (cwd={workdir})")
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=1800, cwd=workdir)
+        proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=1800, cwd=workdir)
     except subprocess.TimeoutExpired:
         raise RuntimeError("StarNet++: Zeitüberschreitung (30 min)")
     if proc.returncode != 0:                  # Fehl-Exit nicht stillschweigend schlucken
@@ -144,7 +145,7 @@ def run_starnet(infile, outfile=None, path=None, log=print):
     raise RuntimeError("StarNet++ lieferte kein Ergebnis. Log-Ende:\n" + tail)
 
 
-def run_graxpert_enhance(infile, outfile=None, path=None, denoise=True, log=print):
+def run_graxpert_enhance(infile, outfile=None, path=None, denoise=True, log=log_print):
     """One-Click-„Veredeln" mit GraXpert: erst Hintergrund-/Gradienten-Extraktion, dann
     (optional) KI-Entrauschung — der übliche Schritt nach dem Stacken. Gibt den End-Pfad zurück.
     Wirft RuntimeError, wenn GraXpert nicht gefunden wird (GUI zeigt dann einen Hinweis)."""

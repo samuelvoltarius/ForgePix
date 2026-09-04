@@ -22,6 +22,7 @@ import cv2
 import astro
 import siril_engine
 import tools_engine
+from constants import imwrite, log_print
 
 
 def available(starnet_path=None):
@@ -61,7 +62,7 @@ def _boost_nebula(neb, lift=3.5, contrast=0.6, saturation=1.25, core_lo=0.62):
 
 def run(linear_path, palette, work_dir, broadband=False, graxpert_path=None, starnet_path=None,
         boost=True, strength=6.0, saturation=1.05, ai_sharpen=True, cosmicclarity_path=None,
-        ai_aberration=False, siril_path=None, log=print):
+        ai_aberration=False, siril_path=None, log=log_print):
     """Vollen Starless-Workflow ausführen. Gibt den Pfad zum fertigen JPG zurück.
 
     linear_path : 32-bit-lineares Stack-Ergebnis (TIFF/FITS).
@@ -94,7 +95,7 @@ def run(linear_path, palette, work_dir, broadband=False, graxpert_path=None, sta
     # ohne StarNet: hier ist Schluss (nur gestrecktes Bild) — der Starless-Weg braucht StarNet.
     if not tools_engine.find_starnet(starnet_path):
         out = os.path.join(work_dir, "result_stretched.jpg")
-        cv2.imwrite(out, np.clip(stretched * 255, 0, 255).astype(np.uint8),
+        imwrite(out, np.clip(stretched * 255, 0, 255).astype(np.uint8),
                     [int(cv2.IMWRITE_JPEG_QUALITY), 94])
         log("      StarNet++ nicht gefunden — Sterntrennung entfällt (nur gestreckt).")
         return out
@@ -165,7 +166,7 @@ def run(linear_path, palette, work_dir, broadband=False, graxpert_path=None, sta
     return out
 
 
-def recombine(work_dir, neb_amt=1.0, star_amt=1.0, log=print):
+def recombine(work_dir, neb_amt=1.0, star_amt=1.0, log=log_print):
     """Aus den gecachten Ebenen (layer_starless/nebula/stars) das Endbild SOFORT neu mischen —
     ohne StarNet erneut laufen zu lassen. So sind Nebel-Boost und Stern-Stärke einstellbar:
 
@@ -181,6 +182,6 @@ def recombine(work_dir, neb_amt=1.0, star_amt=1.0, log=print):
     final = 1.0 - (1.0 - nebula) * (1.0 - st)                            # Screen → Sterne zurück
     final_bgr = cv2.cvtColor(np.clip(final, 0, 1).astype(np.float32), cv2.COLOR_RGB2BGR)
     out = os.path.join(work_dir, "result_starless.jpg")
-    cv2.imwrite(out, np.clip(final_bgr * 255, 0, 255).astype(np.uint8),
+    imwrite(out, np.clip(final_bgr * 255, 0, 255).astype(np.uint8),
                 [int(cv2.IMWRITE_JPEG_QUALITY), 94])
     return out

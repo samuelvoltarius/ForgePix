@@ -12,7 +12,7 @@ Schärfung (Wavelet/Unsharp) liegt in wavelet.py. Reine OpenCV/NumPy(/scipy)-Abh
 """
 import numpy as np
 import cv2
-from constants import luma
+from constants import luma, log_print
 
 
 def _as_float(img):
@@ -219,7 +219,7 @@ def radial_mask(shape, cx, cy, rx, ry, feather=0.3):
     return (1.0 - _smoothstep(1.0 - feather, 1.0, r)).astype(np.float32)
 
 
-def _lensfun_auto(f, exif_path, log=print):
+def _lensfun_auto(f, exif_path, log=log_print):
     """Automatische Objektivkorrektur über die lensfun-Datenbank (Vignette + Verzeichnung + TCA),
     anhand der Kamera-/Objektiv-Angaben aus den EXIF-Daten. Nur aktiv, wenn lensfunpy installiert
     UND Kamera/Objektiv in der Datenbank gefunden werden. Gibt (korrigiert, True) oder (f, False)."""
@@ -229,7 +229,7 @@ def _lensfun_auto(f, exif_path, log=print):
         import json
         meta = json.loads(subprocess.run(
             ["exiftool", "-j", "-n", "-Make", "-Model", "-LensModel", "-FocalLength",
-             "-FNumber", "-FocusDistance", exif_path], capture_output=True, text=True).stdout)[0]
+             "-FNumber", "-FocusDistance", exif_path], capture_output=True, text=True, encoding="utf-8", errors="replace").stdout)[0]
         db = lensfunpy.Database()
         cams = db.find_cameras(meta.get("Make", ""), meta.get("Model", ""))
         lenses = db.find_lenses(cams[0], None, meta.get("LensModel", "")) if cams else []
@@ -256,7 +256,7 @@ def _lensfun_auto(f, exif_path, log=print):
         return f, False
 
 
-def lens_correct(img, vignette=0.0, distortion=0.0, ca=0.0, auto=False, exif_path=None, log=print):
+def lens_correct(img, vignette=0.0, distortion=0.0, ca=0.0, auto=False, exif_path=None, log=log_print):
     """Objektivkorrekturen (RawTherapee/darktable-Niveau). Zwei Wege:
 
       • auto=True + exif_path: automatisch aus der **lensfun-Datenbank** (wenn lensfunpy installiert

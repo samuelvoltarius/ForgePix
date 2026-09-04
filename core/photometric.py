@@ -26,6 +26,7 @@ import numpy as np
 import cv2
 
 import siril_engine
+from constants import imwrite, log_print
 
 # ---------------------------------------------------------------- Siril-Pfad ----
 
@@ -82,7 +83,7 @@ def _platesolve_cmd(hints):
 
 
 def siril_spcc(bgr, hints=None, oscsensor=None, oscfilter=None, osclpf=None,
-               narrowband=False, siril_path=None, log=print):
+               narrowband=False, siril_path=None, log=log_print):
     """Linearbild per Siril-SPCC (Gaia DR3) farbkalibrieren. Gibt das kalibrierte BGR-Bild
     zurück oder wirft RuntimeError (der Orchestrator fällt dann auf den nächsten Pfad zurück)."""
     exe = find_siril(siril_path)
@@ -112,7 +113,7 @@ def siril_spcc(bgr, hints=None, oscsensor=None, oscfilter=None, osclpf=None,
         log("  Siril-SPCC: Plate-Solve + Gaia-DR3-Farbkalibrierung …")
         try:
             proc = subprocess.run([exe, "-s", "-"], input=script, capture_output=True,
-                                  text=True, timeout=150, cwd=work)
+                                  text=True, encoding="utf-8", errors="replace", timeout=150, cwd=work)
         except subprocess.TimeoutExpired:
             raise RuntimeError("Siril-SPCC: Zeitüberschreitung (Katalog/Netz?)")
         # Erfolg NICHT über lokalisierte Log-Strings erkennen (locale-abhängig), sondern über
@@ -151,7 +152,7 @@ def _find_solver():
     return (None, None)
 
 
-def _solve_wcs_siril(bgr, hints, work, siril_path=None, log=print):
+def _solve_wcs_siril(bgr, hints, work, siril_path=None, log=log_print):
     """Bild per Siril plate-solven (schnell, zuverlässig) und das WCS aus dem gelösten FITS lesen.
     Gibt ein astropy-WCS zurück oder None."""
     exe = find_siril(siril_path)
@@ -163,7 +164,7 @@ def _solve_wcs_siril(bgr, hints, work, siril_path=None, log=print):
     script = "\n".join(["requires 1.0.0", f'load "{inp}"', _platesolve_cmd(hints),
                         f'save "{outp}"']) + "\n"
     try:
-        subprocess.run([exe, "-s", "-"], input=script, capture_output=True, text=True, timeout=180)
+        subprocess.run([exe, "-s", "-"], input=script, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=180)
     except subprocess.TimeoutExpired:
         return None
     for cand in (outp + ".fit", outp + ".fits"):
@@ -194,7 +195,7 @@ def _read_wcs2d(path):
 ASTROMETRY_API = "https://nova.astrometry.net/api"
 
 
-def _solve_wcs_astrometry(gray, api_key, work, log=print):
+def _solve_wcs_astrometry(gray, api_key, work, log=log_print):
     """Blindes Plate-Solving über die **Astrometry.net-Online-API** (nova.astrometry.net).
     Braucht einen API-Key, den der/die NUTZER:IN angibt (nie im Code/Repo). Lädt die Luminanz hoch,
     pollt Submission+Job und lädt die WCS-Datei herunter. Gibt WCS oder None.
@@ -216,7 +217,7 @@ def _solve_wcs_astrometry(gray, api_key, work, log=print):
             log("  Astrometry.net: Login fehlgeschlagen (API-Key prüfen)")
             return None
         png = os.path.join(work, "anet_upload.png")
-        cv2.imwrite(png, (np.clip(gray, 0, 1) * 255).astype(np.uint8))
+        imwrite(png, (np.clip(gray, 0, 1) * 255).astype(np.uint8))
         with open(png, "rb") as fh:
             req = {"session": sess, "publicly_visible": "n",
                    "allow_modifications": "n", "allow_commercial_use": "n"}
@@ -269,7 +270,7 @@ def _solve_wcs_astrometry(gray, api_key, work, log=print):
         return None
 
 
-def gaia_pcc(bgr, hints=None, siril_path=None, astrometry_key=None, log=print):
+def gaia_pcc(bgr, hints=None, siril_path=None, astrometry_key=None, log=log_print):
     """Eigener Pfad (MIT-konform): Plate-Solve → WCS → Gaia-DR3-Kegelsuche (astroquery) →
     Katalogsterne über WCS den Bildsternen zuordnen → Kanäle so abgleichen, dass die mittlere
     Sternfarbe zur Gaia-Photometrie passt. Solver-Reihenfolge: Siril (lokal) → Astrometry.net-Online
@@ -323,13 +324,13 @@ def _solve_wcs_external(kind, solver, lpath, work, hints, log):
         # ra UND dec prüfen — ASTAP braucht beide; dec=None crashte hier vorher mit TypeError
         if h.get("ra") is not None and h.get("dec") is not None:
             cmd += ["-ra", str(h["ra"] / 15.0), "-spd", str(h["dec"] + 90)]
-        subprocess.run(cmd, capture_output=True, text=True, timeout=300, cwd=work)
+        subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=300, cwd=work)
         base = os.path.splitext(lpath)[0]
         return _read_wcs2d(base + ".fit") if os.path.isfile(base + ".fit") else None
     cmd = [solver, "--overwrite", "--no-plots", "--downsample", "2", lpath]
     if h.get("ra") is not None and h.get("dec") is not None:
         cmd += ["--ra", str(h["ra"]), "--dec", str(h["dec"]), "--radius", "3"]
-    subprocess.run(cmd, capture_output=True, text=True, timeout=600, cwd=work)
+    subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=600, cwd=work)
     wfile = os.path.splitext(lpath)[0] + ".wcs"
     return _read_wcs2d(wfile) if os.path.isfile(wfile) else None
 
@@ -358,7 +359,7 @@ def _fit_channel_gains(bgr, cat, wcs, log):
 # ---------------------------------------------------------- Orchestrator ----
 
 def run_pcc(linear_bgr, hints=None, prefer="auto", oscsensor=None, narrowband=False,
-            siril_path=None, astrometry_key=None, log=print):
+            siril_path=None, astrometry_key=None, log=log_print):
     """Photometrische Farbkalibrierung mit dreistufigem Fallback. Gibt IMMER ein kalibriertes
     Bild zurück (schlimmstenfalls PCC-lite). prefer: 'auto'|'siril'|'gaia'|'lite'.
     astrometry_key: optionaler Astrometry.net-API-Key (vom User), für blindes Online-Plate-Solving

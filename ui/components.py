@@ -21,15 +21,15 @@ from PySide6.QtWidgets import (
 )
 
 from i18n import tr
-from constants import to_uint8
+from constants import to_uint8, imwrite
 
 
 def save_image(path, img):
     """JPG (Qualität 95) oder TIFF (unkomprimiert) speichern — EINE Stelle statt drei Kopien."""
     if path.lower().endswith((".jpg", ".jpeg")):
-        cv2.imwrite(path, img, [int(cv2.IMWRITE_JPEG_QUALITY), 95])
+        imwrite(path, img, [int(cv2.IMWRITE_JPEG_QUALITY), 95])
     else:
-        cv2.imwrite(path, img, [int(cv2.IMWRITE_TIFF_COMPRESSION), 1])
+        imwrite(path, img, [int(cv2.IMWRITE_TIFF_COMPRESSION), 1])
 
 
 class CompareSlider(QWidget):

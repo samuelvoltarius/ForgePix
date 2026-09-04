@@ -7,6 +7,7 @@ from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QGridLayout, Q
 
 from i18n import tr
 from ui.components import reveal_in_files
+from constants import imread, imwrite
 
 try:
     import cv2
@@ -77,7 +78,7 @@ class ExportMixin:
             if not any_sel:
                 QMessageBox.information(dlg, tr("Exportieren"),
                                        tr("Bitte mindestens ein Ziel auswählen.")); return
-            res = cv2.imread(self.result_path, cv2.IMREAD_UNCHANGED)
+            res = imread(self.result_path, cv2.IMREAD_UNCHANGED)
             if res is None:
                 QMessageBox.warning(dlg, tr("Exportieren"),
                                     tr("Ergebnis konnte nicht geladen werden.")); return
@@ -98,7 +99,7 @@ class ExportMixin:
                         img8 = res
                     else:  # float -> 0..255
                         img8 = np.clip(res * (255.0 if res.max() <= 1.5 else 1.0), 0, 255).astype(np.uint8)
-                    cv2.imwrite(os.path.join(export_dir, f"{base}_web.jpg"), img8,
+                    imwrite(os.path.join(export_dir, f"{base}_web.jpg"), img8,
                                 [int(cv2.IMWRITE_JPEG_QUALITY), jq.value()]); written += 1
                 if tiff16.isChecked():
                     if res.dtype == np.uint16:
@@ -107,7 +108,7 @@ class ExportMixin:
                         out = (res.astype(np.float32) * 257).astype(np.uint16)
                     else:  # float -> 16-bit
                         out = np.clip(res * (65535.0 if res.max() <= 1.5 else 257.0), 0, 65535).astype(np.uint16)
-                    cv2.imwrite(os.path.join(export_dir, f"{base}_16bit.tif"), out,
+                    imwrite(os.path.join(export_dir, f"{base}_16bit.tif"), out,
                                 [int(cv2.IMWRITE_TIFF_COMPRESSION), 1]); written += 1
                 if chosen:
                     # NUR die echte Ergebnisdatei exportieren (kein Verzeichnis-Scan -> kein Müll)

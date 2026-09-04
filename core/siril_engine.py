@@ -14,6 +14,7 @@ import subprocess
 
 import numpy as np
 import cv2
+from constants import log_print
 
 
 def find_siril(explicit=None):
@@ -79,7 +80,7 @@ def available(explicit=None):
 
 
 def run_siril_astro(paths, work_dir, kappa=3.0, dark=None, flat=None, bias=None,
-                    siril_path=None, subsky=True, rmgreen=True, log=print):
+                    siril_path=None, subsky=True, rmgreen=True, log=log_print):
     """Lights mit Siril stacken und Sirils Kern-Nachbearbeitung anwenden. Gibt Pfad zum Ergebnis-TIFF
     zurück. dark/flat/bias = optionale Master-Frame-Dateien.
     subsky=True: Sirils Hintergrund-/Gradienten-Extraktion (Polynom) auf das Stack-Ergebnis.
@@ -131,7 +132,7 @@ def run_siril_astro(paths, work_dir, kappa=3.0, dark=None, flat=None, bias=None,
     log("  Skript: " + " ; ".join(lines))
     try:
         proc = subprocess.run([cli, "-d", seq_dir, "-s", script],
-                              capture_output=True, text=True, timeout=3600)
+                              capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=3600)
     except subprocess.TimeoutExpired:
         raise RuntimeError("Siril: Zeitüberschreitung (60 min)")
     for ext in (".tif", ".tiff", ".fit", ".fits"):

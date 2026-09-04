@@ -15,6 +15,7 @@ import shutil
 import subprocess
 import numpy as np
 import cv2
+from constants import log_print
 
 _CANDIDATES = [
     os.path.expanduser("~/cosmicclarity/SetiAstroCosmicClaritymac"),
@@ -35,7 +36,7 @@ def available(path=None):
 
 
 def sharpen(bgr01, mode="Non-Stellar Only", nonstellar_strength=2.0, nonstellar_amount=0.7,
-            stellar_amount=0.9, auto_psf=False, gpu=True, path=None, timeout=1800, log=print):
+            stellar_amount=0.9, auto_psf=False, gpu=True, path=None, timeout=1800, log=log_print):
     """BGR-Float (0..1) mit Cosmic Clarity schärfen (KI-Dekonvolution) und Ergebnis zurückgeben.
     mode: 'Non-Stellar Only' (Nebel — für sternenlose Bilder!), 'Stellar Only', 'Both'."""
     cli = find_cli(path)
@@ -64,7 +65,7 @@ def sharpen(bgr01, mode="Non-Stellar Only", nonstellar_strength=2.0, nonstellar_
         if not gpu:
             cmd.append("--disable_gpu")
         log(f"    Cosmic Clarity Schärfung ({mode}, GPU={gpu}) …")
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, cwd=exe_dir)
+        proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout, cwd=exe_dir)
         # nur die EIGENE Ausgabe (<stem>_sharpened.tif) einsammeln, keine fremden Dateien
         outs = sorted(glob.glob(os.path.join(outdir, stem + "*")))
         if not outs:

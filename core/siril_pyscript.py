@@ -16,6 +16,7 @@ import subprocess
 import numpy as np
 
 import siril_engine   # für find_siril + gemeinsame TIFF-/FITS-Helper
+from constants import log_print
 
 
 def _scripts_dir():
@@ -40,7 +41,7 @@ def available(name="AutoBGE.py", siril_path=None):
     return siril_engine.find_siril(siril_path) is not None and find_script(name) is not None
 
 
-def run(bgr01, script, args=None, work_dir=None, siril_path=None, timeout=1800, log=print):
+def run(bgr01, script, args=None, work_dir=None, siril_path=None, timeout=1800, log=log_print):
     """`bgr01` (float 0..1 BGR) durch ein Siril-Python-Skript headless schicken; Ergebnis-Array zurück.
     script: Dateiname (z. B. 'AberrationRemover.py'); args: Liste von CLI-Tokens (z. B. ['-strength','0.7'])."""
     cli = siril_engine.find_siril(siril_path)
@@ -61,7 +62,7 @@ def run(bgr01, script, args=None, work_dir=None, siril_path=None, timeout=1800, 
         with open(ssf, "w") as fh:
             fh.write(f'requires 1.4.0\ncd "{work_dir}"\nload in\npyscript "{spath}" {argstr}\nsave out\n')
         log(f"    Siril-pyscript: {script} {argstr} …")
-        proc = subprocess.run([cli, "-s", ssf], capture_output=True, text=True, timeout=timeout)
+        proc = subprocess.run([cli, "-s", ssf], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
         outs = sorted(glob.glob(os.path.join(work_dir, "out.*")))
         if not outs:
             # Log-Ende mit in die Fehlermeldung — sonst bleibt der eigentliche Grund unsichtbar

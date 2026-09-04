@@ -27,6 +27,10 @@ from ui.components import (  # noqa: F401  (Rück-Export für bestehende Skripte
 )
 
 if __name__ == "__main__":
+    # UTF-8-Ausgabe erzwingen, bevor irgendetwas loggt: die Logzeilen enthalten „→/─/σ",
+    # die die Windows-Locale-Codepage (cp1252) nicht kodieren kann → UnicodeEncodeError.
+    from constants import force_utf8_stdio
+    force_utf8_stdio()
     # Im gebündelten Binary (PyInstaller) ist `sys.executable` das Binary selbst, nicht python.
     # Damit der GUI-Subprozess die Pipeline starten kann, dient `--cli` als zweiter Einstiegspunkt:
     #   forgepix --cli --input … → ruft focus_cull_stack.main() statt der GUI.

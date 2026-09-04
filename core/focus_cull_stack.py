@@ -26,7 +26,7 @@ from dataclasses import dataclass, field, asdict
 import cv2
 import numpy as np
 
-from constants import RAW_EXTS, STD_EXTS, FITS_EXTS, to_uint8
+from constants import RAW_EXTS, STD_EXTS, FITS_EXTS, to_uint8, force_utf8_stdio, imread, imwrite, log_print
 
 
 def phase(key):
@@ -74,7 +74,7 @@ def load_gray(path, max_side=1600):
                 rgb = raw.postprocess(use_camera_wb=True, output_bps=8, half_size=True)
             gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
     else:
-        gray = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
+        gray = imread(path, cv2.IMREAD_GRAYSCALE)
         if gray is None:
             raise RuntimeError(f"Konnte Bild nicht lesen: {path}")
     h, w = gray.shape[:2]
@@ -150,7 +150,7 @@ def develop_all(paths, dev_dir, args):
                                            "vignette": getattr(args, "lens_vignette", 0.0),
                                            "distortion": getattr(args, "lens_distortion", 0.0),
                                            "ca": getattr(args, "lens_ca", 0.0)})
-            cv2.imwrite(outp, bgr, [int(cv2.IMWRITE_TIFF_COMPRESSION), 1])
+            imwrite(outp, bgr, [int(cv2.IMWRITE_TIFF_COMPRESSION), 1])
             return outp
         dst = os.path.join(dev_dir, f"{i:04d}_" + name)
         shutil.copy2(p, dst)
@@ -355,7 +355,7 @@ def _encode_jpeg_dataurl(path, max_side=768):
             rgb = raw.postprocess(use_camera_wb=True, output_bps=8, half_size=True)
         img = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
     else:
-        img = cv2.imread(path, cv2.IMREAD_COLOR)
+        img = imread(path, cv2.IMREAD_COLOR)
     if img is None:
         raise RuntimeError(f"Konnte Bild nicht lesen: {path}")
     h, w = img.shape[:2]
@@ -479,7 +479,7 @@ def build_ai_context(paths, args, focusmap=True):
             fm = focus_map(paths)
             if fm is not None:
                 p = os.path.join(tempfile.gettempdir(), "forgepix_ai_focusmap.png")
-                cv2.imwrite(p, fm)
+                imwrite(p, fm)
                 ctx["focusmap_path"] = p
         except Exception:
             pass
@@ -718,12 +718,12 @@ def export_web_jpg(stack_dir, export_dir):
         ext = os.path.splitext(f)[1].lower()
         if ext not in (".tif", ".tiff", ".png", ".jpg", ".jpeg"):
             continue
-        img = cv2.imread(os.path.join(stack_dir, f), cv2.IMREAD_UNCHANGED)
+        img = imread(os.path.join(stack_dir, f), cv2.IMREAD_UNCHANGED)
         if img is None:
             continue
         img = to_uint8(img)
         out = os.path.join(export_dir, os.path.splitext(f)[0] + ".jpg")
-        cv2.imwrite(out, img, [int(cv2.IMWRITE_JPEG_QUALITY), 92])
+        imwrite(out, img, [int(cv2.IMWRITE_JPEG_QUALITY), 92])
         print(f"  Web-JPG: {out}")
 
 
@@ -850,7 +850,7 @@ def export_targets(stack_dir, export_dir, targets, only=None):
     for f in files:
         if os.path.splitext(f)[1].lower() not in (".tif", ".tiff", ".png", ".jpg", ".jpeg"):
             continue
-        src = cv2.imread(os.path.join(stack_dir, f), cv2.IMREAD_UNCHANGED)
+        src = imread(os.path.join(stack_dir, f), cv2.IMREAD_UNCHANGED)
         if src is None:
             continue
         base = os.path.splitext(f)[0]
@@ -862,7 +862,7 @@ def export_targets(stack_dir, export_dir, targets, only=None):
                 # Verlustarm: Originaltiefe (16-bit falls vorhanden) behalten, sanfte Schärfung
                 out = stacker.unsharp_mask(src, min(sharp, 12), 1.0)
                 p = os.path.join(export_dir, f"{base}_print.tif")
-                cv2.imwrite(p, out, [int(cv2.IMWRITE_TIFF_COMPRESSION), 1])
+                imwrite(p, out, [int(cv2.IMWRITE_TIFF_COMPRESSION), 1])
                 continue
             img = src
             if img.dtype != np.uint8:
@@ -874,7 +874,7 @@ def export_targets(stack_dir, export_dir, targets, only=None):
                 out = cv2.resize(img, (int(w * s), int(h * s)), interpolation=cv2.INTER_AREA)
             out = stacker.unsharp_mask(out, sharp, 0.8)  # Ausgabe-Schärfung
             p = os.path.join(export_dir, f"{base}_{t}.jpg")
-            cv2.imwrite(p, out, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
+            imwrite(p, out, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
             print(f"  Export [{t}]: {p}")
 
 
@@ -888,7 +888,7 @@ def run_own_engine(selected_dir, work_dir, args):
     # Erstes LESBARES Bild als Stichprobe (korrupte/nicht dekodierbare überspringen).
     sample = None
     for p in paths:
-        sample = cv2.imread(p, cv2.IMREAD_UNCHANGED)
+        sample = imread(p, cv2.IMREAD_UNCHANGED)
         if sample is not None:
             break
     if sample is None:
@@ -924,7 +924,7 @@ def run_own_engine(selected_dir, work_dir, args):
             try:
                 m = float(img.max()) or 1.0
                 small = cv2.resize(img / m, (0, 0), fx=0.4, fy=0.4)
-                cv2.imwrite(pv_path, np.clip(small * 255, 0, 255).astype(np.uint8),
+                imwrite(pv_path, np.clip(small * 255, 0, 255).astype(np.uint8),
                             [int(cv2.IMWRITE_JPEG_QUALITY), 80])
                 print(f"PREVIEW:{pv_path}"); sys.stdout.flush()
             except Exception:
@@ -945,7 +945,7 @@ def run_own_engine(selected_dir, work_dir, args):
                                                      else (lambda *a: None)))
                 if dmap is not None:
                     gm_path = os.path.join(work_dir, "ghostmap.jpg")
-                    cv2.imwrite(gm_path, stacker.ghost_overlay_from_map(result, dmap),
+                    imwrite(gm_path, stacker.ghost_overlay_from_map(result, dmap),
                                 [int(cv2.IMWRITE_JPEG_QUALITY), 90])
                     if getattr(args, "ghost_map", False):
                         print(f"  Geister-Karte: {gm_path}")
@@ -953,7 +953,7 @@ def run_own_engine(selected_dir, work_dir, args):
                 print(f"  (Geister-Karte im Großstack übersprungen: {e})", file=sys.stderr)
     else:
         print(f"  Lade {len(paths)} Frames …")
-        imgs = [cv2.imread(p, cv2.IMREAD_UNCHANGED) for p in paths]
+        imgs = [imread(p, cv2.IMREAD_UNCHANGED) for p in paths]
         imgs = [im for im in imgs if im is not None]
         if len({im.shape for im in imgs}) > 1:
             h, w = imgs[len(imgs) // 2].shape[:2]
@@ -992,14 +992,14 @@ def run_own_engine(selected_dir, work_dir, args):
         if getattr(args, "ghost_map", False) and len(imgs) >= 3:
             gm = stacker.ghost_overlay(result, imgs)
             gm_path = os.path.join(work_dir, "ghostmap.jpg")
-            cv2.imwrite(gm_path, gm, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
+            imwrite(gm_path, gm, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
             print(f"  Geister-Karte: {gm_path}")
         elif len(imgs) >= 3:
             # Geister-Karte intern erzeugen (für KI-Retusche-Hinweis), auch ohne --ghost-map
             try:
                 gm = stacker.ghost_overlay(result, imgs)
                 gm_path = os.path.join(work_dir, "ghostmap.jpg")
-                cv2.imwrite(gm_path, gm, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
+                imwrite(gm_path, gm, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
             except Exception:
                 gm_path = None
     if getattr(args, "denoise", 0) and args.denoise > 0:
@@ -1029,9 +1029,9 @@ def run_own_engine(selected_dir, work_dir, args):
     ext = ".tif" if result.dtype == np.uint16 else ".jpg"
     out = os.path.join(stack_dir, f"{args.prefix}{base}_stk{ext}")
     if ext == ".jpg":
-        cv2.imwrite(out, result, [int(cv2.IMWRITE_JPEG_QUALITY), 95])
+        imwrite(out, result, [int(cv2.IMWRITE_JPEG_QUALITY), 95])
     else:
-        cv2.imwrite(out, result, [int(cv2.IMWRITE_TIFF_COMPRESSION), 1])
+        imwrite(out, result, [int(cv2.IMWRITE_TIFF_COMPRESSION), 1])
     print(f"  geschrieben: {out}")
 
     if getattr(args, "multilayer", False):
@@ -1058,6 +1058,9 @@ def run_own_engine(selected_dir, work_dir, args):
 
 
 def main():
+    # Als Allererstes: UTF-8-Ausgabe erzwingen. Sonst stirbt unter Windows schon
+    # `--help` an einem „σ" im Hilfetext (Locale-Codepage cp1252 kann es nicht).
+    force_utf8_stdio()
     ap = argparse.ArgumentParser(description="ForgePix — Fokus-Stacking (eigene Engine)")
     ap.add_argument("--input", required=True, help="Ordner mit den Aufnahmen")
     ap.add_argument("--work", help="Arbeits-/Projektordner (Default: <input>/../stack_work)")
@@ -1534,7 +1537,7 @@ def run_astro(input_dir, work_dir, args):
                     paths, work_dir, kappa=args.astro_kappa,
                     dark=getattr(args, "dark", None), flat=getattr(args, "flat", None),
                     bias=getattr(args, "bias", None), siril_path=getattr(args, "siril_path", None))
-                sr = cv2.imread(tif, cv2.IMREAD_UNCHANGED)
+                sr = imread(tif, cv2.IMREAD_UNCHANGED)
                 if sr is None:
                     raise RuntimeError("Siril-Ergebnis nicht lesbar")
                 result = sr.astype(np.float32) / (65535.0 if sr.dtype == np.uint16 else 255.0)
@@ -1582,7 +1585,7 @@ def run_astro(input_dir, work_dir, args):
         try:
             v = astro.autostretch(img01, strength=6.0, saturation=1.05)
             small = cv2.resize(v, (0, 0), fx=0.4, fy=0.4)
-            cv2.imwrite(pv_path, np.clip(small * 255, 0, 255).astype(np.uint8),
+            imwrite(pv_path, np.clip(small * 255, 0, 255).astype(np.uint8),
                         [int(cv2.IMWRITE_JPEG_QUALITY), 80])
             print(f"PREVIEW:{pv_path}")
             sys.stdout.flush()
@@ -1663,7 +1666,7 @@ def _maybe_upscale(result, args):
             return result
         was16 = result.dtype == np.uint16
         f = result.astype(np.float32) / (65535.0 if was16 else 255.0)
-        up = superres.upscale(f, log=print)
+        up = superres.upscale(f, log=log_print)
         return (up * (65535.0 if was16 else 255.0)).astype(result.dtype)
     except Exception as e:
         print(f"  (Upscaling übersprungen: {e})", file=sys.stderr)
@@ -1717,14 +1720,14 @@ def _astro_write(result, work_dir, paths, args, astro):
     os.makedirs(stack_dir)
     base = os.path.splitext(os.path.basename(paths[0]))[0]
     lin = np.clip(result * 65535, 0, 65535).astype(np.uint16)
-    cv2.imwrite(os.path.join(stack_dir, f"{args.prefix}{base}_astro_linear.tif"),
+    imwrite(os.path.join(stack_dir, f"{args.prefix}{base}_astro_linear.tif"),
                 lin, [int(cv2.IMWRITE_TIFF_COMPRESSION), 1])
     if getattr(args, "astro_starless_classic", False):     # A6: klassisch sternloses Nebelbild
         try:
             print("  Klassisches Star-Removal (morphologisch) …")
             starless, _smask = astro.remove_stars(result)
             sv = astro.autostretch(astro.remove_green_cast(astro.color_balance(starless, 1.0)))
-            cv2.imwrite(os.path.join(stack_dir, f"{args.prefix}{base}_starless_classic.jpg"),
+            imwrite(os.path.join(stack_dir, f"{args.prefix}{base}_starless_classic.jpg"),
                         np.clip(sv * 255, 0, 255).astype(np.uint8), [int(cv2.IMWRITE_JPEG_QUALITY), 92])
         except Exception as e:
             print(f"  (Star-Removal übersprungen: {e})", file=sys.stderr)
@@ -1826,7 +1829,7 @@ def _astro_write(result, work_dir, paths, args, astro):
         else:
             view = _broadband(result)
     out_view = os.path.join(stack_dir, f"{args.prefix}{base}_astro.jpg")
-    cv2.imwrite(out_view, np.clip(view * 255, 0, 255).astype(np.uint8),
+    imwrite(out_view, np.clip(view * 255, 0, 255).astype(np.uint8),
                 [int(cv2.IMWRITE_JPEG_QUALITY), 95])
     print(f"  geschrieben: {out_view} (+ lineares 16-bit TIFF)")
     copy_exif_to_dirs(paths[len(paths) // 2], stack_dir)  # Kamera/Objektiv/Datum übernehmen
@@ -1885,7 +1888,7 @@ def run_hybrid_focus_astro(input_dir, work_dir, args):
                               normalize=False, log=lambda *a: None)
             shutil.rmtree(reg_dir, ignore_errors=True)
         op = os.path.join(denoised_dir, f"pos_{gi:03d}.tif")
-        cv2.imwrite(op, np.clip(den * 65535, 0, 65535).astype(np.uint16),
+        imwrite(op, np.clip(den * 65535, 0, 65535).astype(np.uint16),
                     [int(cv2.IMWRITE_TIFF_COMPRESSION), 1])
     print("  -> Fokus-Stacking der entrauschten Positionen …")
     args.no_raw_develop = True  # bereits entwickelte TIFFs
@@ -1944,10 +1947,10 @@ def run_longexp(input_dir, work_dir, args):
     os.makedirs(stack_dir)
     base = os.path.splitext(os.path.basename(orig_first))[0]
     out = os.path.join(stack_dir, f"{args.prefix}{base}_langzeit_{mode}.tif")
-    cv2.imwrite(out, np.clip(result * 65535, 0, 65535).astype(np.uint16),
+    imwrite(out, np.clip(result * 65535, 0, 65535).astype(np.uint16),
                 [int(cv2.IMWRITE_TIFF_COMPRESSION), 1])
     out_jpg = os.path.join(stack_dir, f"{args.prefix}{base}_langzeit_{mode}.jpg")
-    cv2.imwrite(out_jpg, np.clip(result * 255, 0, 255).astype(np.uint8),
+    imwrite(out_jpg, np.clip(result * 255, 0, 255).astype(np.uint8),
                 [int(cv2.IMWRITE_JPEG_QUALITY), 95])
     print(f"  geschrieben: {out_jpg} (+ 16-bit TIFF)")
     if getattr(args, "web_jpg", False):
@@ -1974,7 +1977,7 @@ def run_mosaic(input_dir, work_dir, args):
     os.makedirs(stack_dir)
     base = os.path.splitext(os.path.basename(paths[0]))[0]
     out = os.path.join(stack_dir, f"{args.prefix}{base}_mosaik.jpg")
-    cv2.imwrite(out, pano, [int(cv2.IMWRITE_JPEG_QUALITY), 95])
+    imwrite(out, pano, [int(cv2.IMWRITE_JPEG_QUALITY), 95])
     print(f"  geschrieben: {out} ({pano.shape[1]}x{pano.shape[0]})")
     if getattr(args, "web_jpg", False):
         export_web_jpg(stack_dir, os.path.join(work_dir, "export"))
@@ -2009,7 +2012,7 @@ def run_lucky(input_path, work_dir, args):
 
     def _pv(img, k):
         try:
-            cv2.imwrite(pv, cv2.resize(img, (0, 0), fx=0.6, fy=0.6),
+            imwrite(pv, cv2.resize(img, (0, 0), fx=0.6, fy=0.6),
                         [int(cv2.IMWRITE_JPEG_QUALITY), 80])
             print(f"PREVIEW:{pv}"); sys.stdout.flush()
         except Exception:
@@ -2027,7 +2030,7 @@ def run_lucky(input_path, work_dir, args):
             ok0, bf = cap0.read(); cap0.release()
             if ok0 and bf is not None:
                 bf_jpg = os.path.join(stack_dir, f"{args.prefix}{base}_bestframe.jpg")
-                cv2.imwrite(bf_jpg, bf, [int(cv2.IMWRITE_JPEG_QUALITY), 95])
+                imwrite(bf_jpg, bf, [int(cv2.IMWRITE_JPEG_QUALITY), 95])
                 made.append(bf_jpg)
                 print(f"  schärfstes Einzelbild: {bf_jpg}")
         except Exception as e:
@@ -2050,8 +2053,8 @@ def run_lucky(input_path, work_dir, args):
             res = None
         if res is not None:
             out_jpg = os.path.join(stack_dir, f"{args.prefix}{base}_map.jpg")
-            cv2.imwrite(out_jpg, res, [int(cv2.IMWRITE_JPEG_QUALITY), 95])
-            cv2.imwrite(os.path.join(stack_dir, f"{args.prefix}{base}_map.tif"), res,
+            imwrite(out_jpg, res, [int(cv2.IMWRITE_JPEG_QUALITY), 95])
+            imwrite(os.path.join(stack_dir, f"{args.prefix}{base}_map.tif"), res,
                         [int(cv2.IMWRITE_TIFF_COMPRESSION), 1])
             made.append(out_jpg)
             print(f"  Multi-Point-Stack: {out_jpg}")
@@ -2077,7 +2080,7 @@ def run_hdr(input_dir, work_dir, args):
     def load(p):                                         # RAW treu entwickeln, sonst einlesen
         if os.path.splitext(p)[1].lower() in constants.RAW_EXTS:
             return develop_raw_to_bgr(p, wb=getattr(args, "raw_wb", "camera"), bps=8)
-        return cv2.imread(p, cv2.IMREAD_UNCHANGED)
+        return imread(p, cv2.IMREAD_UNCHANGED)
 
     groups = hdr.split_brackets(paths, size=getattr(args, "hdr_bracket", 0))
     phase("merge")
@@ -2112,9 +2115,9 @@ def run_hdr(input_dir, work_dir, args):
         result = hdr.apply_look(result, getattr(args, "hdr_look", "natural"))
         base = os.path.splitext(os.path.basename(grp[len(grp) // 2]))[0]
         out_jpg = os.path.join(stack_dir, f"{args.prefix}{base}_hdr.jpg")
-        cv2.imwrite(out_jpg, result, [int(cv2.IMWRITE_JPEG_QUALITY), 95])
+        imwrite(out_jpg, result, [int(cv2.IMWRITE_JPEG_QUALITY), 95])
         out_tif = os.path.join(stack_dir, f"{args.prefix}{base}_hdr.tif")
-        cv2.imwrite(out_tif, result, [int(cv2.IMWRITE_TIFF_COMPRESSION), 1])
+        imwrite(out_tif, result, [int(cv2.IMWRITE_TIFF_COMPRESSION), 1])
         copy_exif(grp[len(grp) // 2], [out_jpg, out_tif])
         made.append(out_jpg)
         print(f"    geschrieben: {out_jpg}")
@@ -2275,8 +2278,8 @@ def process(args, input_dir, work_dir):
         stack_imgs = [os.path.join(out, f) for f in os.listdir(out)
                       if os.path.splitext(f)[1].lower() in (".tif", ".tiff", ".jpg", ".jpeg", ".png")]
         if stack_imgs:
-            res = cv2.imread(max(stack_imgs, key=os.path.getmtime), cv2.IMREAD_UNCHANGED)
-            srcs = [cv2.imread(os.path.join(selected_dir, f.name), cv2.IMREAD_UNCHANGED) for f in kept[:12]]
+            res = imread(max(stack_imgs, key=os.path.getmtime), cv2.IMREAD_UNCHANGED)
+            srcs = [imread(os.path.join(selected_dir, f.name), cv2.IMREAD_UNCHANGED) for f in kept[:12]]
             srcs = [s for s in srcs if s is not None]
             q = fa.stack_quality(res, srcs if len(srcs) >= 3 else None,
                                  subject_aligned=getattr(args, "_subject_aligned", False))

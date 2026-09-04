@@ -15,7 +15,7 @@ Reine OpenCV/NumPy. Auf kleinen Graustufen gerechnet → schnell, speicherschone
 import os
 import numpy as np
 import cv2
-from constants import RAW_EXTS, STD_EXTS, FITS_EXTS
+from constants import RAW_EXTS, STD_EXTS, FITS_EXTS, imread, log_print
 
 
 def _load_gray(path, max_side=1000):
@@ -39,7 +39,7 @@ def _load_gray(path, max_side=1000):
                 rgb = raw.postprocess(output_bps=8, use_camera_wb=True, no_auto_bright=True, half_size=True)
             g = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
     else:
-        g = cv2.imread(path, cv2.IMREAD_GRAYSCALE)
+        g = imread(path, cv2.IMREAD_GRAYSCALE)
     if g is None:
         return None
     if g.dtype != np.uint8:
@@ -64,7 +64,7 @@ def tile_sharpness(gray, grid=12):
     return out
 
 
-def sharpness_matrix(paths, grid=12, max_side=1000, log=print):
+def sharpness_matrix(paths, grid=12, max_side=1000, log=log_print):
     """(N_frames × grid²)-Matrix der Kachel-Schärfen. Nicht lesbare Frames → Nullzeile."""
     dim = grid * grid
     import hashlib
@@ -178,7 +178,7 @@ def stack_optimizer(M, paths, levels=(1.0, 0.8, 0.6, 0.4), cover_thresh=0.8):
     return {"order": order, "levels": out_levels, "total_tiles": total}
 
 
-def analyze_series(paths, grid=12, max_side=1000, log=print):
+def analyze_series(paths, grid=12, max_side=1000, log=log_print):
     """Komplette Aufnahmeanalyse in einem Schritt: pro Frame ein Status
     (✓ trägt bei / ♻ redundant / ⚠ verwackelt / ⤳ außerhalb der Reihe) + Sweep,
     Abdeckungs-Vollständigkeit und Optimizer-Kurve."""
@@ -329,7 +329,7 @@ def _optics_via_exiftool(path):
             "-FocusDistance2", "-LensModel"]
     try:
         out = subprocess.run(["exiftool", "-json", *tags, path],
-                             capture_output=True, text=True, timeout=30)
+                             capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30)
         d = _json.loads(out.stdout)[0]
     except Exception:
         return None
@@ -431,7 +431,7 @@ def _exif_expo_iso(paths):
         import re
         try:
             out = subprocess.run(["exiftool", "-json", "-n", "-ExposureTime", "-ISO", *paths],
-                                 capture_output=True, text=True, timeout=10)
+                                 capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=10)
             for d in _json.loads(out.stdout):
                 e, s = d.get("ExposureTime"), d.get("ISO")
                 try:
