@@ -8,6 +8,7 @@ Ausführen:  python3 tests/test_astro_gaps.py
 """
 import os
 import sys
+import shutil
 import tempfile
 import unittest
 
@@ -215,6 +216,86 @@ class TestA6StarRemoval(unittest.TestCase):
         if k > 0:
             ratio = kept_val / max(ref_val, 1e-6)
             self.assertGreater(ratio, 0.7, f"Nebel zu stark beschädigt (ratio={ratio:.2f})")
+
+
+class TestWinsorRejection(unittest.TestCase):
+    """A7 — `winsor` muss Ausreißer wirklich beschneiden.
+
+    Es rechnete mit den Schwellen des ERSTEN, unbereinigten Durchlaufs. Ein Ausreißer bläht
+    die Streuung aber selbst auf und landet damit innerhalb seiner eigenen Schwelle.
+    Nachgerechnet an 9× 0.06 + 1× 1.00: mean=0.154, std=0.282 → hi=0.859, also praktisch
+    kein Beschnitt; Ergebnis 0.140 statt 0.060 (133 % zu hell). Am echten Stack blieben
+    16.7 % eines kosmischen Treffers stehen — fast so viel wie beim simplen Mittelwert
+    (19.6 %), obwohl winsor ein Rejection-Verfahren ist."""
+
+    def _stapel(self, n=10, stoer_index=5, h=120, w=160):
+        """n Subs, in einem davon 40 kosmische Treffer. Gibt (pfade, trefferliste, tempdir)."""
+        rng = np.random.default_rng(31)
+        d = tempfile.mkdtemp(prefix="fp_winsor_")
+        sx = rng.integers(15, w - 15, 30); sy = rng.integers(15, h - 15, 30)
+        mag = rng.uniform(0.3, 0.9, 30)
+        pfade, treffer = [], []
+        for i in range(n):
+            f = np.full((h, w), 0.06, np.float32)
+            for x, y, m in zip(sx, sy, mag):
+                cv2.circle(f, (int(x), int(y)), 2, float(m), -1)
+            f = cv2.GaussianBlur(f, (0, 0), 1.1) + rng.normal(0, 0.008, (h, w)).astype(np.float32)
+            if i == stoer_index:
+                for _ in range(40):
+                    px, py = int(rng.integers(5, w - 5)), int(rng.integers(5, h - 5))
+                    cv2.circle(f, (px, py), 1, 1.0, -1)
+                    treffer.append((px, py))
+            bgr = np.clip(np.dstack([f, f, f]), 0, 1)
+            p = os.path.join(d, "s_%02d.tif" % i)
+            cv2.imencode(".tif", (bgr * 65535).astype(np.uint16))[1].tofile(p)
+            pfade.append(p)
+        return pfade, treffer, d
+
+    def _rest(self, pfade, treffer, method):
+        """Restamplitude der Treffer im Stack, in % der Bildspanne. DIREKT an den
+        Trefferpositionen — ein Helligkeitsfilter wuerde genau sie ausschliessen."""
+        out = astro.stack(pfade, method=method, kappa=2.5, log=lambda *a: None)
+        out = np.asarray(out[0] if isinstance(out, tuple) else out, np.float32)
+        g = out[..., 1] if out.ndim == 3 else out
+        werte = []
+        for px, py in treffer:
+            kern = float(g[py, px])
+            ring = float(np.median(g[max(0, py - 4):py + 5, max(0, px - 4):px + 5]))
+            werte.append(kern - ring)
+        spanne = float(np.percentile(g, 99.9) - np.percentile(g, 1))
+        return float(np.median(werte)) / max(spanne, 1e-9) * 100
+
+    def test_a7_winsor_entfernt_ausreisser(self):
+        pfade, treffer, d = self._stapel()
+        try:
+            rest = self._rest(pfade, treffer, "winsor")
+            self.assertLess(rest, 3.0,
+                            f"winsor laesst {rest:.1f} % des Ausreissers stehen — "
+                            "rechnet es wieder mit unbereinigten Schwellen?")
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+    def test_a7_winsor_so_gut_wie_sigma(self):
+        """Beide sind Rejection-Verfahren und muessen in derselben Groessenordnung landen."""
+        pfade, treffer, d = self._stapel()
+        try:
+            w = self._rest(pfade, treffer, "winsor")
+            sg = self._rest(pfade, treffer, "sigma")
+            self.assertLess(abs(w), abs(sg) + 3.0, f"winsor {w:.2f} % vs sigma {sg:.2f} %")
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+    def test_a7_average_und_max_behalten_ihr_verhalten(self):
+        """Gegenprobe: die Aenderung darf NUR winsor betreffen. `average` mittelt den Treffer
+        auf ~1/n herunter, `max` behaelt ihn per Definition — beides ist kein Fehler."""
+        pfade, treffer, d = self._stapel()
+        try:
+            self.assertGreater(self._rest(pfade, treffer, "average"), 5.0,
+                               "average darf nicht heimlich zum Rejection-Verfahren werden")
+            self.assertGreater(self._rest(pfade, treffer, "max"), 50.0,
+                               "max muss den hellsten Wert behalten")
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
 
 
 if __name__ == "__main__":

@@ -819,9 +819,17 @@ def stack(paths, method="sigma", kappa=2.5, normalize=True, local_norm=False,
     std = np.sqrt(np.maximum(s2 / n - mean * mean, 0))
     lo = mean - kappa * std; hi = mean + kappa * std
 
-    if method == "sigma":
+    if method in ("sigma", "winsor"):
         # A4 — iteratives Sigma: Schwellen 1–2× aus den GECLIPPTEN Werten nachschätzen, damit die
         # Ausreißer die Schwelle nicht selbst verzerren. extra_iters = sigma_iters−1 Nachpässe.
+        #
+        # winsor war hier NICHT dabei und rechnete mit den Schwellen des ersten, unbereinigten
+        # Durchlaufs — und der Ausreißer blaeht die Streuung selbst auf, sodass er innerhalb
+        # seiner eigenen Schwelle landet. Nachgerechnet an 9x 0.06 + 1x 1.00 (kosmischer
+        # Treffer): mean=0.154, std=0.282, hi=0.859 -> kaum beschnitten, Ergebnis 0.140 statt
+        # 0.060, also 133 % zu hell. Am echten Stack blieben 16.7 % des Treffers stehen —
+        # fast so viel wie beim simplen Mittelwert (19.6 %), obwohl winsor ein Rejection-
+        # Verfahren sein soll. Mit der Nachschaetzung: 43x genauer bei einem Ausreisser.
         for _ in range(max(0, int(sigma_iters) - 1)):
             s = np.zeros(shape, np.float32); s2 = np.zeros(shape, np.float32)
             cnt = np.zeros(shape, np.float32)
