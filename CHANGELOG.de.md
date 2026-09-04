@@ -7,6 +7,28 @@ Alle nennenswerten Änderungen an ForgePix. Format orientiert an
 [SemVer](https://semver.org/lang/de/).
 
 ## [Unreleased]
+### Qualitäts-Pass — an synthetischer Wahrheit gemessen, nicht geschätzt
+- **Die Stack-Note bewertete lückenhafte Fokusserien BESSER als lückenlose.** Gemessen an
+  einer Fokusreihe aus einem bekannten scharfen Original: 9 Aufnahmen ohne Lücken bekamen
+  85/100 bei 144 % der Originalschärfe, 3 Aufnahmen mit Lücken 92/100 bei nur 45 %. Ursache:
+  der Lückenabzug war pauschal −8, während Ghosting −15 kostete — dabei ist die Fokuslücke
+  der einzige dieser Mängel, den man nachträglich nicht beheben kann. Jetzt proportional zur
+  fehlenden Abdeckung (`focus_analysis.focus_gap_penalty`), und der Text sagt, was zu tun ist.
+  Nach dem Fix: 85 gegen 67 — Reihenfolge korrekt.
+- **Die Ghosting-Heuristik behauptete Bewegung, wo keine war.** Gemessen überlappen die
+  Wertebereiche: eine völlig statische Fokusreihe erreicht je nach Unschärfegrad 0,00–0,81 %
+  Geisterfläche, eine Serie mit echter Bewegung 0,56–2,67 %. Eine Flächenschwelle kann das
+  grundsätzlich nicht trennen (ein Versuch mit höherer Schwelle machte den Detektor für
+  kleine Geister blind und wurde verworfen). Die Empfindlichkeit bleibt daher unverändert,
+  aber der Befund benennt jetzt eine Möglichkeit statt einer Diagnose und verweist auf die
+  Geister-Karte; der Abzug sinkt von 15 auf 8. Die Messwerte stehen als Kommentar im Code.
+- **`winsor` beschnitt Ausreißer praktisch nicht.** Es rechnete mit den Schwellen des ersten,
+  unbereinigten Durchlaufs — ein Ausreißer bläht die Streuung aber selbst auf und landet
+  innerhalb seiner eigenen Schwelle. Nachgerechnet an 9× 0,06 + 1× 1,00: hi=0,859, Ergebnis
+  133 % zu hell. Am Stack blieben 16,7 % eines kosmischen Treffers stehen — fast so viel wie
+  beim simplen Mittelwert (19,6 %). `winsor` nutzt jetzt dieselbe iterative Schwellen-
+  Nachschätzung wie `sigma`: 0,46 % Rest (Faktor 36).
+
 ### Windows-Portierungs-Pass — ForgePix war auf Windows praktisch unbenutzbar
 ForgePix wurde auf einem Mac gebaut (Pfade und Konsole sind dort UTF-8). Unter Windows gilt
 die Locale-Codepage (deutsch: cp1252). Jeder Befund unten wurde reproduziert, behoben und

@@ -7,6 +7,27 @@ All notable changes to ForgePix. Format based on
 [SemVer](https://semver.org/).
 
 ## [Unreleased]
+### Quality pass — measured against synthetic ground truth, not estimated
+- **The stack score rated gapped focus series BETTER than complete ones.** Measured on a
+  focus series built from a known sharp original: 9 gap-free frames scored 85/100 at 144 % of
+  the original sharpness, 3 gapped frames scored 92/100 at only 45 %. Cause: the gap penalty
+  was a flat −8 while ghosting cost −15 — yet a focus gap is the only one of those defects
+  that cannot be fixed afterwards. Now proportional to the missing coverage
+  (`focus_analysis.focus_gap_penalty`), and the text says what to do about it.
+  After the fix: 85 vs 67 — correct ordering.
+- **The ghosting heuristic asserted motion where there was none.** The measured ranges
+  overlap: a completely static focus series reaches 0.00–0.81 % ghost area depending on the
+  degree of defocus, a series with real motion 0.56–2.67 %. An area threshold cannot separate
+  those (an attempt with a higher threshold blinded the detector for small ghosts and was
+  discarded). Sensitivity is therefore unchanged, but the finding now states a possibility
+  rather than a diagnosis and points at the ghost map; the penalty drops from 15 to 8. The
+  measurements are recorded as a comment in the code.
+- **`winsor` barely clipped outliers at all.** It used the thresholds from the first,
+  uncleaned pass — but an outlier inflates the spread itself and thus ends up inside its own
+  threshold. Worked through for 9× 0.06 + 1× 1.00: hi=0.859, result 133 % too bright. On a
+  real stack 16.7 % of a cosmic hit survived — nearly as much as a plain mean (19.6 %).
+  `winsor` now uses the same iterative threshold refinement as `sigma`: 0.46 % left (36×).
+
 ### Windows portability pass — ForgePix was practically unusable on Windows
 ForgePix was built on a Mac, where paths and the console are UTF-8. On Windows the locale
 code page applies (cp1252 on German systems). Every finding below was reproduced, fixed and
