@@ -143,6 +143,8 @@ def cosmetic_correct(f, strength=3.0):
 
 
 
+
+
 def _rolling_median(werte, fenster):
     """Gleitender Median über ein 1D-Profil (Randbereiche gespiegelt).
 
@@ -977,40 +979,66 @@ def background_extract(f, strength=0.12, method="rbf", grid=12, log=log_print):
     if method == "rbf":
         try:
             from scipy.interpolate import RBFInterpolator
-            g = _gray(f)
-            H, W = g.shape[:2]
-            ys = np.linspace(H * 0.06, H * 0.94, grid)
-            xs = np.linspace(W * 0.06, W * 0.94, grid)
-            pts, vals = [], []
-            bh, bw = int(H / grid / 2), int(W / grid / 2)
-            for y in ys:
-                for x in xs:
-                    yi, xi = int(y), int(x)
-                    tile = g[max(0, yi - bh):yi + bh, max(0, xi - bw):xi + bw]
-                    if tile.size:
-                        pts.append((x, y)); vals.append(float(np.percentile(tile, 25)))
-            pts = np.array(pts, np.float32); vals = np.array(vals, np.float32)
-            # Stützpunkte gegen einen GLATTEN 2D-Quadrat-Trend verwerfen (nicht global): so bleiben
-            # großflächige Gradienten/Ecken-Glow (Lichtverschmutzung) im Modell und werden mit
-            # abgezogen — nur lokal ÜBER dem Trend liegende Punkte (= Nebel/Struktur) fliegen raus.
-            px, py = pts[:, 0] / W, pts[:, 1] / H
-            design = np.stack([np.ones_like(px), px, py, px * px, px * py, py * py], 1)
-            keep = np.ones(len(vals), bool)
-            for _ in range(3):
-                if keep.sum() < 6:
-                    break
-                coef, *_ = np.linalg.lstsq(design[keep], vals[keep], rcond=None)
-                resid = vals - design @ coef
-                rmad = float(np.median(np.abs(resid - np.median(resid)))) * 1.4826 + 1e-6
-                keep = resid <= 2.5 * rmad                  # nur Punkte ÜBER dem Trend (Nebel) verwerfen
-            if keep.sum() >= max(8, grid):
-                rbf = RBFInterpolator(pts[keep], vals[keep], kernel="thin_plate_spline", smoothing=1.0)
+
+            def _sky_flaeche(g, H, W):
+                """Glatte Sky-Fläche für EINEN Kanal (oder None, wenn zu wenige Stützpunkte)."""
+                ys = np.linspace(H * 0.06, H * 0.94, grid)
+                xs = np.linspace(W * 0.06, W * 0.94, grid)
+                pts, vals = [], []
+                bh, bw = int(H / grid / 2), int(W / grid / 2)
+                for y in ys:
+                    for x in xs:
+                        yi, xi = int(y), int(x)
+                        tile = g[max(0, yi - bh):yi + bh, max(0, xi - bw):xi + bw]
+                        if tile.size:
+                            pts.append((x, y)); vals.append(float(np.percentile(tile, 25)))
+                pts = np.array(pts, np.float32); vals = np.array(vals, np.float32)
+                # Stützpunkte gegen einen GLATTEN 2D-Quadrat-Trend verwerfen (nicht global): so
+                # bleiben großflächige Gradienten/Ecken-Glow (Lichtverschmutzung, Amp-Glow) im
+                # Modell und werden mit abgezogen — nur lokal ÜBER dem Trend liegende Punkte
+                # (= Nebel/Struktur) fliegen raus.
+                px, py = pts[:, 0] / W, pts[:, 1] / H
+                design = np.stack([np.ones_like(px), px, py, px * px, px * py, py * py], 1)
+                keep = np.ones(len(vals), bool)
+                for _ in range(3):
+                    if keep.sum() < 6:
+                        break
+                    coef, *_ = np.linalg.lstsq(design[keep], vals[keep], rcond=None)
+                    resid = vals - design @ coef
+                    rmad = float(np.median(np.abs(resid - np.median(resid)))) * 1.4826 + 1e-6
+                    keep = resid <= 2.5 * rmad          # nur Punkte ÜBER dem Trend (Nebel) raus
+                if keep.sum() < max(8, grid):
+                    return None, 0
+                rbf = RBFInterpolator(pts[keep], vals[keep], kernel="thin_plate_spline",
+                                      smoothing=1.0)
                 gy, gx = np.mgrid[0:H, 0:W]
-                surf = rbf(np.stack([gx.ravel(), gy.ravel()], 1)).reshape(H, W).astype(np.float32)
-                surf = surf[..., None] if f.ndim == 3 else surf
-                out = f - surf + float(np.median(surf))
-                log(f"    Hintergrund (RBF/DBE-Stil): {int(keep.sum())} Sky-Stützpunkte, Nebel geschützt")
-                return np.clip(out, 0, 1)
+                return rbf(np.stack([gx.ravel(), gy.ravel()], 1)).reshape(H, W).astype(np.float32), int(keep.sum())
+
+            H, W = f.shape[:2]
+            if f.ndim == 3:
+                # PRO KANAL modellieren. Vorher wurde EINE Graustufen-Fläche geschätzt und von
+                # allen drei Kanälen gleich abgezogen — das kann einen FARBIGEN Hintergrund
+                # grundsätzlich nicht entfernen. Genau der Normalfall: Lichtverschmutzung ist
+                # rot/orange, Amp-Glow der ASI294MC Pro (IMX294) ist blau. Gemessen blieb an
+                # einem blauen Ecken-Glow im Blaukanal +0.0913 stehen, während Rot mit -0.0541
+                # ÜBERkorrigiert wurde — also ein neuer Farbstich statt eines sauberen Bildes.
+                out = f.astype(np.float32).copy()
+                n_pts = 0
+                for c in range(f.shape[2]):
+                    surf, n = _sky_flaeche(f[..., c].astype(np.float32), H, W)
+                    if surf is None:
+                        continue
+                    n_pts = max(n_pts, n)
+                    out[..., c] = out[..., c] - surf + float(np.median(surf))
+                if n_pts:
+                    log(f"    Hintergrund (RBF/DBE-Stil, je Kanal): {n_pts} Sky-Stützpunkte, "
+                        f"Nebel geschützt")
+                    return np.clip(out, 0, 1)
+            else:
+                surf, n = _sky_flaeche(f.astype(np.float32), H, W)
+                if surf is not None:
+                    log(f"    Hintergrund (RBF/DBE-Stil): {n} Sky-Stützpunkte, Nebel geschützt")
+                    return np.clip(f - surf + float(np.median(surf)), 0, 1)
         except Exception as e:
             log(f"    Hintergrund: RBF nicht verfügbar ({e}) → Tiefpass")
     u16 = (np.clip(f, 0, 1) * 65535).astype(np.uint16)

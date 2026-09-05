@@ -428,5 +428,62 @@ class TestBanding(unittest.TestCase):
         self.assertLess(staerke(ohne), staerke(mit) / 3.0)
 
 
+class TestFarbigerHintergrund(unittest.TestCase):
+    """A10 — die Hintergrund-Entfernung muss FARBIGE Verläufe kanalweise modellieren.
+
+    Vorher wurde EINE Graustufen-Fläche geschätzt und von allen drei Kanälen gleich abgezogen.
+    Ein farbiger Hintergrund ist damit grundsätzlich nicht zu entfernen — und das ist der
+    Normalfall: Lichtverschmutzung ist rot/orange, das Amp-Glow der ZWO ASI294MC Pro (IMX294)
+    ist blau. Gemessen an einem blauen Ecken-Glow blieb im Blaukanal +0.0913 stehen, während
+    Rot mit −0.0541 ÜBERkorrigiert wurde: statt eines sauberen Bildes ein neuer Farbstich."""
+
+    def _szene(self, h=200, w=280):
+        rng = np.random.default_rng(17)
+        yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
+        # Amp-Glow-artig: weicher Anstieg zur oberen rechten Ecke, BLAU am stärksten
+        d = np.sqrt(((xx - w) / w * 1.5) ** 2 + (yy / h * 1.5) ** 2)
+        gf = np.clip(0.35 * np.exp(-d * 1.6), 0, None).astype(np.float32)
+        glow = np.dstack([gf * 1.0, gf * 0.45, gf * 0.30])       # BGR
+        sky = np.full((h, w), 0.05, np.float32)
+        for _ in range(60):
+            cv2.circle(sky, (int(rng.integers(10, w - 10)), int(rng.integers(10, h - 10))),
+                       2, float(rng.uniform(0.3, 0.9)), -1)
+        sky = cv2.GaussianBlur(sky, (0, 0), 1.1)
+        return np.dstack([sky, sky, sky]), np.clip(np.dstack([sky, sky, sky]) + glow, 0, 1)
+
+    def _glow(self, img, c, h=200, w=280):
+        """Pegelunterschied Glow-Ecke minus Gegenecke in Kanal c."""
+        ecke = img[0:50, w - 60:w, c]
+        gegen = img[h - 50:h, 0:60, c]
+        return float(np.median(ecke) - np.median(gegen))
+
+    def test_a10_farbiges_glow_wird_in_allen_kanaelen_entfernt(self):
+        wahr, mit = self._szene()
+        ohne = astro.background_extract(mit, log=lambda *a: None)
+        for c, name in ((0, "Blau"), (1, "Gruen"), (2, "Rot")):
+            vor, nach = self._glow(mit, c), self._glow(ohne, c)
+            with self.subTest(kanal=name):
+                self.assertLess(abs(nach), abs(vor) * 0.25,
+                                f"{name}: {vor:+.4f} -> {nach:+.4f} (zu wenig entfernt)")
+
+    def test_a10_kein_neuer_farbstich(self):
+        """Der eigentliche Fehler des Graustufen-Modells: es UEBERkorrigiert die schwachen
+        Kanäle. Nach der Korrektur duerfen die Rest-Pegel nicht ins Negative kippen."""
+        wahr, mit = self._szene()
+        ohne = astro.background_extract(mit, log=lambda *a: None)
+        reste = [self._glow(ohne, c) for c in range(3)]
+        spanne = max(reste) - min(reste)
+        self.assertLess(spanne, 0.03,
+                        f"Kanaele driften auseinander (Rest-Glow B/G/R = {reste}) — Farbstich")
+
+    def test_a10_graustufenbild_funktioniert_weiter(self):
+        """Der 2D-Pfad darf durch die Kanaltrennung nicht verloren gehen."""
+        wahr, mit = self._szene()
+        grau = mit[..., 1]
+        out = astro.background_extract(grau, log=lambda *a: None)
+        self.assertEqual(out.shape, grau.shape)
+        self.assertLess(abs(self._glow(out[..., None], 0)), abs(self._glow(grau[..., None], 0)) * 0.35)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
