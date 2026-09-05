@@ -1217,6 +1217,10 @@ def main():
     ap.add_argument("--astro-align", choices=["shift", "rotate"], default="shift",
                     help="Astro-Ausrichtung: shift=Translation (Nachführung), "
                          "rotate=Translation+Feldrotation (Alt-Az-Montierung)")
+    ap.add_argument("--astro-color-stretch", type=float, default=0.0, metavar="SAETTIGUNG",
+                    help="Farberhaltend strecken (0=aus, 1.8 empfohlen): nur die Helligkeit laeuft "
+                         "durch die Kurve, die Kanalverhaeltnisse bleiben. Gegen das Ausgewaschene "
+                         "einer kanalweisen Streckung, bei der der staerkste Kanal durchschlaegt")
     ap.add_argument("--astro-starless-stretch", type=float, default=None, metavar="STERNSTAERKE",
                     help="Sterne vor dem Strecken entfernen, den Nebel strecken und die Sterne "
                          "dosiert zurueckholen (0=sternenlos, 0.8 empfohlen, 1=voll). Sonst "
@@ -1915,7 +1919,7 @@ def _astro_write(result, work_dir, paths, args, astro):
             base_view = _broadband(result)
         _sm = getattr(args, "astro_stretch_mode", "asinh")
 
-        def _strecken(x):
+        def _kurve(x):
             if _sm == "mtf":
                 return astro.mtf_stretch(x, saturation=sat)
             if _sm == "ghs":
@@ -1923,6 +1927,19 @@ def _astro_write(result, work_dir, paths, args, astro):
                                          b=getattr(args, "astro_ghs_b", -0.5),
                                          SP=getattr(args, "astro_ghs_sp", 0.18), saturation=sat)
             return astro.autostretch(x, strength=strength, saturation=sat, protect_core=protect)
+
+        # Farberhaltend strecken: nur die Helligkeit durch die Kurve, Kanalverhaeltnisse bleiben.
+        # Eine kanalweise Streckung entsaettigt massiv — der staerkste Kanal laeuft gegen Weiss,
+        # die schwaecheren werden relativ staerker angehoben, alles konvergiert zu Grau. An echten
+        # Dual-Band-Daten (NGC7380) gemessen: Saettigung 0.257 -> 0.075, und der Saettigungsregler
+        # der Streckung (bis 2.0) holte nur 0.108 zurueck. Ein Ha-Objekt wirkt dann "nur rot".
+        # Farberhaltend: Saettigung 0.510, Cyan-Anteil 39 % -> 55 %, Nebelhelligkeit gleich.
+        _cs = getattr(args, "astro_color_stretch", 0.0) or 0.0
+        if _cs > 0:
+            def _strecken(x):
+                return astro.stretch_preserve_color(x, _kurve, saettigung=float(_cs))
+        else:
+            _strecken = _kurve
 
         # Starless-Streckung: Sterne raus -> Nebel strecken -> Sterne dosiert zurueck.
         # Der Weisspunkt einer Streckung wird sonst IMMER von einem Stern bestimmt, nicht vom

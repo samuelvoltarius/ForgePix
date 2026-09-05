@@ -1073,7 +1073,38 @@ def reduce_stars(f, strength=0.5, size=5, protect_nebula=True):
     return np.clip(a * (1 - w) + erodiert * w, 0, 1)
 
 
-def stretch_starless(bgr, stretch_fn, star_strength=0.8, sensitivity=5.0, log=log_print):
+
+def stretch_preserve_color(bgr, stretch_fn, saettigung=1.0):
+    """Farberhaltend strecken: nur die HELLIGKEIT durch die Kurve, die Kanalverhaeltnisse bleiben.
+
+    Warum das noetig ist (an echten Dual-Band-Daten gemessen, NGC7380): eine kanalweise
+    Streckung entsaettigt massiv. Der staerkste Kanal (bei Ha-Nebeln Rot) laeuft gegen Weiss,
+    waehrend die schwaecheren relativ staerker angehoben werden — alle Kanaele konvergieren.
+    Gemessen fiel die Saettigung dabei von 0.257 auf 0.075, und selbst der Saettigungsregler
+    der Streckung (bis 2.0) holte nur 0.108 zurueck. Das Bild wirkt ausgewaschen und der
+    dominante Kanal schlaegt durch — bei einem Ha-Objekt also "alles rot".
+
+    Hier wird stattdessen L = max(Kanaele) gestreckt und jeder Kanal mit demselben Faktor
+    L'/L skaliert. Farbton und Saettigung bleiben damit exakt erhalten; nur die Helligkeit
+    aendert sich. `saettigung` > 1 verstaerkt die Farbe zusaetzlich um die Luminanz herum.
+    """
+    a = np.asarray(bgr, np.float32)
+    if a.ndim != 3 or a.shape[2] != 3:
+        return stretch_fn(a)
+    # Helligkeitsmass: Mischung aus Rec.709-Luma und Maximum. Reines max() laesst den
+    # staerksten Kanal die Streckung allein bestimmen und treibt viele Pixel ins Clipping
+    # (gemessen 17-38 % ueber 0.8); reine Luma unterbelichtet stark gefaerbte Bereiche.
+    L = 0.5 * _gray(a) + 0.5 * a.max(axis=2)
+    Ls = stretch_fn(np.dstack([L, L, L]))
+    Ls = Ls.mean(axis=2) if Ls.ndim == 3 else Ls
+    faktor = Ls / np.maximum(L, 1e-6)
+    out = np.clip(a * faktor[..., None], 0, 1)
+    if saettigung and saettigung != 1.0:
+        lum = _gray(out)[..., None]
+        out = np.clip(lum + (out - lum) * float(saettigung), 0, 1)
+    return out
+
+def stretch_starless(bgr, stretch_fn, star_strength=0.35, sensitivity=5.0, log=log_print):
     """Sterne raus -> Nebel strecken -> Sterne wieder rein. Der Profi-Weg.
 
     Das Problem, das dieser Weg loest (an echten Dual-Band-Daten gemessen, NGC7380/ASI294MC Pro):
@@ -1087,7 +1118,8 @@ def stretch_starless(bgr, stretch_fn, star_strength=0.8, sensitivity=5.0, log=lo
     Bereich. Die Sterne kommen danach separat (und dosierbar) wieder dazu.
 
     stretch_fn: die Streckfunktion, z. B. `lambda x: astro.mtf_stretch(x)`.
-    star_strength: wie stark die Sterne zurueckkommen (0 = sternenlos, 1 = voll).
+    star_strength: MAXIMALE Sternhelligkeit im Ergebnis (0 = sternenlos, 0.35 = dezent,
+                   1 = Sterne duerfen bis Weiss gehen). Linear skaliert, nicht gestreckt.
     Faellt sauber auf die normale Streckung zurueck, wenn keine Sterne gefunden werden.
     """
     if bgr is None:
@@ -1102,12 +1134,17 @@ def stretch_starless(bgr, stretch_fn, star_strength=0.8, sensitivity=5.0, log=lo
     if star_strength <= 0:
         log("    Starless-Streckung: Nebel gestreckt, Sterne weggelassen")
         return np.clip(nebel, 0, 1)
-    # Sterne eigenstaendig strecken (sonst verschwinden die schwachen ganz) und per
-    # Screen-Verknuepfung zurueck: hell + hell laeuft nicht ueber, Nebel bleibt erhalten.
-    sterne_g = stretch_fn(sterne) * float(np.clip(star_strength, 0.0, 1.0))
+    # Sterne LINEAR skaliert zurueck — NICHT mit derselben Kurve strecken.
+    # Erster Versuch war genau das, und es hob die Wirkung komplett auf: die Streckkurve ist
+    # dafuer gebaut, Schwaches hochzuziehen, und blaest damit jeden Stern wieder auf. Gemessen
+    # an echten Daten blieben so 5.0 % der Pixel ueber 0.8 — praktisch so viel wie ganz ohne
+    # Starless (5.2 %). Linear zurueckgeholt sind es 0.86 %, bei gleicher Nebelhelligkeit.
+    # star_strength ist damit die maximale Sternhelligkeit im Ergebnis (0.35 = dezent).
+    bezug = max(float(np.percentile(sterne, 99.9)), 1e-9)
+    sterne_g = np.clip(sterne / bezug * float(np.clip(star_strength, 0.0, 1.0)), 0, 1)
     out = 1.0 - (1.0 - np.clip(nebel, 0, 1)) * (1.0 - np.clip(sterne_g, 0, 1))
-    log(f"    Starless-Streckung: Nebel bestimmt den Weisspunkt, Sterne zu "
-        f"{float(np.clip(star_strength,0,1))*100:.0f} % zurueck")
+    log(f"    Starless-Streckung: Nebel bestimmt den Weisspunkt, Sterne linear bis "
+        f"{float(np.clip(star_strength,0,1)):.2f} zurueck")
     return np.clip(out, 0, 1)
 
 def _bg_anwenden(bild, flaeche, korrektur="sub"):
