@@ -556,5 +556,79 @@ class TestSternkerneEntsaettigen(unittest.TestCase):
         self.assertIs(astro.unclip_stars(grau, log=lambda *a: None), grau)
 
 
+class TestStrecken(unittest.TestCase):
+    """A12 — Starless-Streckung, Sternreduktion und Divisions-Korrektur.
+
+    Kern-Erkenntnis aus echten Dual-Band-Daten (NGC7380, ASI294MC Pro, 13x120 s): der Weisspunkt
+    einer Streckung wird IMMER von einem Stern bestimmt, nie vom Nebel. Das Nebelsignal lag dort
+    nur 6 % ueber dem Himmel; nach Normierung auf das 99.9-%-Quantil (= ein Stern) blieb der Nebel
+    bei 3.5 % des Wertebereichs. Zu helle Sterne UND zu schwacher Nebel haben also DIESELBE
+    Ursache. Gemessen: direkt strecken -> Nebel 0.513 / 0.573 % ausgebrannt;
+    starless mit 80 % Sternen -> Nebel 0.628 / 0.041 % ausgebrannt."""
+
+    def _nebel_mit_sternen(self, h=220, w=300):
+        rng = np.random.default_rng(41)
+        yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
+        neb = 0.10 * np.exp(-(((xx - w / 2) / (w / 4)) ** 2 + ((yy - h / 2) / (h / 4)) ** 2))
+        f = np.full((h, w), 0.03, np.float32) + cv2.GaussianBlur(neb, (0, 0), 9)
+        for _ in range(40):                       # helle Sterne, die den Weisspunkt an sich reissen
+            st = np.zeros((h, w), np.float32)
+            cv2.circle(st, (int(rng.integers(12, w - 12)), int(rng.integers(12, h - 12))), 1, 1.0, -1)
+            f = f + cv2.GaussianBlur(st, (0, 0), 1.6) * float(rng.uniform(0.5, 1.0))
+        return np.clip(np.dstack([f, f, f]), 0, 1)
+
+    def test_a12_starless_hebt_nebel_und_senkt_ausgebrannte_sterne(self):
+        bild = self._nebel_mit_sternen()
+        strecken = lambda x: astro.mtf_stretch(x)
+        direkt = strecken(bild)
+        starless = astro.stretch_starless(bild, strecken, star_strength=0.8, log=lambda *a: None)
+        def nebel(v): return float(np.percentile(v.mean(axis=2), 85))
+        def brand(v): return float((v.max(axis=2) >= 0.99).mean())
+        self.assertGreater(nebel(starless), nebel(direkt) * 0.98, "Nebel darf nicht schwaecher werden")
+        self.assertLess(brand(starless), brand(direkt) + 1e-9, "ausgebrannte Pixel duerfen nicht zunehmen")
+
+    def test_a12_starless_ohne_sterne_faellt_zurueck(self):
+        """Findet das Star-Removal nichts, muss normal gestreckt werden — nicht scheitern."""
+        flach = np.full((80, 100, 3), 0.2, np.float32)
+        out = astro.stretch_starless(flach, lambda x: astro.mtf_stretch(x),
+                                     star_strength=0.8, log=lambda *a: None)
+        self.assertEqual(out.shape, flach.shape)
+        self.assertTrue(np.all(np.isfinite(out)))
+
+    def test_a12_sternreduktion_schrumpft_sterne_nicht_den_nebel(self):
+        bild = self._nebel_mit_sternen()
+        v = astro.mtf_stretch(bild)
+        red = astro.reduce_stars(v, strength=0.7)
+        # Sternspitzen ueber das 99.9-Perzentil messen — eine feste Schwelle wie 0.9 traf im
+        # synthetischen Bild GAR KEINE Pixel, der Test haette dann nichts geprueft.
+        spitze_vor = float(np.percentile(v.max(axis=2), 99.9))
+        spitze_nach = float(np.percentile(red.max(axis=2), 99.9))
+        self.assertGreater(spitze_vor, np.percentile(v.mean(axis=2), 60),
+                           "Vorbedingung: es muss ueberhaupt Sternspitzen geben")
+        self.assertLess(spitze_nach, spitze_vor, "Sternspitzen wurden nicht schwaecher")
+        neb_vor = float(np.percentile(v.mean(axis=2), 60))
+        neb_nach = float(np.percentile(red.mean(axis=2), 60))
+        self.assertGreater(neb_nach, neb_vor * 0.85, "Nebel zu stark mitgenommen")
+
+    def test_a12_sternreduktion_null_ist_identitaet(self):
+        bild = self._nebel_mit_sternen()
+        self.assertIs(astro.reduce_stars(bild, strength=0.0), bild)
+
+    def test_a12_divisions_korrektur(self):
+        """korrektur='div' teilt statt abzuziehen — richtig fuer multiplikative Vignettierung."""
+        h, w = 120, 160
+        yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
+        vign = 1.0 - 0.4 * (((xx - w / 2) / (w / 2)) ** 2 + ((yy - h / 2) / (h / 2)) ** 2)
+        flaeche = (0.2 * vign).astype(np.float32)
+        bild = flaeche.copy()
+        sub = astro._bg_anwenden(bild, flaeche, "sub")
+        div = astro._bg_anwenden(bild, flaeche, "div")
+        # nach 'div' muss das Bild FLACH sein (Faktor herausgerechnet)
+        self.assertLess(float(div.max() - div.min()), 0.02, "Division hat die Vignette nicht entfernt")
+        self.assertLess(float(sub.max() - sub.min()), 0.02, "Subtraktion hat sie nicht entfernt")
+        # Division darf den Pegel nicht auf Null ziehen
+        self.assertGreater(float(np.median(div)), 0.05)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

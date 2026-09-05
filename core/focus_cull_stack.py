@@ -1217,6 +1217,14 @@ def main():
     ap.add_argument("--astro-align", choices=["shift", "rotate"], default="shift",
                     help="Astro-Ausrichtung: shift=Translation (Nachführung), "
                          "rotate=Translation+Feldrotation (Alt-Az-Montierung)")
+    ap.add_argument("--astro-starless-stretch", type=float, default=None, metavar="STERNSTAERKE",
+                    help="Sterne vor dem Strecken entfernen, den Nebel strecken und die Sterne "
+                         "dosiert zurueckholen (0=sternenlos, 0.8 empfohlen, 1=voll). Sonst "
+                         "bestimmt immer ein STERN den Weisspunkt und der Nebel bleibt schwach")
+    ap.add_argument("--astro-star-reduce", type=float, default=0.0, metavar="STAERKE",
+                    help="Sterne verkleinern/abschwaechen (0=aus, 0.4-0.7 sinnvoll). Nach dem "
+                         "Strecken dominieren helle Sterne oft den Nebel; morphologische Erosion "
+                         "schrumpft Punktquellen, ausgedehnte Flaechen bleiben (wie StarShrink)")
     ap.add_argument("--astro-unclip-stars", action="store_true",
                     help="Ausgefressene Sternkerne entsaettigen: die Sternfarbe aus den intakten "
                          "Flanken zurueckholen, damit helle Sterne nicht als weisse Scheiben "
@@ -1906,19 +1914,48 @@ def _astro_write(result, work_dir, paths, args, astro):
         else:
             base_view = _broadband(result)
         _sm = getattr(args, "astro_stretch_mode", "asinh")
-        if _sm == "mtf":
-            view = astro.mtf_stretch(base_view, saturation=sat)
-        elif _sm == "ghs":
-            view = astro.ghs_stretch(base_view, D=getattr(args, "astro_ghs_d", 2.5),
-                                     b=getattr(args, "astro_ghs_b", -0.5),
-                                     SP=getattr(args, "astro_ghs_sp", 0.18), saturation=sat)
+
+        def _strecken(x):
+            if _sm == "mtf":
+                return astro.mtf_stretch(x, saturation=sat)
+            if _sm == "ghs":
+                return astro.ghs_stretch(x, D=getattr(args, "astro_ghs_d", 2.5),
+                                         b=getattr(args, "astro_ghs_b", -0.5),
+                                         SP=getattr(args, "astro_ghs_sp", 0.18), saturation=sat)
+            return astro.autostretch(x, strength=strength, saturation=sat, protect_core=protect)
+
+        # Starless-Streckung: Sterne raus -> Nebel strecken -> Sterne dosiert zurueck.
+        # Der Weisspunkt einer Streckung wird sonst IMMER von einem Stern bestimmt, nicht vom
+        # Nebel. Gemessen an echten Dual-Band-Daten (NGC7380, ASI294MC Pro, 13x120 s):
+        #   direkt strecken     : Nebel(85.Perzentil) 0.513   ausgebrannte Pixel 0.573 %
+        #   starless, Sterne 80%: Nebel               0.628   ausgebrannte Pixel 0.041 %
+        # Also gleichzeitig +22 % Nebel und 14x weniger ausgebrannte Sterne.
+        _ss = getattr(args, "astro_starless_stretch", None)
+        if _ss is not None:
+            view = astro.stretch_starless(base_view, _strecken, star_strength=float(_ss))
         else:
-            view = astro.autostretch(base_view, strength=strength, saturation=sat, protect_core=protect)
+            view = _strecken(base_view)
         if not dualband:
             # Farbkorrektur NACH dem Stretch wiederholen: der Stretch bläst jede winzige Rest-
             # Kanalabweichung im schwachen Signal auf (Blau-/Grünstich in Rauschen, grüne Sterne).
             # Erst hier ist der Stich sichtbar/messbar und sauber zu entfernen (SCNR + Neutralisierung).
             view = astro.neutralize_background(astro.remove_green_cast(view))
+        # Rest-Gradient NACH dem Strecken entfernen — fuer BEIDE Pfade.
+        # Gemessen an echten Dual-Band-Daten (NGC7380, ASI294MC Pro): der lineare Stack war
+        # vollkommen flach (0.0 % Spreizung), das fertige JPG hatte 35.6 %. Die Stretch-Kurve ist
+        # nahe Null fast senkrecht und blaest darum Reste auf, die vorher unmessbar klein waren.
+        # Ein zweiter Durchgang auf dem GESTRECKTEN Bild bringt es auf 3.6 %. Der Dual-Band-Pfad
+        # hatte bisher ueberhaupt keine Nachkorrektur (das `if not dualband` oben).
+        if getattr(args, "bg_extract", False):
+            try:
+                view = astro.background_extract(view, log=lambda *a: None)
+                print("  Rest-Gradient nach dem Strecken entfernt")
+            except Exception as e:
+                print(f"  (Nachkorrektur uebersprungen: {e})", file=sys.stderr)
+        _sr = float(getattr(args, "astro_star_reduce", 0.0) or 0.0)
+        if _sr > 0:
+            view = astro.reduce_stars(view, strength=_sr)
+            print(f"  Sterne reduziert (Staerke {_sr:.2f})")
     else:
         if dualband:
             view = _dualband_view(result, getattr(args, "palette", "hoo"), astro)

@@ -1038,7 +1038,102 @@ def bin_image(f, factor=2):
     return f.astype(np.float32)
 
 
-def background_extract(f, strength=0.12, method="rbf", grid=12, log=log_print):
+
+
+def reduce_stars(f, strength=0.5, size=5, protect_nebula=True):
+    """Sterne verkleinern/abschwaechen (Star Reduction, wie RC-Astro StarShrink) — klassisch.
+
+    Warum: nach dem Strecken dominieren helle Sterne das Bild und ueberdecken den Nebel. Die
+    ueblichen Werkzeuge dafuer sind KI-basiert; das Grundprinzip geht aber rein morphologisch.
+
+    Verfahren: eine Graustufen-EROSION verkleinert helle, kompakte Strukturen (Sterne), laesst
+    ausgedehnte Flaechen (Nebel) aber nahezu unberuehrt — genau der gewuenschte Unterschied.
+    Das Ergebnis wird anteilig (strength) mit dem Original gemischt, damit man die Staerke
+    dosieren kann. protect_nebula blendet die Wirkung dort aus, wo das Bild auch nach starker
+    Glaettung hell bleibt (= ausgedehnter Nebel), sodass wirklich nur Punktquellen schrumpfen.
+
+    strength 0..1 (0 = aus), size = Groesse des Strukturelements in Pixeln.
+    """
+    if f is None or strength <= 0:
+        return f
+    a = np.asarray(f, np.float32)
+    k = max(3, int(size) | 1)
+    se = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k, k))
+    erodiert = cv2.erode(a, se)
+    if protect_nebula:
+        lum = _gray(a)
+        # ausgedehnte Struktur = ueberlebt starke Glaettung; Punktquellen nicht
+        gross = cv2.GaussianBlur(lum, (0, 0), max(4.0, k * 1.5))
+        # dort wo das Bild deutlich HELLER ist als seine grossflaechige Version, sitzt ein Stern
+        stern = np.clip((lum - gross) / (np.percentile(lum, 99.5) - np.percentile(lum, 50) + 1e-6), 0, 1)
+        stern = cv2.GaussianBlur(stern, (0, 0), 1.5)[..., None] if a.ndim == 3 else             cv2.GaussianBlur(stern, (0, 0), 1.5)
+    else:
+        stern = 1.0
+    w = float(np.clip(strength, 0.0, 1.0)) * stern
+    return np.clip(a * (1 - w) + erodiert * w, 0, 1)
+
+
+def stretch_starless(bgr, stretch_fn, star_strength=0.8, sensitivity=5.0, log=log_print):
+    """Sterne raus -> Nebel strecken -> Sterne wieder rein. Der Profi-Weg.
+
+    Das Problem, das dieser Weg loest (an echten Dual-Band-Daten gemessen, NGC7380/ASI294MC Pro):
+    Der Weisspunkt einer Streckung wird von den hellsten Pixeln bestimmt — und das sind IMMER
+    Sterne, nicht der Nebel. Bei 13x120 s lag das Nebelsignal nur 6 % ueber dem Himmel; nach der
+    Normierung auf das 99.9-%-Quantil (= ein Stern) blieb der Nebel bei 3.5 % des Wertebereichs
+    liegen, waehrend die Sterne den ganzen Rest bekamen. Ergebnis: zu helle Sterne UND zu
+    schwacher Nebel — beides gleichzeitig, aus derselben Ursache.
+
+    Nimmt man die Sterne vorher heraus, bestimmt der NEBEL den Weisspunkt und bekommt den vollen
+    Bereich. Die Sterne kommen danach separat (und dosierbar) wieder dazu.
+
+    stretch_fn: die Streckfunktion, z. B. `lambda x: astro.mtf_stretch(x)`.
+    star_strength: wie stark die Sterne zurueckkommen (0 = sternenlos, 1 = voll).
+    Faellt sauber auf die normale Streckung zurueck, wenn keine Sterne gefunden werden.
+    """
+    if bgr is None:
+        return bgr
+    starless, maske = remove_stars(bgr, sensitivity=sensitivity, log=log)
+    if maske is None:
+        log("    Starless-Streckung: keine Sterne gefunden -> normale Streckung")
+        return stretch_fn(bgr)
+    # Sternebene = was das Star-Removal weggenommen hat (rein additiv, nichts erfunden)
+    sterne = np.clip(np.asarray(bgr, np.float32) - np.asarray(starless, np.float32), 0, None)
+    nebel = stretch_fn(starless)
+    if star_strength <= 0:
+        log("    Starless-Streckung: Nebel gestreckt, Sterne weggelassen")
+        return np.clip(nebel, 0, 1)
+    # Sterne eigenstaendig strecken (sonst verschwinden die schwachen ganz) und per
+    # Screen-Verknuepfung zurueck: hell + hell laeuft nicht ueber, Nebel bleibt erhalten.
+    sterne_g = stretch_fn(sterne) * float(np.clip(star_strength, 0.0, 1.0))
+    out = 1.0 - (1.0 - np.clip(nebel, 0, 1)) * (1.0 - np.clip(sterne_g, 0, 1))
+    log(f"    Starless-Streckung: Nebel bestimmt den Weisspunkt, Sterne zu "
+        f"{float(np.clip(star_strength,0,1))*100:.0f} % zurueck")
+    return np.clip(out, 0, 1)
+
+def _bg_anwenden(bild, flaeche, korrektur="sub"):
+    """Hintergrundfläche anwenden — subtraktiv oder dividierend.
+
+    'sub': Fläche abziehen, mittleren Pegel zurückgeben. Richtig für ADDITIVE Störungen
+           (Lichtverschmutzung, Amp-Glow).
+    'div': durch die auf ihren Median normierte Fläche teilen. Richtig für MULTIPLIKATIVE
+           Störungen, vor allem Vignettierung: die Bildecke bekommt weniger LICHT, der Abfall
+           ist also ein Faktor. Abziehen hebt dort nur den Pegel an, ohne das Signal selbst zu
+           korrigieren — dunkle Ecken bleiben dunkel, und das Rauschen wird mit angehoben.
+           Der Divisor wird nach unten begrenzt, damit ein sehr dunkler Rand nicht explodiert.
+    """
+    import numpy as _np
+    flaeche = _np.asarray(flaeche, _np.float32)
+    if str(korrektur).lower().startswith("div"):
+        m = float(_np.median(flaeche))
+        if abs(m) < 1e-6:
+            return bild
+        norm = _np.clip(flaeche / m, 0.25, 4.0)
+        return bild / norm
+    return bild - flaeche + float(_np.median(flaeche))
+
+
+def background_extract(f, strength=0.12, method="rbf", grid=12, korrektur="sub",
+                       log=log_print):
     """Hintergrund-/Gradienten-Entfernung (Lichtverschmutzung, Vignette).
 
     method='rbf' (Standard, DBE/GraXpert-Prinzip): das Bild kacheln, pro Kachel einen ROBUSTEN
@@ -1046,7 +1141,14 @@ def background_extract(f, strength=0.12, method="rbf", grid=12, log=log_print):
     Feld-Trend liegen (= echte Großstruktur/Nebel → NICHT mitmodellieren), dann eine glatte
     Thin-Plate-Spline-Fläche durch die verbliebenen Punkte legen und abziehen. Anders als ein
     Tiefpass-Blur folgt das NICHT dem ausgedehnten Nebel und frisst ihn daher nicht weg.
-    method='blur': der alte einfache Tiefpass (Fallback, wenn scipy fehlt)."""
+    method='blur': der alte einfache Tiefpass (Fallback, wenn scipy fehlt).
+
+    korrektur='sub' (Standard) zieht die Fläche AB — richtig für additive Störungen:
+    Lichtverschmutzung, Amp-Glow, Himmelshintergrund.
+    korrektur='div' TEILT durch die Fläche — richtig für MULTIPLIKATIVE Störungen, allen voran
+    Vignettierung. Ohne Flat ist das der einzige Weg, dunkle Ecken sauber wegzubekommen:
+    Subtrahieren verschiebt dort nur den Pegel, während der Abfall in Wahrheit ein Faktor ist
+    (die Ecke bekommt schlicht weniger Licht). GraXpert bietet dieselbe Wahl."""
     if method == "rbf":
         try:
             from scipy.interpolate import RBFInterpolator
@@ -1100,7 +1202,7 @@ def background_extract(f, strength=0.12, method="rbf", grid=12, log=log_print):
                     if surf is None:
                         continue
                     n_pts = max(n_pts, n)
-                    out[..., c] = out[..., c] - surf + float(np.median(surf))
+                    out[..., c] = _bg_anwenden(out[..., c], surf, korrektur)
                 if n_pts:
                     log(f"    Hintergrund (RBF/DBE-Stil, je Kanal): {n_pts} Sky-Stützpunkte, "
                         f"Nebel geschützt")
@@ -1109,15 +1211,14 @@ def background_extract(f, strength=0.12, method="rbf", grid=12, log=log_print):
                 surf, n = _sky_flaeche(f.astype(np.float32), H, W)
                 if surf is not None:
                     log(f"    Hintergrund (RBF/DBE-Stil): {n} Sky-Stützpunkte, Nebel geschützt")
-                    return np.clip(f - surf + float(np.median(surf)), 0, 1)
+                    return np.clip(_bg_anwenden(f, surf, korrektur), 0, 1)
         except Exception as e:
             log(f"    Hintergrund: RBF nicht verfügbar ({e}) → Tiefpass")
     u16 = (np.clip(f, 0, 1) * 65535).astype(np.uint16)
     star_suppressed = cv2.medianBlur(u16, 5).astype(np.float32) / 65535.0
     sigma = max(8.0, min(f.shape[0], f.shape[1]) * strength / 3.0)
     bg = cv2.GaussianBlur(star_suppressed, (0, 0), sigma)
-    out = f - bg + float(np.median(bg))
-    return np.clip(out, 0, 1)
+    return np.clip(_bg_anwenden(f, bg, korrektur), 0, 1)
 
 
 def estimate_psf(f, size=21, max_stars=80):
