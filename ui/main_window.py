@@ -397,9 +397,46 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         # (verschmierte/längliche Sterne); funktioniert auch bei reiner Nachführung. Sicherer Default.
         self.astro_cosmetic = QCheckBox(tr("Hot-/Cold-Pixel entfernen"))
         self.astro_cosmetic.setChecked(True)  # Standard an: entfernt farbige Hot-Pixel-Punkte
+        # Filterauswahl aus der Datenbank (core/filters.py) statt zweier fester Eintraege:
+        # der Filter bestimmt, WELCHE Emissionslinien ankommen, wie stark entmischt wird und
+        # ob eine Palette ueberhaupt eine physikalische Grundlage hat.
         self.astro_filter = QComboBox()
-        self.astro_filter.addItem(tr("Kein Filter / Breitband"), "broadband")
-        self.astro_filter.addItem(tr("Dual-Band Ha+OIII (z. B. SVBony SV220, L-eXtreme)"), "dual")
+        try:
+            import filters as _flt
+            for _f in _flt.FILTER:
+                self.astro_filter.addItem(_f.name, _f.schluessel)
+            self.astro_filter.setCurrentIndex(1)          # UV/IR-Sperrfilter als haeufigster Fall
+        except Exception:                                  # Notfall: altes Verhalten
+            self.astro_filter.addItem(tr("Kein Filter / Breitband"), "keiner")
+            self.astro_filter.addItem(tr("Dual-Band Ha+OIII"), "dual7")
+        self.astro_filter.currentIndexChanged.connect(lambda _i: self._filter_hinweis())
+        # Sensor- und Streckungs-Werkzeuge (bisher nur auf der Kommandozeile erreichbar)
+        self.astro_banding = QDoubleSpinBox(); self.astro_banding.setRange(0.0, 1.0)
+        self.astro_banding.setSingleStep(0.1); self.astro_banding.setValue(0.0)
+        self.astro_banding_vert = QCheckBox(tr("spaltenweise statt zeilenweise"))
+        self.astro_unclip = QCheckBox(tr("Ausgefressene Sternkerne einfärben"))
+        self.astro_star_reduce = QDoubleSpinBox(); self.astro_star_reduce.setRange(0.0, 1.0)
+        self.astro_star_reduce.setSingleStep(0.1); self.astro_star_reduce.setValue(0.0)
+        self.astro_starless_stretch = QDoubleSpinBox()
+        self.astro_starless_stretch.setRange(-1.0, 1.0); self.astro_starless_stretch.setSingleStep(0.05)
+        self.astro_starless_stretch.setValue(-1.0)          # -1 = aus
+        self.astro_color_stretch = QDoubleSpinBox(); self.astro_color_stretch.setRange(0.0, 3.0)
+        self.astro_color_stretch.setSingleStep(0.1); self.astro_color_stretch.setValue(0.0)
+        self.astro_unmix = QDoubleSpinBox(); self.astro_unmix.setRange(-1.0, 0.5)
+        self.astro_unmix.setSingleStep(0.02); self.astro_unmix.setValue(-1.0)   # -1 = vom Filter
+
+        # DAU-Weg: EINE Auswahl in Klartext setzt alle Regler darunter. Wer es genauer will,
+        # klappt „Erweitert" auf — dann stehen dieselben Werte einzeln zur Verfuegung.
+        # Die Zahlen stammen aus den Messungen an echten Dual-Band-Daten (siehe CHANGELOG).
+        self.astro_stil = QComboBox()
+        self.astro_stil.addItem(tr("Naturgetreu (Standard)"), "natur")
+        self.astro_stil.addItem(tr("Nebel betonen — mehr Farbe, dezentere Sterne"), "nebel")
+        self.astro_stil.addItem(tr("Sterne betonen"), "sterne")
+        self.astro_stil.addItem(tr("Sensorfehler stark bereinigen"), "sauber")
+        self.astro_stil.addItem(tr("Eigene Werte (Erweitert)"), "eigen")
+        self.astro_stil.currentIndexChanged.connect(lambda _i: self._stil_anwenden())
+        self.astro_erweitert = QCheckBox(tr("Erweitert: Einzelwerte anzeigen"))
+        self.astro_erweitert.toggled.connect(self._erweitert_umschalten)
         self.astro_palette = QComboBox()
         self.astro_palette.addItem(tr("HOO — naturgetreu (Dual-Band)"), "hoo")
         self.astro_palette.addItem(tr("Bicolor — warm/natürlich"), "bicolor")
@@ -516,6 +553,61 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
                               "Translation + Feldrotation = richtet auch gedrehte Felder aus "
                               "(Alt-Az-Montierung ohne Rotator, lange Sessions) — per Stern-Merkmalen."), 11, 3)
         ar.addWidget(QLabel(tr("Filter")), 17, 0); ar.addWidget(self.astro_filter, 17, 1, 1, 2)
+        ar.addWidget(help_btn("Der Aufnahmefilter bestimmt, welche Emissionslinien überhaupt "
+                              "ankommen. Danach richtet sich die Ha/OIII-Entmischung — und ob "
+                              "eine Palette echt ist: ein Dual-Band-Filter lässt kein SII durch, "
+                              "eine SHO-Darstellung daraus ist synthetisch."), 17, 3)
+        ar.addWidget(QLabel(tr("Bildstil")), 22, 0); ar.addWidget(self.astro_stil, 22, 1, 1, 2)
+        ar.addWidget(help_btn("Setzt alle Feinwerte darunter auf eine erprobte Kombination. "
+                              "„Nebel betonen“ holt Farbe und dezentere Sterne (die häufigste "
+                              "Beschwerde: Sterne zu hell, Nebel zu schwach — beides hat "
+                              "dieselbe Ursache). Wer eigene Werte will, klappt „Erweitert“ auf."),
+                     22, 3)
+        ar.addWidget(self.astro_erweitert, 22, 2)
+        _lbl_unmix = QLabel(tr("Entmischung Ha/OIII"))
+        _lbl_band = QLabel(tr("Zeilen-Banding entfernen"))
+        _lbl_red = QLabel(tr("Sterne verkleinern"))
+        _lbl_sl = QLabel(tr("Starless strecken (Sternstärke)"))
+        _lbl_col = QLabel(tr("Farberhaltend strecken"))
+        ar.addWidget(_lbl_unmix, 23, 0)
+        ar.addWidget(self.astro_unmix, 23, 1)
+        ar.addWidget(help_btn("Wie stark das Übersprechen zwischen den Kanälen herausgerechnet "
+                              "wird. −1 = Startwert des gewählten Filters (empfohlen). Höher "
+                              "trennt schärfer, kann aber echtes Signal wegrechnen."), 23, 3)
+        ar.addWidget(_lbl_band, 24, 0)
+        ar.addWidget(self.astro_banding, 24, 1); ar.addWidget(self.astro_banding_vert, 24, 2)
+        ar.addWidget(help_btn("Sensor-Ausleseversatz, den Dark/Flat/Bias NICHT beseitigen: er ist "
+                              "je Aufnahme anders und mittelt sich auch im Stack nicht weg. "
+                              "0 = aus, 1.0 = voll. Klassisch bei Canon-DSLRs."), 24, 3)
+        ar.addWidget(self.astro_unclip, 25, 0, 1, 3)
+        ar.addWidget(help_btn("Holt die Farbe ausgefressener Sternkerne aus den intakten Flanken "
+                              "zurück, damit helle Sterne nicht als weiße Scheiben dastehen. "
+                              "Die Helligkeit bleibt unverändert."), 25, 3)
+        ar.addWidget(_lbl_red, 26, 0)
+        ar.addWidget(self.astro_star_reduce, 26, 1)
+        ar.addWidget(help_btn("Schrumpft helle Punktquellen, ausgedehnte Nebel bleiben stehen "
+                              "(0 = aus, 0.4–0.7 sinnvoll). Nach dem Strecken dominieren Sterne "
+                              "sonst leicht den Nebel."), 26, 3)
+        ar.addWidget(_lbl_sl, 27, 0)
+        ar.addWidget(self.astro_starless_stretch, 27, 1)
+        ar.addWidget(help_btn("Sterne vor dem Strecken entfernen, den Nebel strecken und die "
+                              "Sterne dosiert zurückholen. −1 = aus, 0 = sternenlos, 0.35 = "
+                              "dezent. Sonst bestimmt immer ein STERN den Weißpunkt und der "
+                              "Nebel bleibt schwach — beides ist dieselbe Ursache."), 27, 3)
+        ar.addWidget(_lbl_col, 28, 0)
+        ar.addWidget(self.astro_color_stretch, 28, 1)
+        ar.addWidget(help_btn("Nur die Helligkeit läuft durch die Streckkurve, die "
+                              "Kanalverhältnisse bleiben (0 = aus, 1.8 empfohlen). Gegen das "
+                              "Ausgewaschene einer kanalweisen Streckung, bei der der stärkste "
+                              "Kanal durchschlägt und alles zu Grau konvergiert."), 28, 3)
+        # Alles Feine standardmaessig VERSTECKEN — sichtbar bleiben Filter und Bildstil.
+        self._astro_erweitert_widgets = [
+            _lbl_unmix, self.astro_unmix, _lbl_band, self.astro_banding, self.astro_banding_vert,
+            self.astro_unclip, _lbl_red, self.astro_star_reduce,
+            _lbl_sl, self.astro_starless_stretch, _lbl_col, self.astro_color_stretch,
+        ]
+        for _w in self._astro_erweitert_widgets:
+            _w.setVisible(False)
         ar.addWidget(help_btn("Aufnahme-Filter wählen (oder wird aus dem FITS-Header erkannt). "
                               "Dual-Band/Schmalband (Ha+OIII), z. B. SVBony SV220 oder L-eXtreme: Hα "
                               "(rot) und OIII (teal) werden GETRENNT und als HOO neu kombiniert (rote "
@@ -1479,6 +1571,69 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
             self.vlm_model.setText(model)
 
     # ---------- Lauf ----------
+    # Vorgaben je Bildstil. Werte aus den Messungen an echten Dual-Band-Daten:
+    # farberhaltend 1.8 -> Saettigung 0.075 auf 0.510; Starless 0.35 -> ausgebrannte Pixel
+    # 0.573 % auf 0.041 %; Sternverkleinerung 0.4 -> 0.528 % auf 0.260 %.
+    _ASTRO_STILE = {
+        "natur":  {"banding": 0.0, "unclip": False, "star_reduce": 0.0,
+                   "starless": -1.0, "color": 0.0},
+        "nebel":  {"banding": 0.0, "unclip": True, "star_reduce": 0.4,
+                   "starless": 0.35, "color": 1.8},
+        "sterne": {"banding": 0.0, "unclip": True, "star_reduce": 0.0,
+                   "starless": -1.0, "color": 1.3},
+        "sauber": {"banding": 1.0, "unclip": True, "star_reduce": 0.3,
+                   "starless": 0.35, "color": 1.5},
+    }
+
+    def _stil_anwenden(self):
+        """Bildstil -> alle Einzelregler setzen. „Eigen" laesst sie unangetastet."""
+        stil = self.astro_stil.currentData()
+        werte = self._ASTRO_STILE.get(stil)
+        if werte is None:                       # "eigen": nichts ueberschreiben
+            self.astro_erweitert.setChecked(True)
+            return
+        self.astro_banding.setValue(werte["banding"])
+        self.astro_unclip.setChecked(werte["unclip"])
+        self.astro_star_reduce.setValue(werte["star_reduce"])
+        self.astro_starless_stretch.setValue(werte["starless"])
+        self.astro_color_stretch.setValue(werte["color"])
+
+    def _erweitert_umschalten(self, an):
+        """Einzelregler ein-/ausblenden. Standardmaessig sind sie versteckt — wer sie nicht
+        braucht, soll sie nicht sehen."""
+        for w in getattr(self, "_astro_erweitert_widgets", []):
+            w.setVisible(bool(an))
+
+    def _gewaehlter_filter(self):
+        """Das Filter-Objekt zur Auswahl in der Oberflaeche (oder None)."""
+        try:
+            import filters as _flt
+            return _flt.hole(self.astro_filter.currentData())
+        except Exception:
+            return None
+
+    def _filter_ist_dualband(self):
+        """Traegt der gewaehlte Filter Ha UND OIII? Nur dann ist eine HOO-Trennung sinnvoll."""
+        f = self._gewaehlter_filter()
+        return bool(f and (f.ist_dualband or f.art == "multiband"))
+
+    def _filter_hinweis(self):
+        """Beschreibung des Filters ins Log — und die ehrliche Warnung, wenn die gewaehlte
+        Palette dazu gar keine physikalische Grundlage hat (SHO braucht SII)."""
+        try:
+            import filters as _flt
+            f = self._gewaehlter_filter()
+            if f is None:
+                return
+            self._append(chr(10) + _flt.beschreibung(f) + chr(10))
+            pal = self.astro_palette.currentData() if hasattr(self, "astro_palette") else None
+            if pal:
+                ok, hinweis = _flt.palette_ehrlich(f, pal)
+                if not ok:
+                    self._append("   " + hinweis + chr(10))
+        except Exception:
+            pass
+
     def _work_dir(self):
         w = self.work_edit.text().strip()
         if w:
@@ -1550,7 +1705,7 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
                     args += ["--astro-narrowband"]
                 if self.astrometry_key.text().strip():
                     args += ["--astrometry-key", self.astrometry_key.text().strip()]
-            if self.astro_filter.currentData() == "dual":
+            if self._filter_ist_dualband():
                 args += ["--dualband", "--palette", self.astro_palette.currentData()]
             if not self.astro_auto.isChecked():   # manuelle Aufbereitung statt Auto/KI
                 args += ["--astro-bright", str(self.astro_bright.value()),
@@ -1670,6 +1825,27 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
             args += ["--alt-merge"]
         if self.slabs.value() >= 2:
             args += ["--slabs", str(self.slabs.value())]
+        # Astro-Feinwerte (vom Bildstil gesetzt oder von Hand unter „Erweitert")
+        if getattr(self, "astro_filter", None) is not None:
+            _fk = self.astro_filter.currentData()
+            if _fk:
+                args += ["--filter", str(_fk)]
+        if getattr(self, "astro_unmix", None) is not None and self.astro_unmix.value() >= 0:
+            args += ["--unmix", str(self.astro_unmix.value())]
+        if getattr(self, "astro_banding", None) is not None and self.astro_banding.value() > 0:
+            args += ["--astro-banding", str(self.astro_banding.value())]
+            if self.astro_banding_vert.isChecked():
+                args += ["--astro-banding-vertical"]
+        if getattr(self, "astro_unclip", None) is not None and self.astro_unclip.isChecked():
+            args += ["--astro-unclip-stars"]
+        if getattr(self, "astro_star_reduce", None) is not None and self.astro_star_reduce.value() > 0:
+            args += ["--astro-star-reduce", str(self.astro_star_reduce.value())]
+        if (getattr(self, "astro_starless_stretch", None) is not None
+                and self.astro_starless_stretch.value() >= 0):
+            args += ["--astro-starless-stretch", str(self.astro_starless_stretch.value())]
+        if (getattr(self, "astro_color_stretch", None) is not None
+                and self.astro_color_stretch.value() > 0):
+            args += ["--astro-color-stretch", str(self.astro_color_stretch.value())]
         if self.dedup.isChecked():
             args += ["--dedup", "--dup-thresh", str(self.dupthresh.value())]
         if self.reject_blurry.isChecked():
@@ -2093,9 +2269,25 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
                "Externe Tools ein (oder ForgePix findet es danach selbst). Dein fertiges "
                "32-bit-Linearbild liegt schon bereit — du kannst es auch von Hand öffnen.")
             .format(tool=name, desc=desc, url=url or "—"))
+        # Ein Klick zur Download-Seite: den Link nur zu NENNEN heisst, dass ihn jemand
+        # abtippen muss. ForgePix liefert diese Werkzeuge bewusst nicht mit (GraXperts
+        # KI-Modelle stehen unter CC BY-NC-SA, StarNets Gewichte ebenso — ein MIT-Projekt
+        # darf sie weder buendeln noch einbinden), aber es kann den Weg dorthin abkuerzen.
+        laden = box.addButton(tr("🌐  Download-Seite öffnen"), QMessageBox.ActionRole) if url else None
         show = box.addButton(tr("📂  Bild im Dateimanager zeigen"), QMessageBox.AcceptRole)
         box.addButton(QMessageBox.Close)
         box.exec()
+        if laden is not None and box.clickedButton() is laden:
+            try:
+                import webbrowser
+                webbrowser.open(url)
+                self._append(chr(10) + f"🌐 Download-Seite für {name} geöffnet: {url}" + chr(10)
+                             + "   Nach der Installation findet ForgePix das Werkzeug meist "
+                               "selbst; sonst den Pfad unter Setup → Externe Tools eintragen."
+                             + chr(10))
+            except Exception:
+                pass
+            return
         if box.clickedButton() is show and linear_file and os.path.isfile(linear_file):
             reveal_in_files(linear_file)
             self._append(f"\n📤 {name} fehlt — Linearbild im Dateimanager: {os.path.basename(linear_file)}\n"
@@ -2105,7 +2297,7 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         """Dual-Band-Palette umschalten = das fertige 32-bit-Linearbild SOFORT neu einfärben
         (Millisekunden), statt den ganzen Stack neu zu rechnen. Greift nur, wenn schon ein
         Astro-Ergebnis existiert; sonst färbt der nächste normale Lauf."""
-        if getattr(self, "astro_filter", None) is None or self.astro_filter.currentData() != "dual":
+        if getattr(self, "astro_filter", None) is None or not self._filter_ist_dualband():
             return
         if not getattr(self, "result_path", None):
             return
@@ -2244,7 +2436,7 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         if not tools_engine.find_starnet(sn):
             self._tool_missing_hint("starnet", f)
             return
-        dual = self.astro_filter.currentData() == "dual"
+        dual = self._filter_ist_dualband()
         palette = self.astro_palette.currentData() if dual else None
         work = os.path.join(os.path.dirname(f), "starless")
         self._append(tr("\n⭐ Starless-Workflow startet … (StarNet rechnet ~½–1 min)\n"))
