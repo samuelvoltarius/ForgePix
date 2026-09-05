@@ -46,6 +46,12 @@ NAFNet architecture with retained upstream license; no downloaded weights.
 baseline-001: 500 steps, synthetic validation worse than input. Not approved.
 baseline-002: 10,000 steps, batch 4, 256-pixel patches; inspect report.json and
 metrics.jsonl before starting another run. Synthetic-only even if scores improve.
+Completed in 714 seconds: synthetic input MSE 3.7243e-5, output MSE 3.2908e-6.
+Follow-up queue `~/forgepix-training/runs/multi-task-001` runs background,
+isotropic deblur, starless and denoise sequentially, 10,000 steps each. Detached
+queue PID at launch: 722933. Inspect logs/process state before restarting anything.
+All task generators passed shape, finite-value and deterministic-seed checks on
+the Spark. Background additionally passed a two-step GPU training smoke test.
 No real-data training, ONNX release model or camera-generalization evidence yet.
 
 ## Next acceptance gates

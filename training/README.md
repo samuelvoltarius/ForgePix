@@ -1,5 +1,26 @@
 # ForgePix model development
 
+## Automatic experiments
+
+`python -m training.run_queue --output runs/multi-task-001 --steps 10000`
+runs background correction, isotropic deblurring, star separation and denoising
+sequentially. An exclusive lock prevents a second queue using the same directory.
+Existing task directories are preserved; failures stop the queue for inspection.
+Each run evaluates 32 deterministic synthetic validation scenes. Queue records
+compare output error against the unprocessed input, not against a production
+incumbent. No model is automatically enabled or promoted to production.
+
+These are deliberately limited engineering baselines: smooth positive gradients,
+Gaussian blur and synthetic stars are not realistic coverage of every telescope,
+camera, nebula or aberration. A successful score does not demonstrate real-data
+quality. Repeated development against these validation seeds requires a further
+untouched final test set before release.
+
+Spark run started 2026-09-05: `~/forgepix-training/runs/multi-task-001`.
+Read `queue.jsonl`, per-task `report.json` and `supervisor.log` before launching
+another run. The queue is finite; changes and follow-up experiments are handled
+by the existing ForgePix continuation task.
+
 This directory contains an experimental, synthetic-only denoising baseline.
 It is not enabled in the application and is not release-qualified.
 
