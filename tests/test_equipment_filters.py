@@ -180,5 +180,65 @@ class TestFilterWarnung(unittest.TestCase):
         self.assertEqual(equipment.filter_warnung(None, filters.hole("dual3")), "")
 
 
+class TestDithererkennung(unittest.TestCase):
+    """Drizzle holt nur mit Versatz zwischen den Aufnahmen echte Auflösung zurück.
+
+    Ohne Dithering liefert es nichts als ein größeres Bild — der Rat „nimm Drizzle" wäre
+    dann falsch. Erkennung gegen echte Serien geprüft: NGC7380 (302 px), M101 (441 px),
+    NGC5033/Seestar (187 px) — alle versetzt."""
+
+    def _serie(self, versatz, n=6, h=140, w=180):
+        import tempfile
+        import numpy as np
+        import cv2
+        d = tempfile.mkdtemp(prefix="fp_dith_")
+        rng = np.random.default_rng(3)
+        sx = rng.integers(20, w - 20, 40); sy = rng.integers(20, h - 20, 40)
+        for i in range(n):
+            f = np.full((h, w), 0.06, np.float32)
+            dx = dy = 0
+            if versatz:
+                dx = int(round((i - n / 2) * versatz / max(n - 1, 1) * 2))
+                dy = int(round((i - n / 2) * versatz / max(n - 1, 1)))
+            for x, y in zip(sx, sy):
+                xi, yi = int(x) + dx, int(y) + dy
+                if 3 <= xi < w - 3 and 3 <= yi < h - 3:
+                    cv2.circle(f, (xi, yi), 2, 0.8, -1)
+            f = cv2.GaussianBlur(f, (0, 0), 1.1)
+            bgr = np.clip(np.dstack([f, f, f]), 0, 1)
+            cv2.imencode(".tif", (bgr * 65535).astype(np.uint16))[1].tofile(
+                os.path.join(d, "l_%02d.tif" % i))
+        return d
+
+    def test_ohne_versatz_wird_kein_dithering_gemeldet(self):
+        import glob
+        import shutil
+        d = self._serie(0)
+        try:
+            kennz, spanne, satz = equipment.dither_erkennen(sorted(glob.glob(os.path.join(d, "*.tif"))))
+            self.assertIn(kennz, ("keins", "unbekannt"), "Versatz erfunden: %s" % satz)
+            if kennz == "keins":
+                self.assertIn("nicht gedithert", satz)
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+    def test_deutlicher_versatz_wird_erkannt(self):
+        import glob
+        import shutil
+        d = self._serie(20)
+        try:
+            kennz, spanne, _ = equipment.dither_erkennen(sorted(glob.glob(os.path.join(d, "*.tif"))))
+            self.assertEqual(kennz, "vorhanden")
+            self.assertGreater(spanne, 3.0)
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+    def test_zu_wenige_aufnahmen_geben_unbekannt(self):
+        kennz, _, _ = equipment.dither_erkennen([])
+        self.assertEqual(kennz, "unbekannt")
+        kennz2, _, _ = equipment.dither_erkennen(["/gibtsnicht.fit"])
+        self.assertEqual(kennz2, "unbekannt")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

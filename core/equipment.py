@@ -197,6 +197,60 @@ def aus_header(header):
     }
 
 
+def dither_erkennen(paths, max_frames=12, log=None):
+    """Wurde zwischen den Aufnahmen gedithert? Misst die Versätze der Sternfelder.
+
+    Warum das zählt: Drizzle holt nur dann echte Auflösung zurück, wenn die Aufnahmen um
+    NICHT-ganzzahlige Pixelbeträge gegeneinander versetzt sind. Ohne Dithering liefert
+    Drizzle nichts als ein größeres Bild — der Rat „nimm Drizzle" wäre dann falsch.
+    Nebenbei verrät ein Versatz von exakt 0 auch, dass die Montierung überhaupt nicht driftet
+    (Standbild), was für die Fixpattern-Trennung wichtig ist.
+
+    Gibt (kennzeichen, spanne_px, satz) zurück:
+      "keins"    — alles unter 1 px, praktisch dasselbe Bildfeld
+      "gering"   — 1 bis 3 px, mehr Drift als Dither
+      "vorhanden"— über 3 px, echtes Dithering
+      "unbekannt"— zu wenige Sterne zum Messen
+    """
+    import numpy as _np
+    try:
+        import astro as _astro
+    except ImportError:
+        return "unbekannt", None, "Versatz nicht messbar."
+    pfade = list(paths)[:max(2, int(max_frames))]
+    if len(pfade) < 2:
+        return "unbekannt", None, "Zu wenige Aufnahmen für eine Aussage."
+    schwerpunkte = []
+    for p in pfade:
+        try:
+            g = _astro._gray(_astro._read_float(p))
+            pts = _astro._star_centroids(g / (float(g.max()) + 1e-9), max_stars=60)
+        except Exception:
+            continue
+        if len(pts) >= 8:
+            arr = _np.asarray(pts, _np.float32)
+            schwerpunkte.append((float(arr[:, 0].mean()), float(arr[:, 1].mean())))
+    if len(schwerpunkte) < 2:
+        return "unbekannt", None, "Zu wenige Sterne zum Messen des Versatzes."
+    a = _np.asarray(schwerpunkte, _np.float32)
+    spanne = float(max(a[:, 0].max() - a[:, 0].min(), a[:, 1].max() - a[:, 1].min()))
+    if spanne < 1.0:
+        return ("keins", spanne,
+                "Die Aufnahmen liegen praktisch deckungsgleich (Versatz %.1f px) — es wurde "
+                "nicht gedithert. Drizzle bringt so nichts außer einem größeren Bild." % spanne)
+    if spanne < 3.0:
+        return ("gering", spanne,
+                "Versatz nur %.1f px — das ist eher Nachführdrift als Dithering. Für Drizzle "
+                "zu wenig, und Fixpattern-Rauschen mittelt sich kaum heraus." % spanne)
+    # EHRLICHE GRENZE: die Funktion unterscheidet gezieltes Dithering nicht von Nachführdrift
+    # oder Feldrotation. An echten Serien wurden Spannen von 190–440 px gemessen — das ist
+    # mehr Drift als Dither. Für die Frage, auf die es ankommt (gibt es Subpixel-Vielfalt,
+    # taugt Drizzle?), spielt der Unterschied keine Rolle: beides liefert sie.
+    return ("vorhanden", spanne,
+            "Versatz %.1f px über die Serie — die Aufnahmen liegen versetzt (Dithering oder "
+            "Drift). Gut für Drizzle und gegen Fixpattern-Rauschen." % spanne)
+
+
 def sampling_urteil(skala_arcsec, fwhm_px):
     """Über- oder unterabgetastet? Gibt (kennzeichen, satz, empfehlung) zurück.
 
