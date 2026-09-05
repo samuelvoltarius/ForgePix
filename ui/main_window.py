@@ -394,6 +394,9 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         self.astro_align.addItem(tr("Translation (Nachführung)"), "shift")
         self.astro_align.addItem(tr("Translation + Feldrotation (Alt-Az)"), "rotate")
         self.astro_align.setCurrentIndex(1)   # Standard: rotate — korrigiert auch Feldrotation
+        # Der Kometen-Schalter bleibt SICHTBAR (nicht unter "Erweitert"): wer einen Kometen
+        # aufnimmt, braucht genau ihn — und niemand findet ihn, wenn er versteckt ist.
+        self.astro_komet = QCheckBox(tr("Komet: auf den Kern ausrichten statt auf die Sterne"))
         # (verschmierte/längliche Sterne); funktioniert auch bei reiner Nachführung. Sicherer Default.
         self.astro_cosmetic = QCheckBox(tr("Hot-/Cold-Pixel entfernen"))
         self.astro_cosmetic.setChecked(True)  # Standard an: entfernt farbige Hot-Pixel-Punkte
@@ -553,6 +556,13 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
                               "„flats“, „bias“ und wendet sie automatisch an — entfernt Amp-Glow/"
                               "Vignette ohne Handarbeit. Manuelle Felder oben haben Vorrang."), 8, 3)
         ar.addWidget(QLabel(tr("Ausrichtung")), 11, 0); ar.addWidget(self.astro_align, 11, 1, 1, 2)
+        ar.addWidget(self.astro_komet, 12, 0, 1, 3)
+        ar.addWidget(help_btn("Ein Komet wandert zwischen den Aufnahmen vor den Sternen. Auf die "
+                              "Sterne ausgerichtet wird er zum Streifen — also genau das "
+                              "Objekt, wegen dem die Nacht draussen verbracht wurde. Hier wird "
+                              "auf den Kern ausgerichtet: der Komet wird scharf, die Sterne "
+                              "werden zu Strichen. Der Kern wird selbst gefunden, es muss nichts "
+                              "angeklickt werden. Findet sich keiner, wird normal gestapelt."), 12, 3)
         ar.addWidget(help_btn("Translation = nur Verschiebung (nachgeführte Montierung, schnell). "
                               "Translation + Feldrotation = richtet auch gedrehte Felder aus "
                               "(Alt-Az-Montierung ohne Rotator, lange Sessions) — per Stern-Merkmalen."), 11, 3)
@@ -1751,6 +1761,8 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
             if self.astro_fits.isChecked():
                 args += ["--fits-out"]
             args += ["--astro-align", self.astro_align.currentData()]
+        if getattr(self, "astro_komet", None) is not None and self.astro_komet.isChecked():
+            args += ["--astro-komet"]
             if self.astro_cosmetic.isChecked():
                 args += ["--astro-cosmetic"]
             if self.astro_drizzle.currentData() and int(self.astro_drizzle.currentData()) > 1:

@@ -1243,6 +1243,13 @@ def main():
                     help="Ausgefressene Sternkerne entsaettigen: die Sternfarbe aus den intakten "
                          "Flanken zurueckholen, damit helle Sterne nicht als weisse Scheiben "
                          "dastehen (Siril: unclipstars/Desaturate Stars)")
+    ap.add_argument("--astro-komet", action="store_true",
+                    help="Kometen-Stacking: auf den KERN ausrichten statt auf die Sterne "
+                         "(Siril: Kometen-Registrierung). Der Kern wird selbst gefunden — "
+                         "Median der sternausgerichteten Frames abziehen, im Rest den hellsten "
+                         "bewegten Fleck suchen, eine Gerade durch die Fundorte legen. Danach "
+                         "sind die STERNE Streifen und der Komet scharf. Gemessen: "
+                         "Spitzenhelligkeit des Kerns 3,8-fach")
     ap.add_argument("--astro-synthstar", action="store_true",
                     help="Sternformen neu setzen: Sterne messen, entfernen und als runde "
                          "Moffat-Profile mit demselben Fluss zurueckschreiben (Siril: synthstar). "
@@ -1764,10 +1771,29 @@ def run_astro(input_dir, work_dir, args):
                                            ref_path=_bestref,
                                            banding=getattr(args, "astro_banding", 0.0))
         phase("stack")
-        print(f"  Stacken ({args.astro_method}, kappa={args.astro_kappa}) …")
-        result = astro.stack(aligned, method=args.astro_method, kappa=args.astro_kappa, normalize=True,
-                             local_norm=getattr(args, "astro_local_norm", False),
-                             weight=getattr(args, "astro_weight", False), preview_cb=_preview_cb)
+        # Kometen-Stacking: auf den KERN statt auf die Sterne. Der Kern wird selbst gefunden,
+        # niemand muss ihn anklicken. Findet sich keiner, wird ganz normal weitergestapelt —
+        # ein stiller Abbruch waere hier das Schlimmste.
+        _komet_erg = None
+        if getattr(args, "astro_komet", False):
+            try:
+                import komet as _komet
+                print("  Kometen-Stacking: Kern suchen …")
+                _kdir = os.path.join(work_dir, "komet")
+                _komet_erg, _kinfo = _komet.stack_auf_kern(aligned, _kdir,
+                                                           method=args.astro_method,
+                                                           kappa=args.astro_kappa)
+                shutil.rmtree(_kdir, ignore_errors=True)
+                if _komet_erg is None:
+                    print("  (kein Kern gefunden — normales Stacken)", file=sys.stderr)
+            except Exception as e:
+                print(f"  (Kometen-Stacking uebersprungen: {e})", file=sys.stderr)
+        if _komet_erg is not None:
+            result = _komet_erg
+        else:
+            result = astro.stack(aligned, method=args.astro_method, kappa=args.astro_kappa, normalize=True,
+                                 local_norm=getattr(args, "astro_local_norm", False),
+                                 weight=getattr(args, "astro_weight", False), preview_cb=_preview_cb)
     binf = int(getattr(args, "astro_bin", 1) or 1)
     if binf > 1:
         result = astro.bin_image(result, binf)

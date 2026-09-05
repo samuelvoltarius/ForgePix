@@ -61,6 +61,8 @@ class SettingsMixin:
                                self.dark_skalieren.isChecked),
             "astro_synthstar": (lambda v: self.astro_synthstar.setChecked(bool(v)),
                                 self.astro_synthstar.isChecked),
+            "astro_komet": (lambda v: self.astro_komet.setChecked(bool(v)),
+                            self.astro_komet.isChecked),
             "astro_unmix": (lambda v: self.astro_unmix.setValue(float(v)), self.astro_unmix.value),
             "astro_bright": (lambda v: self.astro_bright.setValue(float(v)), self.astro_bright.value),
             "astro_sat": (lambda v: self.astro_sat.setValue(float(v)), self.astro_sat.value),
