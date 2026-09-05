@@ -1217,6 +1217,15 @@ def main():
     ap.add_argument("--astro-align", choices=["shift", "rotate"], default="shift",
                     help="Astro-Ausrichtung: shift=Translation (Nachführung), "
                          "rotate=Translation+Feldrotation (Alt-Az-Montierung)")
+    ap.add_argument("--filter", dest="aufnahmefilter", default="auto", metavar="FILTER",
+                    help="Aufnahmefilter (bestimmt, welche Emissionslinien ueberhaupt ankommen "
+                         "und wie stark entmischt wird). 'auto' liest das FITS-Feld FILTER aus. "
+                         "Liste aller Schluessel: --filter-liste")
+    ap.add_argument("--filter-liste", action="store_true",
+                    help="Alle bekannten Aufnahmefilter auflisten und beenden")
+    ap.add_argument("--unmix", type=float, default=None, metavar="FAKTOR",
+                    help="Entmischung Ha/OIII von Hand setzen (0..0.5). Ohne Angabe nimmt "
+                         "ForgePix den Startwert des gewaehlten Filters")
     ap.add_argument("--astro-color-stretch", type=float, default=0.0, metavar="SAETTIGUNG",
                     help="Farberhaltend strecken (0=aus, 1.8 empfohlen): nur die Helligkeit laeuft "
                          "durch die Kurve, die Kanalverhaeltnisse bleiben. Gegen das Ausgewaschene "
@@ -1452,6 +1461,13 @@ def main():
     ap.add_argument("--watch-settle", type=int, default=5,
                     help="Sekunden ohne Änderung, bevor gestackt wird (Default 5)")
     args = ap.parse_args()
+
+    if getattr(args, "filter_liste", False):
+        import filters as _flt
+        print("Bekannte Aufnahmefilter (--filter <Schluessel>):" + chr(10))
+        for f in _flt.FILTER:
+            print(f"  {f.schluessel:16s} {_flt.beschreibung(f)}")
+        return
 
     if args.suggest:
         if not args.vlm_endpoint:
@@ -1741,16 +1757,54 @@ def _detect_dualband(paths):
     return False
 
 
-def _dualband_view(result, palette, astro):
+def aufnahmefilter(args, paths):
+    """Den verwendeten Aufnahmefilter bestimmen: --filter, sonst aus dem FITS-Feld FILTER.
+
+    Warum das zaehlt: der Filter entscheidet, WELCHE Emissionslinien ueberhaupt ankommen.
+    Ein Dual-Band-Filter laesst Ha und OIII durch und sonst nichts — eine SHO-Palette daraus
+    ist synthetisch, weil SII gar nicht gemessen wurde. Ausserdem haengt der Startwert der
+    Ha/OIII-Entmischung an der Bandbreite. Gibt ein Filter-Objekt oder None zurueck.
+    """
+    import filters as _flt
+    wahl = str(getattr(args, "aufnahmefilter", "auto") or "auto").strip().lower()
+    if wahl and wahl != "auto":
+        f = _flt.hole(wahl)
+        if f is None:
+            print(f"  Unbekannter Filter '{wahl}' — --filter-liste zeigt alle. Weiter als Breitband.",
+                  file=sys.stderr)
+        return f
+    # automatisch aus dem Header des ersten FITS
+    for pfad in paths[:1]:
+        if os.path.splitext(pfad)[1].lower() not in FITS_EXTS:
+            return None
+        try:
+            from astropy.io import fits as _fits
+            roh = _fits.getheader(pfad).get("FILTER", "")
+        except Exception:
+            return None
+        f = _flt.aus_header(roh)
+        if f is not None:
+            print(f"  Filter erkannt: {f.name}  (FITS-Feld FILTER={roh!r})")
+        return f
+    return None
+
+
+def _dualband_view(result, palette, astro, filt=None, unmix=None):
     """Dual-Band-Vorschau nach gewählter Palette: hoo (rot+teal), sho (gold+blau),
-    foraxx (dynamisch) oder bicolor (synth. Grün, Cannistra). Default hoo."""
+    foraxx (dynamisch) oder bicolor (synth. Grün, Cannistra). Default hoo.
+
+    `filt` ist der erkannte Aufnahmefilter: daraus kommt der Startwert der Entmischung, und
+    er sagt, ob die gewaehlte Palette ueberhaupt eine physikalische Grundlage hat."""
+    if unmix is None:
+        unmix = filt.unmix if filt is not None else 0.20
+    unmix = float(max(0.0, min(0.5, unmix)))
     if palette == "sho":
-        return astro.dualband_sho(result)
+        return astro.dualband_sho(result, unmix)
     if palette == "foraxx":
-        return astro.dualband_foraxx(result)
+        return astro.dualband_foraxx(result, unmix)
     if palette == "bicolor":
-        return astro.dualband_bicolor(result)
-    return astro.dualband_hoo(result)
+        return astro.dualband_bicolor(result, unmix)
+    return astro.dualband_hoo(result, unmix)
 
 
 def _maybe_upscale(result, args):
@@ -1775,6 +1829,12 @@ def _maybe_upscale(result, args):
 def _astro_write(result, work_dir, paths, args, astro):
     """Astro-Ergebnis schreiben: optional Hintergrund-Extraktion, dann 16-bit-Linear +
     32-bit-Linear (GraXpert/StarNet/PixInsight) + gestreckte Vorschau-JPG."""
+    _filt = aufnahmefilter(args, paths)
+    if _filt is not None and getattr(args, "dualband", False):
+        import filters as _flt
+        _ok, _hinweis = _flt.palette_ehrlich(_filt, getattr(args, "palette", "hoo"))
+        if not _ok:
+            print(f"  Hinweis: {_hinweis}")
     if getattr(args, "bg_extract", False):
         phase("background")
         backend = getattr(args, "astro_bg_backend", "own")
@@ -1914,7 +1974,8 @@ def _astro_write(result, work_dir, paths, args, astro):
         # Breitband läuft über _broadband (oben) — inkl. echtem PCC-Pfad bei --astro-pcc.
         # (Hier stand eine zweite _broadband-Definition, die die echte PCC-Variante überschrieb.)
         if dualband:
-            base_view = _dualband_view(result, getattr(args, "palette", "hoo"), astro)
+            base_view = _dualband_view(result, getattr(args, "palette", "hoo"), astro,
+                                        filt=_filt, unmix=getattr(args, "unmix", None))
         else:
             base_view = _broadband(result)
         _sm = getattr(args, "astro_stretch_mode", "asinh")
@@ -1980,7 +2041,8 @@ def _astro_write(result, work_dir, paths, args, astro):
             print(f"  Sterne reduziert (Staerke {_sr:.2f})")
     else:
         if dualband:
-            view = _dualband_view(result, getattr(args, "palette", "hoo"), astro)
+            view = _dualband_view(result, getattr(args, "palette", "hoo"), astro,
+                                   filt=_filt, unmix=getattr(args, "unmix", None))
         else:
             view = _broadband(result)
     out_view = os.path.join(stack_dir, f"{args.prefix}{base}_astro.jpg")
