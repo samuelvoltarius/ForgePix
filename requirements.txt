@@ -1,31 +1,4 @@
-# ForgePix — Kern-Abhängigkeiten (leicht, frei, plattformübergreifend)
-# Installation:  python3 -m pip install -r requirements.txt
-PySide6>=6.5
-opencv-python>=4.8
-numpy>=1.24
-rawpy>=0.18
-tifffile>=2023.7
-imagecodecs>=2023.7
-psdtags>=2024.1         # Photoshop-Ebenen-Export (.tif mit Layern)
-requests>=2.28          # nur für optionalen KI-Server (OpenAI-kompatibel)
-ExifRead>=3.0           # EXIF lesen ohne exiftool (Brennweite/Blende/ISO/Belichtung; JPEG + RAW)
-piexif>=1.1             # EXIF auf JPEG-Ausgaben übernehmen ohne exiftool (eingebaut, mitgeliefert)
-astropy>=5.3            # optional: FITS lesen/schreiben (Astro). Ohne astropy laufen JPG/TIFF/RAW normal.
+# Standardinstallation inklusive optionaler Online-Katalog- und Objektivfunktionen.
+-r requirements-core.txt
 astroquery>=0.4.7       # optional: eigener Gaia-DR3-Pfad für PCC (Farbkalibrierung). Ohne -> Siril-SPCC/Lite.
-scipy>=1.10             # optional: TPS-Feinregistrierung (Thin-Plate-Spline). Ohne -> globale Ausrichtung.
 lensfunpy>=1.10         # optional: automatische Objektivkorrektur (lensfun-DB). Ohne -> manuelle Regler.
-
-# macOS: echtes Dock-Icon (optional)
-pyobjc-framework-Cocoa; sys_platform == "darwin"
-
-# NICHT nötig für den Kern:
-#  - shinestacker      → nur falls man die alte Vergleichs-Engine nutzen will
-#  - torch/transformers→ nur falls man später ein eingebautes lokales KI-Modell will
-# ForgePix läuft komplett ohne KI (Automatik nutzt dann Heuristik).
-#
-# EXTERNE PROGRAMME (separat installieren, KEIN pip — alle OPTIONAL):
-#  - exiftool   → für „📷 Aus Foto lesen (EXIF)" im DOF-Rechner   (brew install exiftool)
-#  - GraXpert   → Hintergrund/Gradient entfernen (Astro)          (graxpert.com)
-#  - StarNet++  → Sterne entfernen / starless (Astro)             (starnetastro.com)
-#  - Siril      → optionale alternative Astro-Engine               (siril.org)
-# Ohne diese laufen alle Module normal; nur die jeweiligen Knöpfe sind dann inaktiv/fallen zurück.

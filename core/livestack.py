@@ -22,6 +22,8 @@ Der Zustand lässt sich speichern und wieder laden. Ein Absturz um drei Uhr nach
 nicht die halbe Nacht.
 """
 import os
+import tempfile
+import time
 
 import numpy as np
 import cv2
@@ -42,7 +44,7 @@ class LiveStack:
         self.log = log
         self.summe = None          # Σ w·x
         self.quadr = None          # Σ w·x²
-        self.gewicht = None        # Σ w   (je Pixel, weil Ausreisser pixelweise wegfallen)
+        self.gewicht = None        # Σ w je Pixel und Farbkanal
         self.n = 0                 # eingegangene Frames
         self.verworfen = 0         # Frames, die sich nicht ausrichten liessen
         self.ref_grau = None
@@ -58,7 +60,7 @@ class LiveStack:
         self.ref_pegel = float(np.median(f))
         self.summe = np.zeros(f.shape, np.float32)
         self.quadr = np.zeros(f.shape, np.float32)
-        self.gewicht = np.zeros(f.shape[:2], np.float32)
+        self.gewicht = np.zeros(f.shape, np.float32)
 
     def _ausrichten(self, f):
         """Auf die Referenz schieben. Gibt None zurück, wenn es nicht geht — ein Frame, der
@@ -112,8 +114,8 @@ class LiveStack:
 
         maske = None
         if self.n >= self.min_fuer_verwurf:
-            mittel = self.summe / np.maximum(self.gewicht, 1e-9)[..., None]
-            var = (self.quadr / np.maximum(self.gewicht, 1e-9)[..., None]) - mittel * mittel
+            mittel = self.summe / np.maximum(self.gewicht, 1e-9)
+            var = (self.quadr / np.maximum(self.gewicht, 1e-9)) - mittel * mittel
             std = np.sqrt(np.maximum(var, 0.0))
             maske = np.abs(g - mittel) <= (self.kappa * std + 1e-6)
 
@@ -125,9 +127,8 @@ class LiveStack:
             mw = maske.astype(np.float32) * w
             self.summe += g * mw
             self.quadr += g * g * mw
-            # Das Gewicht ist je Pixel, weil ein Ausreisser nur DORT wegfällt. Ein Frame mit
-            # einer Satellitenspur soll nicht komplett verloren gehen — nur die Spur.
-            self.gewicht += mw.mean(axis=2) if mw.ndim == 3 else mw
+            # Gleiche Kanalmaske für Zähler und Nenner; sonst entstehen Farbstiche.
+            self.gewicht += mw
         self.n += 1
         if pfad:
             self.pfade.append(pfad)
@@ -137,7 +138,7 @@ class LiveStack:
         """Der aktuelle Stapel als float32-BGR in [0..1], oder None."""
         if self.summe is None or self.n == 0:
             return None
-        return np.clip(self.summe / np.maximum(self.gewicht, 1e-9)[..., None], 0, 1)
+        return np.clip(self.summe / np.maximum(self.gewicht, 1e-9), 0, 1)
 
     def vorschau_schreiben(self, pfad, strecken=True, skala=0.5):
         """Zwischenstand als JPG — das ist der Sinn des Ganzen: beim Aufnehmen zusehen."""
@@ -154,30 +155,51 @@ class LiveStack:
         """Zustand sichern. Ein Absturz um drei Uhr nachts kostet dann nicht die halbe Nacht."""
         if self.summe is None:
             return False
-        np.savez_compressed(
-            pfad, summe=self.summe, quadr=self.quadr, gewicht=self.gewicht,
-            ref_grau=self.ref_grau, n=np.int64(self.n), verworfen=np.int64(self.verworfen),
-            ref_pegel=np.float32(self.ref_pegel), pfade=np.array(self.pfade, dtype=object),
-            kappa=np.float32(self.kappa))
+        target = os.path.abspath(os.fspath(pfad))
+        if not target.endswith(".npz"):
+            target += ".npz"
+        fd, temp = tempfile.mkstemp(prefix=".live-", suffix=".npz", dir=os.path.dirname(target))
+        try:
+            with os.fdopen(fd, "wb") as out:
+                np.savez_compressed(
+                    out, version=np.int64(2), summe=self.summe, quadr=self.quadr,
+                    gewicht=self.gewicht, ref_grau=self.ref_grau, n=np.int64(self.n),
+                    verworfen=np.int64(self.verworfen), ref_pegel=np.float32(self.ref_pegel),
+                    pfade=np.asarray(self.pfade, dtype=str), kappa=np.float64(self.kappa),
+                    registrieren=self.registrieren, gewichten=self.gewichten,
+                    min_fuer_verwurf=np.int64(self.min_fuer_verwurf))
+                out.flush()
+                os.fsync(out.fileno())
+            os.replace(temp, target)
+        finally:
+            if os.path.exists(temp):
+                os.unlink(temp)
         return True
 
     @classmethod
     def laden(cls, pfad, log=log_print):
-        """Gesicherten Zustand zurückholen. Gibt None zurück, wenn die Datei unbrauchbar ist —
-        ein halb geschriebener Zustand darf nicht als gültiger Stapel durchgehen."""
+        """Versionierten Zustand laden; alte Zustände müssen neu aufgebaut werden."""
         try:
-            d = np.load(pfad, allow_pickle=True)
-            s = cls(log=log)
-            s.summe = d["summe"].astype(np.float32)
-            s.quadr = d["quadr"].astype(np.float32)
-            s.gewicht = d["gewicht"].astype(np.float32)
-            s.ref_grau = d["ref_grau"].astype(np.float32)
-            s.n = int(d["n"])
-            s.verworfen = int(d["verworfen"])
-            s.ref_pegel = float(d["ref_pegel"])
-            s.kappa = float(d["kappa"])
-            s.pfade = [str(p) for p in d["pfade"]]
-            return s
+            with np.load(pfad, allow_pickle=False) as d:
+                if "version" not in d or int(d["version"]) != 2:
+                    raise ValueError("alter Zustand mit unvollstaendigen Gewichten; Frames neu einlesen")
+                s = cls(log=log, kappa=float(d["kappa"]),
+                        registrieren=bool(d["registrieren"]), gewichten=bool(d["gewichten"]),
+                        min_fuer_verwurf=int(d["min_fuer_verwurf"]))
+                s.summe = d["summe"].astype(np.float32)
+                s.quadr = d["quadr"].astype(np.float32)
+                s.gewicht = d["gewicht"].astype(np.float32)
+                s.ref_grau = d["ref_grau"].astype(np.float32)
+                s.n = int(d["n"])
+                s.verworfen = int(d["verworfen"])
+                s.ref_pegel = float(d["ref_pegel"])
+                s.pfade = [str(p) for p in d["pfade"]]
+                if (s.quadr.shape != s.summe.shape or s.gewicht.shape != s.summe.shape
+                        or s.ref_grau.shape != s.summe.shape[:2]):
+                    raise ValueError("unpassende Array-Dimensionen")
+                if any(not np.isfinite(a).all() for a in (s.summe, s.quadr, s.gewicht)):
+                    raise ValueError("ungueltige Summen/Gewichte")
+                return s
         except Exception as e:
             log("    Live: gespeicherter Zustand nicht lesbar (%s)" % e)
             return None
@@ -189,20 +211,33 @@ class LiveStack:
                    if self.n >= self.min_fuer_verwurf else " (noch ohne Ausreisser-Verwurf)"))
 
 
-def neue_dateien(ordner, bekannt, endungen=(".fit", ".fits", ".fts", ".tif", ".tiff")):
-    """Dateien im Ordner, die noch nicht verrechnet sind — und die fertig geschrieben sind.
+def neue_dateien(ordner, bekannt, endungen=(".fit", ".fits", ".fts", ".tif", ".tiff"),
+                 *, beobachtet=None, settle=2.0, jetzt=None):
+    """Nur Dateien liefern, deren Größe und mtime über das Ruheintervall stabil sind.
 
-    Die Grössenprüfung ist wichtiger, als sie aussieht: eine Aufnahme, die gerade noch von der
-    Kamera geschrieben wird, ist halb da und würde als kaputter Frame in den Stapel wandern.
+    Der Aufrufer behält `beobachtet` zwischen Abfragen. Ohne Verlauf ist noch
+    keine Datei nachweislich fertig und es werden keine Kandidaten geliefert.
     """
-    raus = []
+    jetzt = time.monotonic() if jetzt is None else jetzt
+    beobachtet = {} if beobachtet is None else beobachtet
+    raus, vorhanden = [], set()
     for name in sorted(os.listdir(ordner)):
         p = os.path.join(ordner, name)
         if p in bekannt or os.path.splitext(name)[1].lower() not in endungen:
             continue
         try:
-            if os.path.getsize(p) > 0:
+            if not os.path.isfile(p):
+                continue
+            st = os.stat(p)
+            vorhanden.add(p)
+            sig = (st.st_size, st.st_mtime_ns)
+            alt = beobachtet.get(p)
+            if alt is None or alt[:2] != sig:
+                beobachtet[p] = (*sig, jetzt)
+            elif st.st_size > 0 and jetzt - alt[2] >= settle:
                 raus.append(p)
         except OSError:
-            pass
+            continue
+    for p in set(beobachtet) - vorhanden:
+        del beobachtet[p]
     return raus

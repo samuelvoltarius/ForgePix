@@ -127,7 +127,7 @@ class TestLiveStack(unittest.TestCase):
         self.assertIsNotNone(weiter)
         self.assertEqual(weiter.n, 5)
         self.assertTrue(np.array_equal(weiter.ergebnis(), ls.ergebnis()))
-        weiter.registrieren = False
+        self.assertFalse(weiter.registrieren)
         for p in pfade[5:]:
             ls.hinzufuegen(p)
             weiter.hinzufuegen(p)
@@ -184,7 +184,9 @@ class TestLiveStack(unittest.TestCase):
         d = os.path.dirname(pfade[0])
         with open(os.path.join(d, "notiz.txt"), "w", encoding="utf-8") as fh:
             fh.write("kein Bild")
-        raus = livestack.neue_dateien(d, set(pfade[:1]))
+        gesehen = {}
+        self.assertEqual(livestack.neue_dateien(d, set(pfade[:1]), beobachtet=gesehen, jetzt=0), [])
+        raus = livestack.neue_dateien(d, set(pfade[:1]), beobachtet=gesehen, jetzt=3)
         self.assertEqual(len(raus), 2)
         self.assertTrue(all(p.endswith(".tif") for p in raus))
 

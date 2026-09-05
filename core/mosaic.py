@@ -7,7 +7,6 @@ Aufnahmen vom Mond/Sonne, die zusammen die ganze Scheibe ergeben. Reine OpenCV-L
 """
 import cv2
 import numpy as np
-from scipy.optimize import least_squares
 from constants import to_uint8, imread, log_print
 
 
@@ -310,6 +309,7 @@ def bundle_adjust_distortion(point_pairs, image_shapes, f_init=None, log=log_pri
     p0[3 * n] = f_init  # f; a=b=c=0 → reine Identitäts-Verzeichnung als Start
     r0 = residuals(p0)
     rms0 = float(np.sqrt(np.mean(r0 ** 2)))
+    from scipy.optimize import least_squares
     sol = least_squares(residuals, p0, method="trf", loss="huber",
                         f_scale=2.0, max_nfev=max_nfev)
     rs, f, a, b, c = unpack(sol.x)
@@ -381,6 +381,7 @@ def optimize_photometric(images, overlaps, log=log_print, max_nfev=120):
         return np.concatenate(res) if res else np.zeros(1)
 
     p0 = np.zeros(n + 2)
+    from scipy.optimize import least_squares
     sol = least_squares(residuals, p0, method="trf", loss="soft_l1",
                         f_scale=10.0, max_nfev=max_nfev)
     loggain = sol.x[:n]

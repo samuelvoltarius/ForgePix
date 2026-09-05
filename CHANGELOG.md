@@ -7,6 +7,15 @@ All notable changes to ForgePix. Format based on
 [SemVer](https://semver.org/).
 
 ## [Unreleased]
+### Live stacking: correctness and recovery
+
+- Reject outliers with separate channel weights, preserving neutral colours.
+- Stop/SIGINT exports the result; temporarily unreadable frames are retried.
+- Incoming files must keep a stable size and modification time throughout the settling interval.
+- Checkpoints preserve processing options and are replaced atomically. Legacy checkpoints without a format version are rebuilt from the original frames, which must remain available.
+- Share core dependencies across installation, CI and packages; include SciPy for mosaic optimisation while keeping basic cropping independent of it.
+- Run regression tests on Windows, macOS and Linux; require a packaged CLI smoke test before publishing native artifacts.
+
 ### Live stacking, measurement photometry, a local Gaia catalogue — and a sourced PixInsight comparison
 
 **Incremental live stacking** (`--live`, together with `--watch`). The previous watch mode

@@ -1,0 +1,14 @@
+# Gemeinsame Laufzeit für Installation, CI und native Pakete.
+PySide6>=6.5
+opencv-python-headless>=4.8
+numpy>=1.24
+rawpy>=0.18
+tifffile>=2023.7
+imagecodecs>=2023.7
+psdtags>=2024.1         # Photoshop-Ebenen-Export (.tif mit Layern)
+requests>=2.28          # nur für optionalen KI-Server (OpenAI-kompatibel)
+ExifRead>=3.0           # EXIF lesen ohne exiftool (Brennweite/Blende/ISO/Belichtung; JPEG + RAW)
+piexif>=1.1             # EXIF auf JPEG-Ausgaben übernehmen ohne exiftool (eingebaut, mitgeliefert)
+astropy>=5.3            # optional: FITS lesen/schreiben (Astro). Ohne astropy laufen JPG/TIFF/RAW normal.
+scipy>=1.10             # Mosaik-Optimierung und Feinregistrierung
+pyobjc-framework-Cocoa; sys_platform == "darwin"

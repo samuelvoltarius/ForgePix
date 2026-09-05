@@ -7,6 +7,15 @@ Alle nennenswerten Änderungen an ForgePix. Format orientiert an
 [SemVer](https://semver.org/lang/de/).
 
 ## [Unreleased]
+### Live-Stacking: Korrektheit und Wiederherstellung
+
+- Farbkanäle behalten beim Ausreißer-Verwerfen getrennte Gewichte; neutrale Pixel erhalten keinen künstlichen Farbstich.
+- Stop/SIGINT exportiert das Ergebnis; temporär unlesbare Aufnahmen werden erneut versucht.
+- Neue Dateien müssen über das Ruheintervall eine stabile Größe und Änderungszeit haben.
+- Zustände speichern alle Verarbeitungsoptionen und werden atomar ersetzt. Alte Zustände ohne Formatversion werden aus den weiterhin vorhandenen Originalaufnahmen neu aufgebaut.
+- Gemeinsame Kern-Abhängigkeiten für Installation, CI und Pakete; SciPy ist für die Mosaik-Optimierung enthalten, einfacher Zuschnitt benötigt es nicht.
+- Regressionstests auf Windows, macOS und Linux; native Pakete müssen vor Veröffentlichung einen CLI-Funktionstest bestehen.
+
 ### Live-Stacking, Messphotometrie, lokaler Gaia-Katalog — und der belegte PixInsight-Vergleich
 
 **Inkrementelles Live-Stacking** (`--live`, nur zusammen mit `--watch`). Der bisherige

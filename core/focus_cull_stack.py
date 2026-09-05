@@ -2835,39 +2835,49 @@ def live_loop(args, input_dir, work_dir):
     import time
     import signal
     import livestack
+    import astro
     stop = {"flag": False}
-    signal.signal(signal.SIGTERM, lambda *a: stop.__setitem__("flag", True))
-    os.makedirs(work_dir, exist_ok=True)
-    zustand = os.path.join(work_dir, "_live_zustand.npz")
-    vorschau = os.path.join(work_dir, "_live_preview.jpg")
-    ls = livestack.LiveStack.laden(zustand) if os.path.exists(zustand) else None
-    if ls is None:
-        ls = livestack.LiveStack(kappa=getattr(args, "astro_kappa", 2.5))
-    else:
-        print(f"  fortgesetzt: {ls.n} Frames aus einem frueheren Lauf")
-    bekannt = set(ls.pfade)
-    print(f"== LIVE-Modus == Ordner: {input_dir}")
-    print("(jeder neue Sub wird einmal verrechnet; Strg-C, SIGTERM oder Stop zum Beenden)")
-    while not stop["flag"]:
-        try:
-            neu = livestack.neue_dateien(input_dir, bekannt)
-        except OSError as e:
-            print(f"  (Ordner nicht lesbar: {e})", file=sys.stderr)
-            neu = []
-        for pfad in neu:
-            if stop["flag"]:
-                break
-            if ls.hinzufuegen(pfad):
-                print(f"  + {os.path.basename(pfad)}  ({ls.n} Frames im Stapel)")
-            bekannt.add(pfad)
-            ls.vorschau_schreiben(vorschau)
-            ls.speichern(zustand)
-        time.sleep(2)
-    print("  " + ls.bericht())
-    erg = ls.ergebnis()
-    if erg is not None:
-        _astro_write(erg, work_dir, ls.pfade or [input_dir], args, astro)
-    print("Live-Modus beendet.")
+    stop_handler = lambda *a: stop.__setitem__("flag", True)
+    old_term = signal.signal(signal.SIGTERM, stop_handler)
+    old_int = signal.signal(signal.SIGINT, stop_handler)
+    try:
+        os.makedirs(work_dir, exist_ok=True)
+        zustand = os.path.join(work_dir, "_live_zustand.npz")
+        vorschau = os.path.join(work_dir, "_live_preview.jpg")
+        ls = livestack.LiveStack.laden(zustand) if os.path.exists(zustand) else None
+        if ls is None:
+            ls = livestack.LiveStack(kappa=getattr(args, "astro_kappa", 2.5))
+        else:
+            print(f"  fortgesetzt: {ls.n} Frames aus einem frueheren Lauf")
+        bekannt = set(ls.pfade)
+        beobachtet = {}
+        print(f"== LIVE-Modus == Ordner: {input_dir}")
+        print("(jeder neue Sub wird einmal verrechnet; Strg-C, SIGTERM oder Stop zum Beenden)")
+        while not stop["flag"]:
+            try:
+                neu = livestack.neue_dateien(input_dir, bekannt, beobachtet=beobachtet,
+                                                 settle=max(2, getattr(args, "watch_settle", 5)))
+            except OSError as e:
+                print(f"  (Ordner nicht lesbar: {e})", file=sys.stderr)
+                neu = []
+            for pfad in neu:
+                if stop["flag"]:
+                    break
+                if ls.hinzufuegen(pfad):
+                    print(f"  + {os.path.basename(pfad)}  ({ls.n} Frames im Stapel)")
+                    bekannt.add(pfad)
+                    ls.vorschau_schreiben(vorschau)
+                    ls.speichern(zustand)
+            time.sleep(2)
+        print("  " + ls.bericht())
+        erg = ls.ergebnis()
+        if erg is not None:
+            _astro_write(erg, work_dir, ls.pfade or [input_dir], args, astro)
+        print("Live-Modus beendet.")
+
+    finally:
+        signal.signal(signal.SIGTERM, old_term)
+        signal.signal(signal.SIGINT, old_int)
 
 
 def watch_loop(args, input_dir, work_dir):

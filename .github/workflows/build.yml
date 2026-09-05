@@ -43,11 +43,12 @@ jobs:
       - name: Python-Abhängigkeiten
         run: |
           python -m pip install --upgrade pip
-          pip install numpy "opencv-python-headless>=4.8" "PySide6>=6.5" rawpy tifffile imagecodecs psdtags requests "ExifRead>=3.0" piexif "astropy>=5.3" pyinstaller
+          pip install -r requirements-core.txt pyinstaller
 
-      - name: Mac-Dock-Icon (pyobjc)
-        if: runner.os == 'macOS'
-        run: pip install pyobjc-framework-Cocoa
+      - name: Regressionstests
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python -m unittest discover -s tests -q
 
       - name: Build (PyInstaller)
         shell: bash
@@ -66,6 +67,9 @@ jobs:
             --hidden-import ui.result_view --hidden-import ui.theme --hidden-import ui.appinfo \
             --hidden-import ui.workers \
             focus_stack_gui.py
+
+      - name: Paket-Funktionstest
+        run: python tests/smoke_bundle.py
 
       # macOS: mit Developer-ID signieren + notarisieren, FALLS Secrets gesetzt sind;
       # sonst Ad-hoc-Signatur (App startet dann nach Rechtsklick→Öffnen ohne „beschädigt").
