@@ -678,5 +678,72 @@ class TestStrecken(unittest.TestCase):
         self.assertGreater(float(np.median(div)), 0.05)
 
 
+class TestLokalerKontrastUndEntrauschen(unittest.TestCase):
+    """A13 — zwei PixInsight-Gegenstuecke klassisch: LocalHistogramEqualization und TGVDenoise."""
+
+    def _bild(self, h=200, w=260, seed=4):
+        rng = np.random.default_rng(seed)
+        yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
+        neb = 0.3 * np.exp(-(((xx - w / 2) / (w / 3)) ** 2 + ((yy - h / 2) / (h / 3)) ** 2))
+        f = cv2.GaussianBlur(neb, (0, 0), 6).astype(np.float32) + 0.1
+        f = f + rng.normal(0, 0.02, (h, w)).astype(np.float32)
+        return np.clip(np.dstack([f, f, f]), 0, 1)
+
+    def _lokaler_kontrast(self, v):
+        lum = v.mean(axis=2) if v.ndim == 3 else v
+        return float(np.std(lum - cv2.GaussianBlur(lum, (0, 0), 12)))
+
+    def _rauschen(self, v):
+        lum = v.mean(axis=2) if v.ndim == 3 else v
+        return float(np.std(lum - cv2.GaussianBlur(lum, (0, 0), 1.5)))
+
+    def test_a13_clahe_hebt_lokalen_kontrast(self):
+        b = self._bild()
+        self.assertGreater(self._lokaler_kontrast(astro.local_contrast(b, staerke=2.0)),
+                           self._lokaler_kontrast(b))
+
+    def test_a13_clahe_staerke_wirkt_wirklich(self):
+        """OpenCVs CLAHE IGNORIERT den clipLimit bei 16-bit-Eingabe — alle Werte liefern dann
+        bitgleiche Ergebnisse, also volle Histogrammausgleichung samt hochgezogenem Rauschen.
+        Genau das war der erste Entwurf. Der Test haelt fest, dass die Staerke greift."""
+        b = self._bild()
+        werte = [self._lokaler_kontrast(astro.local_contrast(b, staerke=s))
+                 for s in (0.5, 1.0, 2.0, 4.0)]
+        self.assertEqual(werte, sorted(werte), "nicht monoton: %s" % werte)
+        self.assertGreater(werte[-1], werte[0] * 1.1,
+                           "Staerke ohne Wirkung — wird wieder in 16 bit gerechnet?")
+
+    def test_a13_clahe_null_ist_identitaet(self):
+        b = self._bild()
+        self.assertIs(astro.local_contrast(b, staerke=0.0), b)
+        self.assertIsNone(astro.local_contrast(None))
+
+    def test_a13_tv_entrauschen_nimmt_mehr_rauschen_als_detail(self):
+        """Der Sinn eines kantenerhaltenden Entrauschens: Rauschen soll staerker fallen als
+        der Strukturkontrast. Sonst waere es ein gewoehnlicher Weichzeichner."""
+        b = self._bild()
+        out = astro.tv_denoise(b, staerke=0.5, iterationen=5)
+        rausch_ab = 1 - self._rauschen(out) / max(self._rauschen(b), 1e-9)
+        detail_ab = 1 - self._lokaler_kontrast(out) / max(self._lokaler_kontrast(b), 1e-9)
+        self.assertGreater(rausch_ab, 0.02, "kaum Rauschminderung")
+        self.assertGreater(rausch_ab, detail_ab, "es geht mehr Detail als Rauschen verloren")
+
+    def test_a13_tv_null_ist_identitaet(self):
+        b = self._bild()
+        self.assertIs(astro.tv_denoise(b, staerke=0.0), b)
+
+    def test_a13_beide_erhalten_form_und_wertebereich(self):
+        b = self._bild()
+        for name, out in (("clahe", astro.local_contrast(b, 2.0)),
+                          ("tv", astro.tv_denoise(b, 0.4))):
+            with self.subTest(fn=name):
+                self.assertEqual(out.shape, b.shape)
+                self.assertGreaterEqual(float(out.min()), 0.0)
+                self.assertLessEqual(float(out.max()), 1.0)
+        grau = b[..., 1]
+        self.assertEqual(astro.local_contrast(grau, 2.0).shape, grau.shape)
+        self.assertEqual(astro.tv_denoise(grau, 0.4).shape, grau.shape)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -1147,6 +1147,75 @@ def stretch_starless(bgr, stretch_fn, star_strength=0.35, sensitivity=5.0, log=l
         f"{float(np.clip(star_strength,0,1)):.2f} zurueck")
     return np.clip(out, 0, 1)
 
+def local_contrast(f, staerke=1.5, kacheln=8):
+    """Lokaler Kontrast per CLAHE (PixInsight: LocalHistogramEqualization).
+
+    Wozu: ausgedehnte Nebel haben oft viel Struktur bei WENIG Kontrast. Eine globale
+    Streckung kann das nicht heben, ohne den Rest zu überziehen — eine kontrastlimitierte
+    adaptive Histogrammausgleichung arbeitet je Kachel und holt die Struktur heraus, wo sie
+    steht. Die Begrenzung (clipLimit) verhindert dabei, dass das Rauschen mit hochgezogen wird.
+
+    Wirkt NUR auf die Helligkeit; die Farbe bleibt unangetastet — sonst kippen die Kanäle
+    gegeneinander und es entstehen Farbflecken.
+
+    staerke: clipLimit, 0 = aus. 1–3 ist der brauchbare Bereich; darüber wird es hart.
+    """
+    if f is None or staerke <= 0:
+        return f
+    a = np.clip(np.asarray(f, np.float32), 0, 1)
+    k = max(2, int(kacheln))
+    clahe = cv2.createCLAHE(clipLimit=float(staerke), tileGridSize=(k, k))
+
+    def _ausgleich(lum):
+        # BEWUSST 8 bit: OpenCVs CLAHE IGNORIERT den clipLimit bei 16-bit-Eingabe. Die Grenze
+        # wird als clipLimit x Kachelflaeche / Histogrammgroesse gerechnet; bei 65536 Klassen
+        # wird das kleiner als 1 und rundet auf null — es findet dann GAR KEINE Begrenzung
+        # statt, also volle Histogrammausgleichung samt hochgezogenem Rauschen. Gemessen
+        # lieferten clipLimit 1, 2, 4 und 8 bitgleiche Ergebnisse. In 8 bit greift die
+        # Begrenzung korrekt (Std 6.5 gegen 16.2 bei 1 gegen 4).
+        u8 = (np.clip(lum, 0, 1) * 255).astype(np.uint8)
+        return clahe.apply(u8).astype(np.float32) / 255.0
+
+    if a.ndim == 2:
+        return np.clip(_ausgleich(a), 0, 1)
+    # Die 8-bit-Stufe betrifft nur den KORREKTURFAKTOR, nicht die Bilddaten selbst — die
+    # bleiben in voller Genauigkeit erhalten.
+    lum = _gray(a)
+    faktor = _ausgleich(lum) / np.maximum(lum, 1e-6)
+    return np.clip(a * faktor[..., None], 0, 1)
+
+
+def tv_denoise(f, staerke=0.3, iterationen=5):
+    """Kantenerhaltendes Entrauschen über wiederholte Total-Variation-Schritte.
+
+    Das Gegenstück zu PixInsights TGVDenoise, klassisch umgesetzt: das Bild wird schrittweise
+    in Richtung seiner kantenerhaltend geglätteten Fassung gezogen. Anders als ein Gauss- oder
+    Medianfilter bleiben Kanten dabei stehen, weil der bilaterale Filter Pixel nur mit
+    ÄHNLICH HELLEN Nachbarn mittelt.
+
+    Der Baustein `_tv_step` steckte schon in der Dekonvolution (dort gegen Ringing); hier wird
+    er als eigenständiges Entrauschen nutzbar gemacht. Wirkt auf die Helligkeit, damit keine
+    Farbflecken entstehen.
+
+    staerke: 0..1 je Schritt (0 = aus). iterationen: wie oft.
+    """
+    if f is None or staerke <= 0:
+        return f
+    a = np.clip(np.asarray(f, np.float32), 0, 1)
+    w = float(np.clip(staerke, 0.0, 1.0))
+    if a.ndim == 2:
+        out = a
+        for _ in range(max(1, int(iterationen))):
+            out = _tv_step(out, w)
+        return np.clip(out, 0, 1)
+    lum = _gray(a)
+    glatt = lum
+    for _ in range(max(1, int(iterationen))):
+        glatt = _tv_step(glatt, w)
+    faktor = glatt / np.maximum(lum, 1e-6)
+    return np.clip(a * faktor[..., None], 0, 1)
+
+
 def _bg_anwenden(bild, flaeche, korrektur="sub"):
     """Hintergrundfläche anwenden — subtraktiv oder dividierend.
 
