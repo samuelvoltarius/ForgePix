@@ -477,9 +477,21 @@ def _warp_and_save(f, M, out_size, op, drizzle, tps_refg=None):
     return op
 
 
+
+def _ref_path(paths, ref_path=None):
+    """Referenz-Sub waehlen: der uebergebene, sonst der mittlere der Serie.
+
+    Der mittlere ist nur ein Notbehelf (Mitte der Session = Mitte der Drift). Wer die
+    Sub-Bewertung hat, sollte den QUALITATIV besten uebergeben — siehe
+    astro_quality.best_reference()."""
+    if ref_path and ref_path in paths:
+        return ref_path
+    return paths[len(paths) // 2]
+
+
 def register_and_cache(paths, out_dir, dark=None, flat=None, do_register=True,
                        align_mode="shift", cosmetic=False, drizzle=1, detector="ORB",
-                       tps=False, log=log_print):
+                       tps=False, ref_path=None, log=log_print):
     """Frames kalibrieren + ausrichten, als 16-bit-TIFF in out_dir ablegen.
 
     align_mode: 'shift' = NUR Translation (Nachführung ohne Feldrotation, s. CLI --astro-align),
@@ -495,7 +507,7 @@ def register_and_cache(paths, out_dir, dark=None, flat=None, do_register=True,
     from parallel import pmap
     os.makedirs(out_dir, exist_ok=True)
     drizzle = max(1, int(drizzle))
-    ref = calibrate(_read_float(paths[len(paths) // 2]), dark, flat)
+    ref = calibrate(_read_float(_ref_path(paths, ref_path)), dark, flat)
     if cosmetic:
         ref = cosmetic_correct(ref)
     refg = _gray(ref)
@@ -579,7 +591,7 @@ def register_and_cache(paths, out_dir, dark=None, flat=None, do_register=True,
 
 
 def drizzle_stack(paths, scale=2, pixfrac=0.7, dark=None, flat=None, cosmetic=False,
-                  detector="ORB", log=log_print):
+                  detector="ORB", ref_path=None, log=log_print):
     """ECHTES Drizzle (Variable-Pixel Linear Reconstruction, Fruchter & Hook — Punktkernel,
     inverse Formulierung). Anders als „Drizzle-lite“ (jeden Frame einzeln hochskalieren und mitteln,
     was die Interpolation verschmiert) wird hier das Resampling AUFGESCHOBEN: jeder Roh-Frame wird
@@ -591,7 +603,7 @@ def drizzle_stack(paths, scale=2, pixfrac=0.7, dark=None, flat=None, cosmetic=Fa
     braucht aber mehr Frames für volle Abdeckung; 0.7 ist ein guter Kompromiss)."""
     scale = int(max(2, scale))
     pf = float(np.clip(pixfrac, 0.1, 1.0))
-    ref = calibrate(_read_float(paths[len(paths) // 2]), dark, flat)
+    ref = calibrate(_read_float(_ref_path(paths, ref_path)), dark, flat)
     if cosmetic:
         ref = cosmetic_correct(ref)
     refg = _gray(ref)

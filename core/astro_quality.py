@@ -144,3 +144,31 @@ def select_subs(paths, fwhm_factor=1.5, ecc_max=1.7, star_frac=0.5, bg_factor=1.
             kept.append(f["path"])
     log(f"  -> {len(kept)}/{len(good)} Subs behalten")
     return frames, kept
+
+
+def best_reference(frames):
+    """Index des BESTEN Subs als Registrier-Referenz — statt einfach des mittleren.
+
+    Die Referenz bestimmt, worauf alle anderen Frames gefittet werden. Ein mittelmaessiger
+    Referenz-Sub (dicke, leicht laengliche Sterne) liefert schlechtere Passungen fuer die
+    ganze Serie; die Sub-Bewertung sortiert nur die AUSREISSER aus, nicht das Mittelmass.
+    Siril macht das in seiner Zwei-Pass-Registrierung genauso.
+
+    `frames` ist die Liste aus select_subs(). Bewertet werden nur behaltene Subs, nach
+    Sternzahl (viel = gut), FWHM (klein = gut) und Elongation (rund = gut) — jeweils relativ
+    zum Median der Serie, damit die Zahl vom Setup unabhaengig bleibt.
+    Rueckgabe: Pfad des besten Subs, oder None wenn nichts bewertbar ist.
+    """
+    good = [f for f in frames if f.get("keep") and f.get("path")]
+    if not good:
+        return None
+    med_fwhm = float(np.median([f["fwhm"] for f in good])) or 1.0
+    med_stars = float(np.median([f["stars"] for f in good])) or 1.0
+
+    def guete(f):
+        fwhm = max(float(f.get("fwhm", med_fwhm)), 1e-6) / max(med_fwhm, 1e-6)
+        ecc = max(float(f.get("ecc", 1.0)), 1.0)
+        sterne = max(float(f.get("stars", 0)), 0.0) / max(med_stars, 1e-6)
+        return sterne / (fwhm * ecc)
+
+    return max(good, key=guete)["path"]

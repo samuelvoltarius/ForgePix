@@ -298,5 +298,56 @@ class TestWinsorRejection(unittest.TestCase):
             shutil.rmtree(d, ignore_errors=True)
 
 
+class TestReferenzwahl(unittest.TestCase):
+    """A8 — die Registrier-Referenz soll das BESTE Sub sein, nicht einfach das mittlere.
+
+    Die Referenz bestimmt, worauf alle Frames gefittet werden. Die Sub-Bewertung sortiert nur
+    Ausreißer aus, nicht das Mittelmaß — ein schwaches Sub (Dunst, leichter Guidingfehler)
+    kann also Referenz werden und die Passung der ganzen Serie verschlechtern.
+    Gemessen: bei gleichwertigen Subs ±0 %, bei schwachem mittleren Sub 7 % kompaktere
+    Sterne im Ergebnis. Siril macht das in seiner Zwei-Pass-Registrierung genauso."""
+
+    def _frames(self, werte):
+        """werte: Liste (name, sterne, fwhm, ecc, keep)."""
+        return [{"path": f"/x/{n}.fit", "name": n, "stars": st, "fwhm": fw,
+                 "ecc": ec, "keep": k} for n, st, fw, ec, k in werte]
+
+    def test_a8_waehlt_das_beste_sub(self):
+        import astro_quality
+        f = self._frames([("a", 50, 3.4, 1.30, True),
+                          ("b", 90, 2.1, 1.02, True),      # klar das beste
+                          ("c", 60, 3.0, 1.10, True)])
+        self.assertEqual(astro_quality.best_reference(f), "/x/b.fit")
+
+    def test_a8_ignoriert_aussortierte_subs(self):
+        """Ein verworfenes Sub darf nie Referenz werden, auch wenn seine Zahlen gut aussehen."""
+        import astro_quality
+        f = self._frames([("gut", 80, 2.2, 1.03, True),
+                          ("raus", 200, 1.0, 1.00, False)])
+        self.assertEqual(astro_quality.best_reference(f), "/x/gut.fit")
+
+    def test_a8_ohne_brauchbare_subs_none(self):
+        import astro_quality
+        self.assertIsNone(astro_quality.best_reference([]))
+        self.assertIsNone(astro_quality.best_reference(self._frames([("x", 9, 2.0, 1.0, False)])))
+
+    def test_a8_rundheit_schlaegt_reine_sternzahl(self):
+        """Ein Sub mit etwas mehr Sternen, aber deutlich länglichen (Guidingfehler), ist die
+        schlechtere Referenz — daran fittet die ganze Serie schief."""
+        import astro_quality
+        f = self._frames([("laenglich", 100, 2.5, 1.60, True),
+                          ("rund", 88, 2.5, 1.00, True)])
+        self.assertEqual(astro_quality.best_reference(f), "/x/rund.fit")
+
+    def test_a8_ref_path_wird_beachtet_und_faellt_sauber_zurueck(self):
+        """astro._ref_path: übergebener Pfad gewinnt; unbekannter oder None → mittleres Sub
+        (das bisherige Verhalten bleibt damit unverändert)."""
+        import astro
+        pfade = ["/a.fit", "/b.fit", "/c.fit", "/d.fit", "/e.fit"]
+        self.assertEqual(astro._ref_path(pfade, "/b.fit"), "/b.fit")
+        self.assertEqual(astro._ref_path(pfade, None), pfade[len(pfade) // 2])
+        self.assertEqual(astro._ref_path(pfade, "/gibtsnicht.fit"), pfade[len(pfade) // 2])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

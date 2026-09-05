@@ -1512,11 +1512,18 @@ def run_astro(input_dir, work_dir, args):
         return astro._master(spec)
 
     # Sub-Qualität bewerten + schlechte aussortieren (FWHM/Sterne/Guiding/Wolken/Spuren)
+    _bestref = None          # ohne Sub-Bewertung (--no-astro-qc) bleibt es beim mittleren Sub
     if not getattr(args, "no_astro_qc", False):
         import astro_quality
         phase("grade")
         print("  Sub-Bewertung (erklärbar, klassisch) …")
         _frames, kept = astro_quality.select_subs(paths)
+        # Bestes Sub als Registrier-Referenz (Sternzahl / FWHM / Rundheit) statt des mittleren.
+        # Die Bewertung sortiert nur Ausreisser aus — die Referenz bestimmt aber, worauf ALLE
+        # Frames gefittet werden, und dafuer zaehlt Qualitaet, nicht Position in der Serie.
+        _bestref = astro_quality.best_reference(_frames)
+        if _bestref:
+            print(f"  Referenzbild: {os.path.basename(_bestref)} (bestes Sub der Serie)")
         # Optional: KI fasst in Klartext zusammen, welche Subs warum rausfliegen (nur Text, datensparsam)
         if getattr(args, "vlm_endpoint", None):
             try:
@@ -1611,13 +1618,15 @@ def run_astro(input_dir, work_dir, args):
         result = astro.drizzle_stack(paths, scale=drizzle,
                                      pixfrac=getattr(args, "astro_pixfrac", 0.7),
                                      dark=dark, flat=flat, cosmetic=cosmetic,
-                                     detector=getattr(args, "detector", "ORB"))
+                                     detector=getattr(args, "detector", "ORB"),
+                                     ref_path=_bestref)
     else:
         aligned = astro.register_and_cache(paths, reg_dir, dark, flat,
                                            do_register=not args.no_register,
                                            align_mode=align_mode, cosmetic=cosmetic,
                                            drizzle=drizzle, detector=getattr(args, "detector", "ORB"),
-                                           tps=getattr(args, "astro_tps", False))
+                                           tps=getattr(args, "astro_tps", False),
+                                           ref_path=_bestref)
         phase("stack")
         print(f"  Stacken ({args.astro_method}, kappa={args.astro_kappa}) …")
         result = astro.stack(aligned, method=args.astro_method, kappa=args.astro_kappa, normalize=True,
