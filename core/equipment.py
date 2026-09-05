@@ -118,6 +118,118 @@ TELESKOPE = [
 NACH_TELESKOP = {t[0]: t for t in TELESKOPE}
 
 
+# Kameras: entscheidend ist allein die Pixelgröße (µm). Die Liste ist ein Startpunkt —
+# eigene Geräte kommen über eigene_geraete_laden()/speichern() dazu und stehen gleichberechtigt
+# daneben. Werte an echten FITS-Headern gegengeprüft, wo vorhanden.
+KAMERAS = [
+    ("manuell", "Eigene Werte eintragen", None),
+    ("asi294mc", "ZWO ASI294MC Pro (IMX294)", 4.63),        # aus echten Headern: XPIXSZ 4.63
+    ("asi294mm", "ZWO ASI294MM Pro (IMX492)", 2.315),
+    ("asi533mc", "ZWO ASI533MC Pro (IMX533)", 3.76),
+    ("asi183mc", "ZWO ASI183MC Pro (IMX183)", 2.4),
+    ("asi2600mc", "ZWO ASI2600MC Pro (IMX571)", 3.76),
+    ("asi6200mc", "ZWO ASI6200MC Pro (IMX455)", 3.76),
+    ("asi1600mm", "ZWO ASI1600MM Pro (Panasonic MN34230)", 3.8),
+    ("seestar_s30_cam", "Seestar S30 (IMX662)", 2.90),      # aus echten Headern: XPIXSZ 2.90
+    ("seestar_s50_cam", "Seestar S50 (IMX462)", 2.90),
+]
+
+NACH_KAMERA = {k[0]: k for k in KAMERAS}
+
+
+def _eigene_datei():
+    """Pfad der Datei mit den selbst eingetragenen Geräten (neben den übrigen Einstellungen)."""
+    import os as _os
+    basis = (_os.environ.get("APPDATA")
+             or _os.path.join(_os.path.expanduser("~"), ".config"))
+    return _os.path.join(basis, "ForgePix", "geraete.json")
+
+
+def eigene_geraete_laden(pfad=None):
+    """Selbst eingetragene Teleskope, Kameras und Korrektoren laden.
+
+    Struktur (bewusst schlicht, damit man sie notfalls im Texteditor pflegen kann):
+        {"teleskope": [{"schluessel","name","oeffnung_mm","brennweite_mm"}, ...],
+         "kameras":   [{"schluessel","name","pixelgroesse_um"}, ...],
+         "korrektoren":[{"schluessel","name","faktor","hinweis"}, ...]}
+    Fehlt die Datei oder ist sie kaputt, kommt eine leere Struktur zurück — nie eine Ausnahme:
+    eine unlesbare Nutzerdatei darf den Programmstart nicht verhindern.
+    """
+    import json as _json
+    import os as _os
+    p = pfad or _eigene_datei()
+    leer = {"teleskope": [], "kameras": [], "korrektoren": []}
+    if not _os.path.isfile(p):
+        return leer
+    try:
+        with open(p, encoding="utf-8") as fh:
+            d = _json.load(fh)
+        if not isinstance(d, dict):
+            return leer
+        for k in leer:
+            if not isinstance(d.get(k), list):
+                d[k] = []
+        return d
+    except (OSError, ValueError):
+        return leer
+
+
+def eigene_geraete_speichern(daten, pfad=None):
+    """Eigene Geräte sichern. Gibt True/False zurück, wirft nicht."""
+    import json as _json
+    import os as _os
+    p = pfad or _eigene_datei()
+    try:
+        _os.makedirs(_os.path.dirname(p), exist_ok=True)
+        with open(p, "w", encoding="utf-8") as fh:
+            _json.dump(daten, fh, ensure_ascii=False, indent=2)
+        return True
+    except (OSError, TypeError, ValueError):
+        return False
+
+
+def alle_teleskope(eigene=None):
+    """Eingebaute Vorgaben + selbst eingetragene, als Liste (schluessel, name, oeff, brennw.).
+    Eigene Einträge mit gleichem Schlüssel ERSETZEN die Vorgabe — so kann man eine Vorgabe
+    korrigieren, ohne den Code zu ändern."""
+    e = eigene if eigene is not None else eigene_geraete_laden()
+    aus = {t[0]: t for t in TELESKOPE}
+    for t in e.get("teleskope", []):
+        try:
+            aus[str(t["schluessel"])] = (str(t["schluessel"]), str(t.get("name") or t["schluessel"]),
+                                         float(t["oeffnung_mm"]), float(t["brennweite_mm"]))
+        except (KeyError, TypeError, ValueError):
+            continue
+    return list(aus.values())
+
+
+def alle_kameras(eigene=None):
+    """Eingebaute Kameras + selbst eingetragene (schluessel, name, pixelgroesse_um)."""
+    e = eigene if eigene is not None else eigene_geraete_laden()
+    aus = {k[0]: k for k in KAMERAS}
+    for k in e.get("kameras", []):
+        try:
+            aus[str(k["schluessel"])] = (str(k["schluessel"]), str(k.get("name") or k["schluessel"]),
+                                         float(k["pixelgroesse_um"]))
+        except (KeyError, TypeError, ValueError):
+            continue
+    return list(aus.values())
+
+
+def alle_korrektoren(eigene=None):
+    """Eingebaute Korrektoren + selbst eingetragene."""
+    e = eigene if eigene is not None else eigene_geraete_laden()
+    aus = {k.schluessel: k for k in KORREKTOREN}
+    for k in e.get("korrektoren", []):
+        try:
+            aus[str(k["schluessel"])] = Korrektor(str(k["schluessel"]),
+                                                  str(k.get("name") or k["schluessel"]),
+                                                  float(k["faktor"]), str(k.get("hinweis", "")))
+        except (KeyError, TypeError, ValueError):
+            continue
+    return list(aus.values())
+
+
 def wirksame_brennweite(brennweite_mm, korrektor=None):
     """Brennweite nach Reducer/Barlow. `korrektor` ist ein Schlüssel oder ein Faktor."""
     try:

@@ -240,5 +240,82 @@ class TestDithererkennung(unittest.TestCase):
         self.assertEqual(kennz2, "unbekannt")
 
 
+class TestEigeneGeraete(unittest.TestCase):
+    """Die eingebauten Vorgaben sind ein Startpunkt — eigene Ausrüstung muss dazu können.
+
+    Wichtig ist zweierlei: eigene Einträge stehen gleichberechtigt neben den Vorgaben, und
+    ein eigener Eintrag mit gleichem Schlüssel ERSETZT die Vorgabe. So kann man eine falsche
+    Vorgabe korrigieren, ohne den Code anzufassen."""
+
+    def setUp(self):
+        import tempfile
+        self.d = tempfile.mkdtemp(prefix="fp_ger_")
+        self.p = os.path.join(self.d, "geraete.json")
+
+    def tearDown(self):
+        import shutil
+        shutil.rmtree(self.d, ignore_errors=True)
+
+    def test_eigene_geraete_speichern_und_laden(self):
+        eigene = {
+            "teleskope": [{"schluessel": "mein_rc8", "name": "Mein RC8",
+                           "oeffnung_mm": 203, "brennweite_mm": 1624}],
+            "kameras": [{"schluessel": "meine294", "name": "Meine 294",
+                         "pixelgroesse_um": 4.63}],
+            "korrektoren": [{"schluessel": "mein_red", "name": "Mein Reducer", "faktor": 0.67}],
+        }
+        self.assertTrue(equipment.eigene_geraete_speichern(eigene, self.p))
+        gel = equipment.eigene_geraete_laden(self.p)
+        self.assertIn("mein_rc8", [t["schluessel"] for t in gel["teleskope"]])
+
+        tele = {t[0]: t for t in equipment.alle_teleskope(gel)}
+        self.assertIn("mein_rc8", tele)
+        self.assertEqual(tele["mein_rc8"][3], 1624.0)
+        self.assertIn("rc8", tele, "eingebaute Vorgaben muessen erhalten bleiben")
+
+        kams = {k[0]: k for k in equipment.alle_kameras(gel)}
+        self.assertAlmostEqual(kams["meine294"][2], 4.63)
+
+        korr = {k.schluessel: k for k in equipment.alle_korrektoren(gel)}
+        self.assertAlmostEqual(korr["mein_red"].faktor, 0.67)
+
+    def test_eigener_eintrag_ersetzt_die_vorgabe(self):
+        eigene = {"teleskope": [{"schluessel": "rc8", "name": "RC8 nachgemessen",
+                                 "oeffnung_mm": 203, "brennweite_mm": 1620}],
+                  "kameras": [], "korrektoren": []}
+        tele = {t[0]: t for t in equipment.alle_teleskope(eigene)}
+        self.assertEqual(tele["rc8"][1], "RC8 nachgemessen")
+        self.assertEqual(tele["rc8"][3], 1620.0)
+
+    def test_kaputte_oder_fehlende_datei_blockiert_nichts(self):
+        """Eine unlesbare Nutzerdatei darf den Programmstart nicht verhindern."""
+        with open(self.p, "w", encoding="utf-8") as fh:
+            fh.write("{kaputt")
+        leer = equipment.eigene_geraete_laden(self.p)
+        self.assertEqual(leer, {"teleskope": [], "kameras": [], "korrektoren": []})
+        self.assertEqual(equipment.eigene_geraete_laden(os.path.join(self.d, "gibtsnicht.json")),
+                         {"teleskope": [], "kameras": [], "korrektoren": []})
+
+    def test_unvollstaendige_eintraege_werden_uebersprungen(self):
+        """Ein Eintrag ohne Brennweite darf die ganze Liste nicht unbrauchbar machen."""
+        eigene = {"teleskope": [{"schluessel": "kaputt", "name": "ohne Werte"},
+                                {"schluessel": "gut", "name": "vollstaendig",
+                                 "oeffnung_mm": 80, "brennweite_mm": 480}],
+                  "kameras": [{"schluessel": "murks", "pixelgroesse_um": "keine Zahl"}],
+                  "korrektoren": []}
+        tele = {t[0]: t for t in equipment.alle_teleskope(eigene)}
+        self.assertIn("gut", tele)
+        self.assertNotIn("kaputt", tele)
+        self.assertNotIn("murks", {k[0]: k for k in equipment.alle_kameras(eigene)})
+
+    def test_eingebaute_kameras_haben_plausible_pixelgroessen(self):
+        for schl, name, px in equipment.KAMERAS:
+            if px is None:
+                continue
+            with self.subTest(kamera=schl):
+                self.assertGreater(px, 0.5, "%s: Pixel zu klein" % name)
+                self.assertLess(px, 25.0, "%s: Pixel zu gross" % name)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
