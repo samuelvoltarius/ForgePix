@@ -7,6 +7,87 @@ All notable changes to ForgePix. Format based on
 [SemVer](https://semver.org/).
 
 ## [Unreleased]
+### Star shapes, comets, mixed exposures and a mask system
+
+**Re-rendering star shapes** (`--astro-synthstar`). Coma at the edges, sensor tilt and tracking
+errors distort the STARS while the nebulosity barely shows it. That cannot be undone by
+calculation — but the stars can be put back: measure them, remove them, write them back as round
+Moffat profiles carrying the same flux. On real data (M27, ASI294MC Pro, 300 s, artificial 7 px
+tracking error): **distortion 0.790 → 0.388 at a total flux of 1.0000**, nebulosity untouched.
+The same frame without the tracking error measures 0.420 — the result lands at the level of an
+image that never had the fault. Moffat rather than Gauss, because seeing gives real stars wider
+wings; Gaussian stars look like pasted-on dots.
+*Honest limit, stated in the help text too:* the star shape is invented. What was a line on the
+sensor becomes a round dot — unusable for photometry and astrometry.
+
+**Comet stacking on the nucleus** (`--astro-komet`). A comet moves against the stars between
+frames; aligned on the stars it becomes a streak — the very object the night outside was spent
+on. Siril and most others require **clicking** the nucleus in two frames. Here the program finds
+it itself: subtract the median of the star-aligned frames, look for the brightest *extended* blob
+in the residual (the minimum area rules out noise spikes — a comet is diffuse), and fit a robust
+straight line through the positions. Checked against a known trajectory: **nucleus found in 12 of
+12 frames, residual to the line 0.33 px, largest error 1.30 px, peak brightness of the nucleus up
+by a factor of 3.75.** The time axis comes from `DATE-OBS` where available — cloud breaks make the
+spacing uneven. If the timestamp is missing, that is reported rather than silently using the frame
+index.
+
+**Mixed exposure times.** The obvious part is the level; the important part is outlier rejection:
+without exposure information, sigma clipping compares a 60 s sub with a 300 s sub and treats the
+short one as an outlier — it spends its rejection budget on the short subs and lets real artefacts
+through. Measured (12 subs, a satellite in one short sub):
+
+| | SNR | satellite residual |
+|---|---|---|
+| sigma without exposures | 87.0 | 0.0423 |
+| sigma with exposures | 66.4 | 0.0161 |
+| sigma with exposures + weighting | **85.8** | **0.0161** |
+
+Scaling *alone* therefore costs signal-to-noise — the scaled-up short subs bring their noise with
+them. That is why the pipeline switches SNR weighting on by itself once mixed exposures are
+detected, rather than letting the user end up in the worse half. Uniform exposures leave the
+result bit-for-bit unchanged.
+
+*Built, measured and removed again:* DeepSkyStacker's "Entropy Weighted Average". A satellite
+trail carries the highest local variance of anything in the frame and therefore receives the
+highest weight. On the same series the trail then stood at **0.845 against a sky of 0.036** (sigma
+with exposures: 0.013 against 0.010, i.e. essentially gone), and the sky variance rose by a factor
+of **414**. The method reliably promotes exactly the artefacts that are supposed to be rejected.
+The reasoning stays in the code and a test keeps the method from coming back.
+
+**Mask system** (`core/masken.py`, `--astro-hintergrund-entrauschen`, `--astro-nebelkontrast`).
+This is what really separates a fixed tool chain from PixInsight: there, every step can be applied
+only where it belongs. Denoise into the background, local contrast into the nebulosity. On real
+data (10 subs of M27, stacked, stretched):
+
+| | sky noise | star peak |
+|---|---|---|
+| untreated | 0.0252 | 0.948 |
+| denoise without mask | 0.0155 | 0.919 |
+| denoise **with** mask | 0.0161 | **0.938** |
+| local contrast without mask | 0.0640 | — |
+| local contrast **with** mask | **0.0255** | — |
+
+The mask costs almost nothing in effect and prevents the damage. *Honestly:* local contrast does
+not help M27 even masked (0.0406 → 0.0343 inside the nebulosity) — CLAHE compresses more there
+than it brings out. In this case the mask only limits the damage.
+
+**Three defects this measuring exposed:**
+- **Star detection used `cv2.subtract`**, which clips negative values to 0. That flattens half the
+  noise distribution, the MAD collapses to 0 and the threshold falls back to its floor of 3/255.
+  On a real sub: **MAD 0.000 instead of 10.378, threshold 3.0 instead of 51.9, 39.9 % of pixels
+  flagged as star candidates instead of 4.0 %.** Invisible on linear subs, devastating on
+  stretched ones.
+- **Every blob from ONE pixel upwards counted as a star** (`area < 1` excluded nothing). With a
+  minimum area of 4: 165 → 70 blobs linear, 8313 → 2079 stretched.
+- **`synthstar` ran on the stretched image.** There the star mask covered 65 %, re-rendering cost
+  27 % of the total flux and halved the sky. It now runs on the LINEAR data (mask 0.13 %, total
+  flux 1.0000) **and** carries an emergency brake: above 10 % mask coverage the image is left
+  alone.
+
+*Side finding, fixed along the way:* an unknown stacking method fell **silently** into the sigma
+branch. Through the library interface a typo would have quietly computed something other than
+what was asked for.
+
 ### Siril and PixInsight counterparts — four small tools and two post-processing steps
 
 **`--astro-stretch-mode ddp` — Digital Development (Okano).** The curve `y = x/(x+k)` with the

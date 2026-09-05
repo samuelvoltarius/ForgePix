@@ -7,6 +7,89 @@ Alle nennenswerten Änderungen an ForgePix. Format orientiert an
 [SemVer](https://semver.org/lang/de/).
 
 ## [Unreleased]
+### Sternformen, Kometen, gemischte Belichtungen und ein Maskensystem
+
+**Sternformen neu setzen** (`--astro-synthstar`). Koma am Bildrand, Sensorverkippung und
+Nachführfehler verformen die STERNE, während der Nebel es kaum zeigt. Rechnerisch entzerren
+lässt sich das nicht — die Sterne aber neu setzen: messen, entfernen, als runde Moffat-Profile
+mit demselben Fluss zurückschreiben. An echten Daten (M27, ASI294MC Pro, 300 s, künstlicher
+Nachführfehler von 7 px): **Verformung 0,790 → 0,388 bei einem Gesamtfluss von 1,0000** und
+unangetastetem Nebel. Dieselbe Aufnahme ohne Nachführfehler misst 0,420 — das Ergebnis landet
+also auf dem Niveau eines Bildes, das den Fehler nie hatte. Moffat statt Gauss, weil echte
+Sterne durch das Seeing breitere Flanken haben; Gauss-Sterne wirken wie aufgeklebte Punkte.
+*Ehrliche Grenze, auch im Hilfetext:* die Sternform wird dabei erfunden. Was auf dem Sensor
+eine Linie war, wird ein runder Punkt — für Photometrie und Astrometrie ist das Ergebnis
+unbrauchbar.
+
+**Kometen-Stacking auf den Kern** (`--astro-komet`). Ein Komet wandert zwischen den Aufnahmen
+vor den Sternen; sternausgerichtet wird er zum Streifen — genau das Objekt, wegen dem die Nacht
+draussen verbracht wurde. Siril und die meisten anderen verlangen, den Kern in zwei Frames
+**anzuklicken**. Hier findet ihn das Programm selbst: Median der sternausgerichteten Frames
+abziehen, im Rest den hellsten *ausgedehnten* Fleck suchen (die Mindestfläche schliesst
+Rauschspitzen aus — ein Komet ist diffus), und durch die Fundorte eine robuste Gerade legen.
+Gegen eine bekannte Bahn geprüft: **Kern in 12 von 12 Frames gefunden, Rest zur Geraden 0,33 px,
+grösster Fehler 1,30 px, Spitzenhelligkeit des Kerns Faktor 3,75.** Die Zeitachse kommt aus
+`DATE-OBS`, wenn vorhanden — bei Wolkenpausen sind die Abstände ungleich. Fehlt der Zeitstempel,
+wird das gemeldet statt stillschweigend die Bildnummer zu nehmen.
+
+**Gemischte Belichtungszeiten.** Der offensichtliche Teil ist der Pegel; der wichtigere ist die
+Ausreisser-Erkennung: ohne Zeitangabe vergleicht das Sigma-Clipping ein 60-s-Sub mit einem
+300-s-Sub und hält das kurze für einen Ausreisser — es verschwendet sein Verwurfsbudget auf die
+kurzen Subs und lässt dafür echte Störungen stehen. Gemessen (12 Subs, ein Satellit in einem
+kurzen Sub):
+
+| | SNR | Satellitenrest |
+|---|---|---|
+| sigma ohne Zeiten | 87,0 | 0,0423 |
+| sigma mit Zeiten | 66,4 | 0,0161 |
+| sigma mit Zeiten + Gewicht | **85,8** | **0,0161** |
+
+Skalieren *allein* kostet also Rauschabstand — die hochgerechneten kurzen Subs bringen ihr
+Rauschen mit. Deshalb schaltet die Pipeline bei erkannt gemischten Zeiten die SNR-Gewichtung
+selbst mit, statt den Nutzer in die schlechtere Hälfte laufen zu lassen. Einheitliche Zeiten
+ändern das Ergebnis Bit für Bit nicht.
+
+*Gebaut, gemessen und wieder ausgebaut:* DeepSkyStackers „Entropy Weighted Average". Eine
+Satellitenspur trägt die höchste örtliche Streuung überhaupt und bekommt damit das höchste
+Gewicht. Auf derselben Serie stand die Spur danach bei **0,845 gegen einen Himmel von 0,036**
+(Sigma mit Zeiten: 0,013 gegen 0,010, also praktisch weg), und die Himmelsstreuung stieg auf das
+**414-fache**. Das Verfahren belädt zuverlässig genau die Störungen, die weggerechnet werden
+sollen. Begründung steht im Code, ein Test hält fest, dass die Methode nicht zurückkommt.
+
+**Maskensystem** (`core/masken.py`, `--astro-hintergrund-entrauschen`, `--astro-nebelkontrast`).
+Das ist der eigentliche Unterschied zwischen einer Kette fester Werkzeuge und PixInsight: dort
+lässt sich jeder Schritt nur dort anwenden, wo er hingehört. Entrauschen in den Hintergrund,
+lokaler Kontrast in den Nebel. An echten Daten (10 Subs M27, gestapelt, gestreckt):
+
+| | Himmelrauschen | Sternspitze |
+|---|---|---|
+| unbehandelt | 0,0252 | 0,948 |
+| Entrauschen ohne Maske | 0,0155 | 0,919 |
+| Entrauschen **mit** Maske | 0,0161 | **0,938** |
+| lokaler Kontrast ohne Maske | 0,0640 | — |
+| lokaler Kontrast **mit** Maske | **0,0255** | — |
+
+Die Maske kostet fast nichts an Wirkung und verhindert den Schaden. *Ehrlich dazu:* der lokale
+Kontrast hilft M27 auch maskiert nicht (im Nebel 0,0406 → 0,0343) — CLAHE komprimiert dort mehr,
+als es hervorholt. Die Maske begrenzt in diesem Fall nur den Schaden.
+
+**Drei Fehler, die erst durch dieses Messen sichtbar wurden:**
+- **Die Sternerkennung rechnete mit `cv2.subtract`**, das negative Werte auf 0 abschneidet. Damit
+  ist die halbe Rauschverteilung platt, MAD fällt auf 0 und die Schwelle rutscht auf ihren
+  Notwert von 3/255. An einem echten Sub: **MAD 0,000 statt 10,378, Schwelle 3,0 statt 51,9,
+  39,9 % der Pixel als Sternkandidat statt 4,0 %.** Auf linearen Subs fällt das nicht auf, auf
+  gestreckten ist es verheerend.
+- **Jeder Blob ab EINEM Pixel galt als Stern** (`area < 1` schloss nichts aus). Mit Mindestfläche
+  4: linear 165 → 70 Blobs, gestreckt 8313 → 2079.
+- **`synthstar` lief auf dem gestreckten Bild.** Dort deckte die Sternmaske 65 % ab, das
+  Neusetzen kostete 27 % des Gesamtflusses und halbierte den Himmel. Jetzt auf den LINEAREN
+  Daten (Maske 0,13 %, Gesamtfluss 1,0000) **und** mit Notbremse: über 10 % Maskendeckung bleibt
+  das Bild unangetastet.
+
+*Nebenbefund, mit behoben:* eine unbekannte Stacking-Methode fiel **still** in den Sigma-Zweig.
+Über die Bibliotheks-Schnittstelle hätte ein Tippfehler klaglos etwas anderes gerechnet als
+verlangt.
+
 ### Siril- und PixInsight-Gegenstücke — vier kleine Werkzeuge und zwei Nachbearbeitungsschritte
 
 **`--astro-stretch-mode ddp` — Digital Development nach Okano.** Die Kurve `y = x/(x+k)` mit dem
