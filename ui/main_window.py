@@ -874,6 +874,7 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         self.ghost_map = QCheckBox(tr("Geister-Karte erzeugen (zeigt Bewegungszonen)"))
         self.deghost = QCheckBox(tr("Deghost (Bewegungszonen entdoppeln)"))
         self.alt_merge = QCheckBox(tr("Zweite Verschmelzung als Retusche-Quelle mitrechnen"))
+        self.slabs = QSpinBox(); self.slabs.setRange(0, 99); self.slabs.setValue(0)
         self.prefix = QLineEdit("stack_")
         self.nostack = QCheckBox(tr("Nur Auswahl (nicht zusammenrechnen)"))
         kg.addWidget(QLabel(tr("Nachschärfen")), 0, 0); kg.addWidget(self.sharpen, 0, 1)
@@ -918,6 +919,13 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
                               "glatte Flächen sauber, die Pyramide holt Detail an Haaren und "
                               "Borsten — eine als Basis nehmen, die Stärken der anderen "
                               "hineinpinseln. Kostet einen zweiten Verschmelzungs-Durchgang."), 11, 2)
+        kg.addWidget(QLabel(tr("Gruppen zu je (Slabs)")), 15, 0); kg.addWidget(self.slabs, 15, 1)
+        kg.addWidget(help_btn("Verschmilzt die Serie zusätzlich in Gruppen benachbarter Aufnahmen "
+                              "und legt die Teilergebnisse als Pinselquellen ab (0 = aus). Nützlich, "
+                              "wo ein unscharfer Vordergrund durchscheint: dort malt man die Gruppe "
+                              "darüber, die nur die vorderen Aufnahmen enthält. Das Endergebnis "
+                              "bleibt unverändert — gemessen bringt Gruppieren beim automatischen "
+                              "Verschmelzen keinen Vorteil, der Nutzen liegt im Übermalen."), 15, 2)
         self.focus_radius = QDoubleSpinBox(); self.focus_radius.setRange(-1.0, 50.0)
         self.focus_radius.setSingleStep(1.0); self.focus_radius.setValue(-1.0)
         self.focus_smoothing = QDoubleSpinBox(); self.focus_smoothing.setRange(-1.0, 20.0)
@@ -1660,6 +1668,8 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
             args += ["--deghost"]
         if self.alt_merge.isChecked():
             args += ["--alt-merge"]
+        if self.slabs.value() >= 2:
+            args += ["--slabs", str(self.slabs.value())]
         if self.dedup.isChecked():
             args += ["--dedup", "--dup-thresh", str(self.dupthresh.value())]
         if self.reject_blurry.isChecked():
@@ -2589,9 +2599,16 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
                 im = imread(os.path.join(wd, fn), cv2.IMREAD_UNCHANGED)
                 if im is None:
                     continue
-                verfahren = os.path.splitext(fn)[0].replace("altmerge_", "")
+                kennung = os.path.splitext(fn)[0].replace("altmerge_", "")
                 srcs.append(im)
-                names.append(tr("Verschmelzung: %s") % verfahren)
+                if kennung.startswith("slab"):
+                    # altmerge_slab02_04-06 -> "Gruppe 2 (Aufnahmen 4-6)"
+                    teile = kennung.split("_")
+                    nr = teile[0][4:].lstrip("0") or "1"
+                    spanne = teile[1] if len(teile) > 1 else "?"
+                    names.append(tr("Gruppe %s (Aufnahmen %s)") % (nr, spanne))
+                else:
+                    names.append(tr("Verschmelzung: %s") % kennung)
         except OSError:
             pass
         return srcs, names

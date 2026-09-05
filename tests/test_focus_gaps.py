@@ -386,6 +386,59 @@ class TestZweiteVerschmelzung(unittest.TestCase):
         finally:
             shutil.rmtree(d, ignore_errors=True)
 
+    def test_f8_slabs_legen_teilverschmelzungen_ab(self):
+        """`--slabs N`: Teilverschmelzungen über Gruppen benachbarter Aufnahmen als
+        Pinselquellen — und das ENDERGEBNIS bleibt davon unberührt.
+
+        Bewusst ohne Eingriff ins Zusammenrechnen: an einem synthetischen Fall mit
+        transparentem Vordergrund gemessen macht Gruppieren beim automatischen Verschmelzen
+        keinen Unterschied (flach 59.6, Baum-Merge 58.7, Slabs zu 3/4/6: 59.0/58.9/59.1 bei
+        Sollwert 60.0). Der Nutzen liegt darin, die Gruppen einzeln übermalen zu können."""
+        import subprocess
+        import glob
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        d = tempfile.mkdtemp(prefix="fp_slab_")
+        try:
+            ein = os.path.join(d, "in"); os.makedirs(ein)
+            for i, f in enumerate(self._serie(n=6)):
+                cv2.imencode(".jpg", f)[1].tofile(os.path.join(ein, "f_%02d.jpg" % i))
+            wd = os.path.join(d, "work")
+            r = subprocess.run([sys.executable, "-u", os.path.join(root, "core", "focus_cull_stack.py"),
+                                "--input", ein, "--work", wd, "--slabs", "3"],
+                               capture_output=True, cwd=root, timeout=600)
+            self.assertEqual(r.returncode, 0, r.stderr.decode("utf-8", "replace")[-500:])
+            slabs = sorted(glob.glob(os.path.join(wd, "altmerge_slab*.tif")))
+            self.assertGreaterEqual(len(slabs), 2, f"zu wenige Slabs abgelegt: {slabs}")
+            # Der Name muss die enthaltenen Aufnahmen nennen (wird in der GUI zur Bezeichnung)
+            self.assertRegex(os.path.basename(slabs[0]), r"altmerge_slab\d\d_\d\d-\d\d\.tif")
+            for sp in slabs:
+                self.assertIsNotNone(cv2.imdecode(np.fromfile(sp, np.uint8), cv2.IMREAD_UNCHANGED))
+            # Endergebnis existiert und ist unabhaengig davon entstanden
+            self.assertTrue(glob.glob(os.path.join(wd, "stack", "*_stk.*")))
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+    def test_f8_slabs_aus_bei_null_oder_eins(self):
+        """0 und 1 sind sinnlose Gruppengroessen und duerfen nichts ausloesen."""
+        import subprocess
+        import glob
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        d = tempfile.mkdtemp(prefix="fp_slab0_")
+        try:
+            ein = os.path.join(d, "in"); os.makedirs(ein)
+            for i, f in enumerate(self._serie(n=4)):
+                cv2.imencode(".jpg", f)[1].tofile(os.path.join(ein, "f_%02d.jpg" % i))
+            for wert in ("0", "1"):
+                wd = os.path.join(d, "work" + wert)
+                r = subprocess.run([sys.executable, "-u", os.path.join(root, "core", "focus_cull_stack.py"),
+                                    "--input", ein, "--work", wd, "--slabs", wert],
+                                   capture_output=True, cwd=root, timeout=600)
+                self.assertEqual(r.returncode, 0)
+                self.assertEqual(glob.glob(os.path.join(wd, "altmerge_slab*.tif")), [],
+                                 f"--slabs {wert} haette nichts erzeugen duerfen")
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
     def test_f8_ohne_schalter_keine_zweite_datei(self):
         """Gegenprobe: ohne --alt-merge darf der zweite Durchgang nicht laufen (er kostet Zeit)."""
         import subprocess

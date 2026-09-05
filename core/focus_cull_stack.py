@@ -1011,6 +1011,29 @@ def run_own_engine(selected_dir, work_dir, args):
             except Exception as e:
                 print(f"  (zweite Verschmelzung uebersprungen: {e})", file=sys.stderr)
 
+        # Slabbing: Teilverschmelzungen ueber Gruppen benachbarter Aufnahmen, als Pinselquellen.
+        # BEWUSST ohne Aenderung am Endergebnis: gemessen an einem synthetischen Fall mit
+        # transparentem Vordergrund macht Gruppieren beim automatischen Verschmelzen keinen
+        # Unterschied (flach 59.6, Baum 58.7, Slabs zu 3/4/6: 59.0/58.9/59.1 bei Soll 60.0 —
+        # flach war sogar minimal am besten). Der Nutzen von Slabbing liegt darin, die
+        # Teilergebnisse EINZELN zum Uebermalen zu haben, nicht im Zusammenrechnen.
+        _slab = int(getattr(args, "slabs", 0) or 0)
+        if _slab >= 2 and len(imgs) > _slab:
+            try:
+                gruppen = [imgs[i:i + _slab] for i in range(0, len(imgs), _slab)]
+                print(f"  Slabs: {len(gruppen)} Gruppen zu je bis zu {_slab} Aufnahmen …")
+                for gi, gruppe in enumerate(gruppen, 1):
+                    if len(gruppe) < 2:
+                        continue
+                    von = (gi - 1) * _slab + 1
+                    bis = von + len(gruppe) - 1
+                    sl = _merge1(gruppe)
+                    sp = os.path.join(work_dir, f"altmerge_slab{gi:02d}_{von:02d}-{bis:02d}.tif")
+                    if imwrite(sp, to_uint8(sl) if sl.dtype != np.uint8 else sl):
+                        print(f"    Slab {gi} (Aufnahmen {von}-{bis}): {sp}")
+            except Exception as e:
+                print(f"  (Slabs uebersprungen: {e})", file=sys.stderr)
+
         if getattr(args, "ghost_map", False) and len(imgs) >= 3:
             gm = stacker.ghost_overlay(result, imgs)
             gm_path = os.path.join(work_dir, "ghostmap.jpg")
@@ -1326,6 +1349,12 @@ def main():
                     help="Paarweise/sequenzielle Ausrichtung (jedes Frame auf den Nachbarn, "
                          "aufkumuliert) statt aufs globale Referenzbild — robuster bei großem "
                          "Fokusbereich / Stativ-Reihen")
+    ap.add_argument("--slabs", type=int, default=0, metavar="N",
+                    help="Serie zusaetzlich in Gruppen zu je N Aufnahmen verschmelzen und die "
+                         "Teilergebnisse ablegen (Zerene-'Slabbing'). Sie werden Pinselquellen in "
+                         "der Retusche: an einer Stelle, wo ein unscharfer Vordergrund durchscheint, "
+                         "malt man den Slab darueber, der nur die vorderen Aufnahmen enthaelt. "
+                         "Das ENDERGEBNIS bleibt unveraendert")
     ap.add_argument("--alt-merge", action="store_true",
                     help="Zusaetzlich mit dem KOMPLEMENTAEREN Verfahren verschmelzen und ablegen "
                          "(Pyramide <-> Tiefenkarte). Dient als Pinselquelle in der Retusche: "
