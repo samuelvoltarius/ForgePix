@@ -7,6 +7,62 @@ All notable changes to ForgePix. Format based on
 [SemVer](https://semver.org/).
 
 ## [Unreleased]
+### Siril and PixInsight counterparts — four small tools and two post-processing steps
+
+**`--astro-stretch-mode ddp` — Digital Development (Okano).** The curve `y = x/(x+k)` with the
+sky level `k` as its inflection point: weak signal is lifted hard, bright areas are compressed so
+stars do not turn into white blobs. The honest comparison is not against the original but against
+a stretch that **blows out just as much** — at 135 versus 134 blown pixels, DDP delivers **2.2x
+the nebula contrast** of a gamma curve (0.18 versus 0.083). A gamma curve could not reach that
+contrast at all: it peaked at 0.098 and fell again afterwards. Optionally with the unsharp mask
+that belongs to the original (`--astro-ddp-schaerfe`).
+
+**`--astro-unpurple` — purple fringing around bright stars.** Optics focus blue and red in a
+different plane than green, which leaves a magenta halo. The give-away is that **both** channels
+sit above green — something that essentially does not occur in real astronomical objects. That is
+what the correction tests for, instead of simply damping magenta: the magenta share drops from
+0.0020 to 0.0002 while a red Hα nebula in the same frame stays **unchanged to five decimal
+places**. Mistaking Hα for a colour defect would have been the most expensive possible error
+here.
+
+**`--dark-skalieren` — rescale a master dark to a different exposure time/temperature.**
+The trap is in the physics: dark current grows linearly with time (and doubles about every 6 °C),
+but the **bias pedestal does not**. Multiplying the dark scales the pedestal along with it —
+measured error 0.020, whereas `bias + (dark − bias) · factor` hits the truth **exactly**. Without
+a bias frame the pedestal is estimated from the 1st percentile, which on a realistic dark (most
+pixels with almost no dark current plus a tail of hot pixels) is still **35x closer** than naive
+doubling (0.0006 versus 0.020). The limit is documented and pinned down by a test: with dark
+current uniform across the sensor the estimate misses, and only a real bias frame helps.
+When the exposure times of lights and darks do not match, the pipeline now **warns** even without
+this switch — but only rescales when explicitly told to, because for the IMX294 (ASI294MC Pro)
+the manufacturer explicitly advises against it.
+
+**`astro.linear_match()` — put one image on the linear scale of another.** For two nights, two
+filters, two sessions at different levels. Robust fit with iterative outlier rejection so the
+line follows the background and the nebula rather than a few bright stars: mean deviation
+0.130 → 0.0005, and with outliers present the robust variant is 27x more accurate than the plain
+one (0.0005 versus 0.0144).
+
+**Local contrast and edge-preserving denoise** (counterparts to the PixInsight processes
+`LocalHistogramEqualization` and `TGVDenoise`). Both building blocks already existed but were
+unreachable: CLAHE sat in `hdr.py` (at 0 in every preset there), the TV step only *inside*
+deconvolution against ringing. Both now act on **luminance only** — otherwise the channels tilt
+against each other and colour blotches appear.
+- **An OpenCV trap found along the way:** `cv2.createCLAHE` **ignores `clipLimit` for 16-bit
+  input**. The limit is computed as `clipLimit × tile area / histogram size`; with 65536 bins that
+  falls below 1 and rounds to zero — so no clipping happens at all, just full histogram
+  equalisation with the noise pulled up. Measured, `clipLimit` 1, 2, 4 and 8 produced
+  **bit-identical** results (std 13337.7 for all four), versus 6.5 against 16.2 in 8-bit. Now
+  luminance is equalised in 8-bit and applied as a *ratio* at full precision. On a real result
+  (NGC7380): local contrast 0.183 → 0.194 / 0.209 / 0.241 / 0.274 — properly graded, where every
+  step used to be identical.
+- **TV denoise:** noise 0.1084 → 0.0960 (−11 %) at only −5 % local contrast, so it removes more
+  noise than detail.
+
+In the interface, purple fringing and dark rescaling live under "Advanced"; the image style sets
+purple fringing along with it (off for "Natural", full for "Emphasise stars" — emphasising stars
+is exactly when the fringe shows most). 17 new tests (272 → 289, all green).
+
 ### Astro pass on real data — stretching, filter knowledge, equipment
 Everything below was measured on Alfred's own frames (ASI294MC Pro, 120 s, gain 121, −10 °C,
 SVBONY SV220 7 nm dual-band — without darks and flats, which do not exist for this camera).

@@ -7,6 +7,64 @@ Alle nennenswerten Änderungen an ForgePix. Format orientiert an
 [SemVer](https://semver.org/lang/de/).
 
 ## [Unreleased]
+### Siril- und PixInsight-Gegenstücke — vier kleine Werkzeuge und zwei Nachbearbeitungsschritte
+
+**`--astro-stretch-mode ddp` — Digital Development nach Okano.** Die Kurve `y = x/(x+k)` mit dem
+Himmelspegel `k` als Wendepunkt: schwaches Signal wird kräftig angehoben, Helles komprimiert,
+sodass Sterne keine weißen Klumpen werden. Der ehrliche Vergleich ist nicht der gegen das
+Original, sondern der gegen eine Streckung, die **gleich viel ausbrennt** — bei 135 gegen 134
+ausgebrannten Pixeln erreicht DDP den **2,2-fachen Nebelkontrast** einer Gamma-Kurve
+(0,18 gegen 0,083). Eine Gamma-Kurve kam an diesen Kontrast überhaupt nicht heran: ihr Maximum
+lag bei 0,098, danach fiel er wieder. Optional mit Unschärfemaskierung
+(`--astro-ddp-schaerfe`), die im Original dazugehört.
+
+**`--astro-unpurple` — Violettsaum um helle Sterne.** Die Optik bündelt Blau und Rot in einer
+anderen Ebene als Grün, darum bleibt ein magentafarbener Hof stehen. Erkennungsmerkmal ist, dass
+**beide** Kanäle über Grün liegen — das gibt es in echten astronomischen Objekten praktisch
+nicht. Genau darauf prüft die Korrektur, statt einfach Magenta zu dämpfen: gemessen sinkt der
+Magenta-Anteil von 0,0020 auf 0,0002, während ein roter Hα-Nebel im selben Bild **auf fünf
+Nachkommastellen unverändert** bleibt. Der teuerste denkbare Fehlgriff wäre gewesen, Hα für
+einen Farbfehler zu halten.
+
+**`--dark-skalieren` — Master-Dark auf eine andere Belichtungszeit/Temperatur umrechnen.**
+Die Falle steckt in der Physik: der Dunkelstrom wächst linear mit der Zeit (und verdoppelt sich
+je rund 6 °C), der **Bias-Sockel aber nicht**. Wer das Dark einfach multipliziert, skaliert den
+Sockel mit — gemessen ein Fehler von 0,020, während `bias + (dark − bias) · Faktor` die Wahrheit
+**exakt** trifft. Ohne Bias-Frame wird der Sockel aus dem 1. Perzentil geschätzt, was an einem
+realistischen Dark (die meisten Pixel fast ohne Dunkelstrom, dazu ein Schwanz heißer Pixel)
+immer noch **35-mal näher** liegt als das naive Verdoppeln (0,0006 gegen 0,020). Die Grenze ist
+mitdokumentiert und als Test festgehalten: bei über die Fläche gleichmäßigem Dunkelstrom greift
+die Schätzung daneben, dort hilft nur ein echtes Bias-Frame.
+Passen die Zeiten von Lights und Darks nicht zusammen, **warnt** die Pipeline jetzt auch ohne
+diesen Schalter — umgerechnet wird aber nur auf ausdrückliche Anweisung, denn für den IMX294
+(ASI294MC Pro) rät der Hersteller ausdrücklich davon ab.
+
+**`astro.linear_match()` — ein Bild auf die lineare Skala eines anderen ziehen.** Für zwei
+Nächte, zwei Filter, zwei Sessions mit unterschiedlichen Pegeln. Robuste Anpassung mit
+iterativem Ausreißer-Verwurf, damit die Gerade dem Hintergrund und dem Nebel folgt und nicht ein
+paar hellen Sternen: mittlere Abweichung 0,130 → 0,0005, mit Ausreißern im Bild ist die robuste
+Variante 27-mal genauer als die einfache (0,0005 gegen 0,0144).
+
+**Lokaler Kontrast und kantenerhaltendes Entrauschen** (Gegenstücke zu PixInsights
+`LocalHistogramEqualization` und `TGVDenoise`). Beide Bausteine waren schon da, aber nicht
+erreichbar: CLAHE steckte in `hdr.py` (dort in allen Voreinstellungen auf 0), der TV-Schritt nur
+*innerhalb* der Dekonvolution gegen Ringing. Beide wirken jetzt **nur auf die Helligkeit**, sonst
+kippen die Kanäle gegeneinander und es entstehen Farbflecken.
+- **Dabei eine OpenCV-Falle gefunden:** `cv2.createCLAHE` **ignoriert den `clipLimit` bei
+  16-bit-Eingabe**. Die Grenze wird als `clipLimit × Kachelfläche / Histogrammgröße` gerechnet;
+  bei 65536 Klassen wird das kleiner als 1 und rundet auf null — es findet also gar keine
+  Begrenzung statt, sondern volle Histogrammausgleichung samt hochgezogenem Rauschen. Gemessen
+  lieferten `clipLimit` 1, 2, 4 und 8 **bitgleiche** Ergebnisse (Std 13337,7 bei allen vieren),
+  in 8 bit dagegen 6,5 gegen 16,2. Jetzt wird in 8 bit ausgeglichen und das Ergebnis als *Faktor*
+  auf die volle Genauigkeit angewandt. An einem echten Ergebnis (NGC7380): lokaler Kontrast
+  0,183 → 0,194 / 0,209 / 0,241 / 0,274 — sauber gestuft, vorher waren alle Stufen identisch.
+- **TV-Entrauschen:** Rauschen 0,1084 → 0,0960 (−11 %) bei nur −5 % lokalem Kontrast, es nimmt
+  also mehr Rauschen als Detail.
+
+In der Oberfläche sind Violettsaum und Dark-Skalierung unter „Erweitert" erreichbar; der
+Bildstil setzt den Violettsaum mit (bei „Naturgetreu" aus, bei „Sterne betonen" voll — wer Sterne
+betont, sieht den Saum am stärksten). 17 neue Tests (272 → 289, alle grün).
+
 ### Astro-Pass an echten Daten — Streckung, Filterkunde, Ausrüstung
 Alles Folgende wurde an Alfreds eigenen Aufnahmen gemessen (ASI294MC Pro, 120 s, Gain 121,
 −10 °C, SVBONY SV220 7 nm Dual-Band — ohne Darks und Flats, die es für diese Kamera nicht gibt).

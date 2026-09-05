@@ -1203,10 +1203,11 @@ def main():
     ap.add_argument("--astro-local-norm", action="store_true",
                     help="Astro: lokale Normalisierung (örtlicher Hintergrundabgleich pro Frame VOR "
                          "der Rejection) — gegen Gradienten & Mehrfach-Sessions")
-    ap.add_argument("--astro-stretch-mode", choices=["asinh", "mtf", "ghs"], default="mtf",
+    ap.add_argument("--astro-stretch-mode", choices=["asinh", "mtf", "ghs", "ddp"], default="mtf",
                     help="Astro-Streckung: asinh (Standard), mtf (MTF/Histogramm, reversibel, "
-                         "definierter Schwarzpunkt — PixInsight-AutoSTF-Stil) oder ghs "
-                         "(Generalised Hyperbolic Stretch, voll parametrisch)")
+                         "definierter Schwarzpunkt — PixInsight-AutoSTF-Stil), ghs "
+                         "(Generalised Hyperbolic Stretch, voll parametrisch) oder ddp "
+                         "(Digital Development nach Okano — hält Sterne klein)")
     ap.add_argument("--astro-ghs-d", type=float, default=2.5,
                     help="GHS-Intensität D (höher = aggressiver; nur bei --astro-stretch-mode ghs)")
     ap.add_argument("--astro-ghs-b", type=float, default=-0.5,
@@ -1242,6 +1243,19 @@ def main():
                     help="Ausgefressene Sternkerne entsaettigen: die Sternfarbe aus den intakten "
                          "Flanken zurueckholen, damit helle Sterne nicht als weisse Scheiben "
                          "dastehen (Siril: unclipstars/Desaturate Stars)")
+    ap.add_argument("--astro-unpurple", type=float, default=0.0, metavar="STAERKE",
+                    help="Violettsaum um helle Sterne daempfen (0=aus, 1.0=voll). Die Optik "
+                         "buendelt Blau und Rot in einer anderen Ebene als Gruen; behandelt wird "
+                         "nur, wo BEIDE ueber Gruen liegen — roter Ha-Nebel bleibt unberuehrt "
+                         "(Siril: unpurple)")
+    ap.add_argument("--astro-ddp-schaerfe", type=float, default=0.0, metavar="STAERKE",
+                    help="Unschaerfemaskierung innerhalb der DDP-Kurve (0=aus, 0.3-0.8 sinnvoll) "
+                         "— nur bei --astro-stretch-mode ddp. Im Original gehört sie dazu, "
+                         "weil die Kompression sonst flau wirkt")
+    ap.add_argument("--dark-skalieren", action="store_true",
+                    help="Master-Dark auf die Belichtungszeit/Temperatur der Lights umrechnen, wenn "
+                         "sie nicht passt (Siril: calibrate -opt). Der Bias wird dabei NICHT "
+                         "mitskaliert. Fuer IMX294 (ASI294MC Pro) raet der Hersteller davon ab")
     ap.add_argument("--astro-banding", type=float, default=0.0, metavar="STAERKE",
                     help="Zeilen-Banding je Sub entfernen (0=aus, 1.0=voll). Sensor-Ausleseversatz, "
                          "den Dark/Flat/Bias NICHT beseitigen — er ist je Aufnahme anders und "
@@ -1674,6 +1688,27 @@ def run_astro(input_dir, work_dir, args):
         else:
             print("  (Bias steckt im Dark-Master — nur das Flat wird bias-korrigiert)")
 
+    # Belichtungszeiten von Lights und Darks vergleichen. Ein Dark mit anderer Zeit zieht
+    # entweder zu wenig oder zu viel ab — beides sieht man später im Hintergrund. Skaliert
+    # wird aber NUR auf ausdrückliche Anweisung: für manche Sensoren (IMX294) raten die
+    # Hersteller davon ab, weil ihr Glow nicht linear mitläuft.
+    if dark is not None:
+        _lp = paths[0] if paths else None
+        _dp, _dt = None, None
+        _dspec = getattr(args, "dark", None)
+        if _dspec:
+            _dp = (list_images(_dspec) or [None])[0] if os.path.isdir(_dspec) else _dspec
+            _dt = _belichtung(_dp)
+        _lt = _belichtung(_lp)
+        if _lt and _dt and abs(_lt - _dt) > max(0.05 * _dt, 0.5):
+            if getattr(args, "dark_skalieren", False):
+                dark = astro.dark_skalieren(dark, _lt, _dt, bias=bias,
+                                            ziel_temp=_ccd_temp(_lp), dark_temp=_ccd_temp(_dp))
+            else:
+                print("  Achtung: Lights %.0f s, Darks %.0f s — das Dark passt nicht. "
+                      "Mit --dark-skalieren umrechnen (bei IMX294/ASI294MC Pro besser NICHT)."
+                      % (_lt, _dt), file=sys.stderr)
+
     reg_dir = os.path.join(work_dir, "registered")
     if os.path.isdir(reg_dir):
         shutil.rmtree(reg_dir)
@@ -1733,6 +1768,33 @@ def run_astro(input_dir, work_dir, args):
     out = _astro_write(result, work_dir, paths, args, astro)
     shutil.rmtree(reg_dir, ignore_errors=True)
     return out
+
+
+def _fits_zahl(pfad, *felder):
+    """Ein Zahlenfeld aus einem FITS-Header lesen. Gibt None zurück, wenn es nicht geht —
+    JPEG/TIFF haben keinen Header, und das ist kein Fehler, sondern der Normalfall."""
+    if not pfad or os.path.splitext(pfad)[1].lower() not in (".fit", ".fits", ".fts"):
+        return None
+    try:
+        from astropy.io import fits
+        h = fits.getheader(pfad)
+    except Exception:
+        return None
+    for n in felder:
+        if n in h:
+            try:
+                return float(h[n])
+            except (TypeError, ValueError):
+                pass
+    return None
+
+
+def _belichtung(pfad):
+    return _fits_zahl(pfad, "EXPTIME", "EXPOSURE")
+
+
+def _ccd_temp(pfad):
+    return _fits_zahl(pfad, "CCD-TEMP", "SET-TEMP")
 
 
 def _detect_dualband(paths):
@@ -1983,6 +2045,11 @@ def _astro_write(result, work_dir, paths, args, astro):
         def _kurve(x):
             if _sm == "mtf":
                 return astro.mtf_stretch(x, saturation=sat)
+            if _sm == "ddp":
+                # DDP nach Okano: y = x/(x+k), k = Himmelspegel. Gemessen (synthetische Szene,
+                # Nebel gegen Himmel): bei gleicher Ausbrenn-Menge (135 gegen 134 Pixel) der
+                # 2,2-fache Nebelkontrast einer Gamma-Kurve — 0.18 gegen 0.083.
+                return astro.ddp(x, schaerfe=getattr(args, "astro_ddp_schaerfe", 0.0))
             if _sm == "ghs":
                 return astro.ghs_stretch(x, D=getattr(args, "astro_ghs_d", 2.5),
                                          b=getattr(args, "astro_ghs_b", -0.5),
@@ -2045,6 +2112,10 @@ def _astro_write(result, work_dir, paths, args, astro):
                                    filt=_filt, unmix=getattr(args, "unmix", None))
         else:
             view = _broadband(result)
+    _up = float(getattr(args, "astro_unpurple", 0.0) or 0.0)
+    if _up > 0:
+        view = astro.unpurple(view, staerke=_up)
+        print(f"  Violettsaum gedämpft (Stärke {_up:.2f})")
     out_view = os.path.join(stack_dir, f"{args.prefix}{base}_astro.jpg")
     imwrite(out_view, np.clip(view * 255, 0, 255).astype(np.uint8),
                 [int(cv2.IMWRITE_JPEG_QUALITY), 95])

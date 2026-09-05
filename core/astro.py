@@ -1147,6 +1147,158 @@ def stretch_starless(bgr, stretch_fn, star_strength=0.35, sensitivity=5.0, log=l
         f"{float(np.clip(star_strength,0,1)):.2f} zurueck")
     return np.clip(out, 0, 1)
 
+def linear_match(bild, referenz, robust=True):
+    """Ein Bild auf die lineare Skala eines anderen ziehen (Siril `linear_match`).
+
+    Wozu: zwei Nächte, zwei Filter, zwei Sessions — die Pegel unterscheiden sich, obwohl
+    dasselbe Objekt drin ist. Vor dem Zusammenrechnen oder Kombinieren müssen sie auf
+    dieselbe Skala. Gesucht sind a und b in  bild·a + b ≈ referenz.
+
+    `robust=True` verwirft Ausreißer iterativ (Sterne, kosmische Treffer, Satelliten), damit
+    die Anpassung dem HINTERGRUND und dem Nebel folgt und nicht ein paar hellen Punkten.
+    Gibt das angepasste Bild zurück; bei unbrauchbaren Eingaben unverändert das Original.
+    """
+    if bild is None or referenz is None:
+        return bild
+    a = np.asarray(bild, np.float32)
+    r = np.asarray(referenz, np.float32)
+    if a.shape != r.shape:
+        return bild
+    x = a.ravel().astype(np.float64)
+    y = r.ravel().astype(np.float64)
+    gueltig = np.isfinite(x) & np.isfinite(y)
+    if gueltig.sum() < 100:
+        return bild
+    x, y = x[gueltig], y[gueltig]
+    # Bei großen Bildern reicht eine Stichprobe — die Steigung ändert sich dadurch nicht.
+    if x.size > 500000:
+        idx = np.linspace(0, x.size - 1, 500000).astype(np.int64)
+        x, y = x[idx], y[idx]
+    behalten = np.ones(x.size, bool)
+    steigung, versatz = 1.0, 0.0
+    for _ in range(3 if robust else 1):
+        if behalten.sum() < 50:
+            break
+        steigung, versatz = np.polyfit(x[behalten], y[behalten], 1)
+        rest = y - (steigung * x + versatz)
+        mad = float(np.median(np.abs(rest - np.median(rest)))) * 1.4826 + 1e-12
+        behalten = np.abs(rest - np.median(rest)) <= 3.0 * mad
+        if not robust:
+            break
+    if not np.isfinite(steigung) or not np.isfinite(versatz) or abs(steigung) < 1e-9:
+        return bild
+    return np.clip(a * float(steigung) + float(versatz), 0, 1)
+
+
+def unpurple(f, staerke=1.0, schwelle=0.06):
+    """Violettsaum um helle Sterne dämpfen (Siril `unpurple`).
+
+    Wodurch er entsteht: die Optik bündelt Blau und Rot in einer anderen Ebene als Grün
+    (Farblängsfehler). Um helle Sterne bleibt dadurch ein magentafarbener Hof stehen — Rot UND
+    Blau liegen dort deutlich über Grün, was es in echten astronomischen Objekten praktisch
+    nicht gibt. Genau das ist das Erkennungsmerkmal.
+
+    Behandelt wird nur, wo BEIDE Kanäle über Grün liegen und es hell genug ist; Rot und Blau
+    werden dort anteilig zu Grün gezogen. Rein rote Nebel (Hα!) bleiben damit unangetastet —
+    das wäre sonst der teuerste Fehlgriff.
+    """
+    if f is None or staerke <= 0:
+        return f
+    a = np.asarray(f, np.float32)
+    if a.ndim != 3 or a.shape[2] != 3:
+        return f
+    b, g, r = a[..., 0], a[..., 1], a[..., 2]
+    ueber = np.minimum(b - g, r - g)              # nur wenn BEIDE über Grün liegen
+    hell = np.clip((np.maximum(b, r) - schwelle) / max(schwelle, 1e-6), 0, 1)
+    maske = np.clip(ueber / max(schwelle, 1e-6), 0, 1) * hell * float(np.clip(staerke, 0, 1))
+    out = a.copy()
+    out[..., 0] = b - maske * (b - g)
+    out[..., 2] = r - maske * (r - g)
+    return np.clip(out, 0, 1)
+
+
+def ddp(f, hintergrund=None, staerke=1.0, schaerfe=0.0):
+    """Digital Development Processing (Okano) — die klassische Astro-Tonwertkurve.
+
+    Die Idee stammt aus der Chemie: ein Film entwickelt sich nicht linear, sondern läuft in
+    die Sättigung. Die Kurve  y = x / (x + k)  tut dasselbe — sie hebt schwaches Signal kräftig
+    an und komprimiert die hellen Bereiche, sodass Sterne nicht zu weißen Klumpen werden.
+    `k` ist der Himmelspegel: dort liegt der Wendepunkt, unterhalb wird angehoben, oberhalb
+    komprimiert. Wird er nicht angegeben, misst ihn die Funktion selbst (Median).
+
+    `schaerfe` mischt optional eine leichte Unschärfemaskierung dazu — im Original gehört das
+    dazu, weil die Kompression sonst flau wirkt.
+    """
+    if f is None or staerke <= 0:
+        return f
+    a = np.clip(np.asarray(f, np.float32), 0, 1)
+    lum = _gray(a) if a.ndim == 3 else a
+    k = float(hintergrund) if hintergrund is not None else float(np.median(lum))
+    k = max(k, 1e-4)
+    neu = lum / (lum + k)
+    neu = neu / max(float(neu.max()), 1e-6)
+    if schaerfe > 0:
+        weich = cv2.GaussianBlur(neu, (0, 0), 2.0)
+        neu = np.clip(neu + float(schaerfe) * (neu - weich), 0, 1)
+    s = float(np.clip(staerke, 0.0, 1.0))
+    ziel = (1.0 - s) * lum + s * neu
+    if a.ndim == 2:
+        return np.clip(ziel, 0, 1)
+    faktor = ziel / np.maximum(lum, 1e-6)
+    return np.clip(a * faktor[..., None], 0, 1)
+
+
+def dark_skalieren(dark, ziel_belichtung, dark_belichtung, bias=None,
+                   ziel_temp=None, dark_temp=None, log=log_print):
+    """Master-Dark auf eine andere Belichtungszeit/Temperatur umrechnen (Siril `calibrate -opt`).
+
+    Physik dahinter, und warum es zwei Anteile sind:
+      * Der BIAS (Ausleseversatz) ist in jedem Frame gleich groß — er hängt NICHT von der
+        Belichtungszeit ab und darf darum NICHT mitskaliert werden.
+      * Der DUNKELSTROM wächst näherungsweise linear mit der Belichtungszeit und verdoppelt
+        sich je etwa 6 °C Temperaturanstieg.
+    Also:  dark_neu = bias + (dark − bias) · (t_ziel/t_dark) · 2^((T_ziel−T_dark)/6)
+
+    Ohne übergebenen Bias wird er aus dem Dark selbst geschätzt (1. Perzentil) — das funktioniert,
+    solange ein Teil des Sensors nahezu keinen Dunkelstrom hat, was bei echten Darks der Normalfall
+    ist (an echten Verhältnissen gemessen: Fehler 0.0006 gegenüber 0.020 beim naiven Verdoppeln,
+    also 35-mal besser). Bei einem Sensor mit über die Fläche GLEICHMÄSSIGEM Dunkelstrom greift die
+    Schätzung dagegen daneben — dort hilft nur ein echtes Bias-Frame. Deshalb wird ohne Bias
+    ausdrücklich gewarnt statt stillschweigend geraten.
+
+    WICHTIGE EINSCHRÄNKUNG: für manche Sensoren, allen voran den IMX294 der ASI294MC Pro,
+    raten die Hersteller ausdrücklich VON der Dark-Skalierung ab — der Glow skaliert dort nicht
+    sauber mit, und ein skaliertes Master passt schlechter als gar keins. Diese Funktion ist
+    ein Werkzeug, keine Empfehlung.
+    """
+    if dark is None:
+        return None
+    d = np.asarray(dark, np.float32)
+    try:
+        t_ziel, t_dark = float(ziel_belichtung), float(dark_belichtung)
+    except (TypeError, ValueError):
+        return d
+    if t_dark <= 0 or t_ziel <= 0:
+        return d
+    faktor = t_ziel / t_dark
+    if ziel_temp is not None and dark_temp is not None:
+        try:
+            faktor *= 2.0 ** ((float(ziel_temp) - float(dark_temp)) / 6.0)
+        except (TypeError, ValueError):
+            pass
+    if bias is None:
+        sockel = float(np.percentile(d, 1))
+        log("    Dark-Skalierung: kein Bias übergeben — Sockel aus dem Dark geschätzt (%.5f). "
+            "Nur brauchbar, wenn ein Teil des Sensors kaum Dunkelstrom zeigt." % sockel)
+    else:
+        sockel = np.asarray(bias, np.float32)
+    log("    Dark-Skalierung: Faktor %.3f (%.0f s -> %.0f s%s)"
+        % (faktor, t_dark, t_ziel,
+           ", %.1f -> %.1f °C" % (dark_temp, ziel_temp)
+           if (ziel_temp is not None and dark_temp is not None) else ""))
+    return np.clip(sockel + (d - sockel) * faktor, 0, None)
+
+
 def local_contrast(f, staerke=1.5, kacheln=8):
     """Lokaler Kontrast per CLAHE (PixInsight: LocalHistogramEqualization).
 

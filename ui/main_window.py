@@ -422,6 +422,9 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         self.astro_starless_stretch.setValue(-1.0)          # -1 = aus
         self.astro_color_stretch = QDoubleSpinBox(); self.astro_color_stretch.setRange(0.0, 3.0)
         self.astro_color_stretch.setSingleStep(0.1); self.astro_color_stretch.setValue(0.0)
+        self.astro_unpurple = QDoubleSpinBox(); self.astro_unpurple.setRange(0.0, 1.0)
+        self.astro_unpurple.setSingleStep(0.1); self.astro_unpurple.setValue(0.0)
+        self.dark_skalieren = QCheckBox(tr("Dark auf die Belichtungszeit der Lights umrechnen"))
         self.astro_unmix = QDoubleSpinBox(); self.astro_unmix.setRange(-1.0, 0.5)
         self.astro_unmix.setSingleStep(0.02); self.astro_unmix.setValue(-1.0)   # -1 = vom Filter
 
@@ -600,11 +603,25 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
                               "Kanalverhältnisse bleiben (0 = aus, 1.8 empfohlen). Gegen das "
                               "Ausgewaschene einer kanalweisen Streckung, bei der der stärkste "
                               "Kanal durchschlägt und alles zu Grau konvergiert."), 28, 3)
+        _lbl_pur = QLabel(tr("Violettsaum dämpfen"))
+        ar.addWidget(_lbl_pur, 29, 0)
+        ar.addWidget(self.astro_unpurple, 29, 1)
+        ar.addWidget(help_btn("Die Optik bündelt Blau und Rot in einer anderen Ebene als Grün, "
+                              "darum bleibt um helle Sterne ein magentafarbener Hof stehen "
+                              "(0 = aus, 1.0 = voll). Behandelt wird nur, wo BEIDE Kanäle über "
+                              "Grün liegen — roter Hα-Nebel bleibt unangetastet."), 29, 3)
+        ar.addWidget(self.dark_skalieren, 30, 0, 1, 3)
+        ar.addWidget(help_btn("Passt die Belichtungszeit der Darks nicht zu den Lights, wird das "
+                              "Master-Dark umgerechnet. Der Bias skaliert dabei NICHT mit — "
+                              "genau daran scheitert das naive Multiplizieren. Achtung: für den "
+                              "IMX294 (ASI294MC Pro) rät der Hersteller davon ab, weil der Glow "
+                              "dort nicht linear mitläuft."), 30, 3)
         # Alles Feine standardmaessig VERSTECKEN — sichtbar bleiben Filter und Bildstil.
         self._astro_erweitert_widgets = [
             _lbl_unmix, self.astro_unmix, _lbl_band, self.astro_banding, self.astro_banding_vert,
             self.astro_unclip, _lbl_red, self.astro_star_reduce,
             _lbl_sl, self.astro_starless_stretch, _lbl_col, self.astro_color_stretch,
+            _lbl_pur, self.astro_unpurple, self.dark_skalieren,
         ]
         for _w in self._astro_erweitert_widgets:
             _w.setVisible(False)
@@ -1574,15 +1591,17 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
     # Vorgaben je Bildstil. Werte aus den Messungen an echten Dual-Band-Daten:
     # farberhaltend 1.8 -> Saettigung 0.075 auf 0.510; Starless 0.35 -> ausgebrannte Pixel
     # 0.573 % auf 0.041 %; Sternverkleinerung 0.4 -> 0.528 % auf 0.260 %.
+    # Violettsaum: bei "natur" aus (er soll nichts anfassen), sonst dezent bis voll. Bei
+    # "sterne" bewusst voll — wer Sterne betont, sieht den Saum am staerksten.
     _ASTRO_STILE = {
         "natur":  {"banding": 0.0, "unclip": False, "star_reduce": 0.0,
-                   "starless": -1.0, "color": 0.0},
+                   "starless": -1.0, "color": 0.0, "unpurple": 0.0},
         "nebel":  {"banding": 0.0, "unclip": True, "star_reduce": 0.4,
-                   "starless": 0.35, "color": 1.8},
+                   "starless": 0.35, "color": 1.8, "unpurple": 0.5},
         "sterne": {"banding": 0.0, "unclip": True, "star_reduce": 0.0,
-                   "starless": -1.0, "color": 1.3},
+                   "starless": -1.0, "color": 1.3, "unpurple": 1.0},
         "sauber": {"banding": 1.0, "unclip": True, "star_reduce": 0.3,
-                   "starless": 0.35, "color": 1.5},
+                   "starless": 0.35, "color": 1.5, "unpurple": 0.7},
     }
 
     def _stil_anwenden(self):
@@ -1597,6 +1616,7 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         self.astro_star_reduce.setValue(werte["star_reduce"])
         self.astro_starless_stretch.setValue(werte["starless"])
         self.astro_color_stretch.setValue(werte["color"])
+        self.astro_unpurple.setValue(werte.get("unpurple", 0.0))
 
     def _erweitert_umschalten(self, an):
         """Einzelregler ein-/ausblenden. Standardmaessig sind sie versteckt — wer sie nicht
@@ -1846,6 +1866,11 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         if (getattr(self, "astro_color_stretch", None) is not None
                 and self.astro_color_stretch.value() > 0):
             args += ["--astro-color-stretch", str(self.astro_color_stretch.value())]
+        if (getattr(self, "astro_unpurple", None) is not None
+                and self.astro_unpurple.value() > 0):
+            args += ["--astro-unpurple", str(self.astro_unpurple.value())]
+        if getattr(self, "dark_skalieren", None) is not None and self.dark_skalieren.isChecked():
+            args += ["--dark-skalieren"]
         if self.dedup.isChecked():
             args += ["--dedup", "--dup-thresh", str(self.dupthresh.value())]
         if self.reject_blurry.isChecked():
