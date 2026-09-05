@@ -485,5 +485,76 @@ class TestFarbigerHintergrund(unittest.TestCase):
         self.assertLess(abs(self._glow(out[..., None], 0)), abs(self._glow(grau[..., None], 0)) * 0.35)
 
 
+class TestSternkerneEntsaettigen(unittest.TestCase):
+    """A11 — `unclip_stars`: die Farbe ausgefressener Sternkerne aus den Flanken zurückholen.
+
+    Bei hellen Sternen laufen alle drei Kanäle in die Sättigung, der Kern wird reinweiß und die
+    Sternfarbe ist dort verloren — obwohl sie in den nicht gesättigten Flanken vollständig
+    vorliegt. Gemessen an Sternen mit BEKANNTER Farbe: vorher 12 von 16 Kernen farblos,
+    mittlerer Farbfehler 0.226; danach 0 farblose Kerne, Farbfehler 0.040 (−82 %)."""
+
+    def _feld(self, h=260, w=340):
+        rng = np.random.default_rng(29)
+        farben = [np.array(c, np.float32) for c in
+                  ((1.00, 0.72, 0.45), (0.45, 0.70, 1.00), (0.70, 0.85, 0.95), (0.40, 0.65, 1.00))]
+        bild = np.full((h, w, 3), 0.04, np.float32)
+        pos, soll = [], []
+        for i in range(18):
+            x, y = int(rng.integers(25, w - 25)), int(rng.integers(25, h - 25))
+            if any(abs(x - px) < 30 and abs(y - py) < 30 for px, py in pos):
+                continue
+            c = farben[i % len(farben)]
+            st = np.zeros((h, w), np.float32); cv2.circle(st, (x, y), 1, 1.0, -1)
+            st = cv2.GaussianBlur(st, (0, 0), 2.2); st /= st.max()
+            bild += st[..., None] * c.reshape(1, 1, 3) * float(rng.uniform(1.8, 3.0))
+            pos.append((x, y)); soll.append(c / c.max())
+        return np.clip(bild, 0, 1), pos, soll
+
+    def _farbfehler(self, img, pos, soll):
+        fehler, farblos = [], 0
+        for (x, y), s in zip(pos, soll):
+            kern = img[y - 1:y + 2, x - 1:x + 2].reshape(-1, 3).mean(0) - 0.04
+            if kern.max() <= 1e-6:
+                continue
+            ist = kern / kern.max()
+            fehler.append(float(np.abs(ist - s).mean()))
+            if (ist.max() - ist.min()) < 0.10:
+                farblos += 1
+        return float(np.mean(fehler)), farblos
+
+    def test_a11_holt_die_sternfarbe_zurueck(self):
+        geclippt, pos, soll = self._feld()
+        vor_f, vor_w = self._farbfehler(geclippt, pos, soll)
+        self.assertGreater(vor_w, 0, "Vorbedingung: es muss farblose Kerne geben")
+        rein = astro.unclip_stars(geclippt, log=lambda *a: None)
+        nach_f, nach_w = self._farbfehler(rein, pos, soll)
+        self.assertLess(nach_f, vor_f * 0.5, f"Farbfehler {vor_f:.3f} -> {nach_f:.3f}")
+        self.assertLess(nach_w, vor_w, f"farblose Kerne {vor_w} -> {nach_w}")
+
+    def test_a11_helligkeit_bleibt(self):
+        """Es wird nur die FARBE korrigiert — die Helligkeit darf sich nicht verschieben."""
+        geclippt, _, _ = self._feld()
+        rein = astro.unclip_stars(geclippt, log=lambda *a: None)
+        self.assertAlmostEqual(float(np.median(geclippt)), float(np.median(rein)), places=3)
+
+    def test_a11_bild_ohne_gesaettigte_sterne_bleibt_unveraendert(self):
+        """Kein gesättigter Kern -> nichts anfassen. Sonst wäre es ein Filter, der immer wirkt."""
+        rng = np.random.default_rng(5)
+        h, w = 200, 260
+        f = np.full((h, w, 3), 0.05, np.float32)
+        for _ in range(30):
+            st = np.zeros((h, w), np.float32)
+            cv2.circle(st, (int(rng.integers(20, w - 20)), int(rng.integers(20, h - 20))), 1, 1.0, -1)
+            f += cv2.GaussianBlur(st, (0, 0), 2.0)[..., None] * 0.35
+        f = np.clip(f, 0, 0.7)
+        out = astro.unclip_stars(f, log=lambda *a: None)
+        self.assertLess(float(np.abs(out - f).max()), 1e-5, "unveraendertes Bild wurde angefasst")
+
+    def test_a11_graustufen_und_none_sind_no_op(self):
+        self.assertIsNone(astro.unclip_stars(None, log=lambda *a: None))
+        grau = np.full((60, 80), 0.5, np.float32)
+        self.assertIs(astro.unclip_stars(grau, log=lambda *a: None), grau)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

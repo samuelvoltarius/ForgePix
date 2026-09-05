@@ -145,6 +145,77 @@ def cosmetic_correct(f, strength=3.0):
 
 
 
+
+def unclip_stars(f, thresh=0.92, radius=6, max_stars=400, log=log_print):
+    """Ausgefressene Sternkerne entsättigen: die FARBE aus den intakten Flanken zurückholen.
+
+    Warum das nötig ist: bei hellen Sternen laufen ein oder mehrere Kanäle in die Sättigung.
+    Sind alle drei voll, wird der Kern reinweiß — die Sternfarbe (die eigentliche Information
+    über den Spektraltyp) ist im Kern verloren, obwohl sie in den nicht gesättigten FLANKEN
+    noch vollständig steht. Ergebnis sonst: ein Feld aus weißen Scheiben statt blauer, gelber
+    und roter Sterne. Siril nennt das `unclipstars` / „Desaturate Stars".
+
+    Verfahren (klassisch, kein ML): Sterne mit gesättigtem Kern suchen; um jeden Stern einen
+    Ring aus NICHT gesättigten Pixeln auswerten und daraus je Kanal die Amplitude über dem
+    lokalen Hintergrund bestimmen; das Kanalverhältnis der Flanke dann auf den Kern übertragen.
+    Die Helligkeit des Kerns bleibt, nur seine Farbe wird korrigiert — es wird nichts erfunden,
+    die Information kommt aus demselben Stern.
+
+    thresh: ab welchem Pegel ein Kanal als gesättigt gilt (0..1).
+    radius: Radius des Kernbereichs; der Auswertering liegt direkt außerhalb.
+    Gibt ein neues Bild zurück (Original bleibt unangetastet).
+    """
+    if f is None or f.ndim != 3 or f.shape[2] != 3:
+        return f
+    a = np.asarray(f, np.float32).copy()
+    H, W = a.shape[:2]
+    g = _gray(a)
+    # Kandidaten: Sterne, deren Kern irgendwo in die Saettigung laeuft
+    kandidaten = _star_centroids(g / (g.max() + 1e-6), max_stars=max_stars)
+    r = max(2, int(radius))
+    ring_r = r + max(2, r // 2)
+    behandelt = 0
+    for x, y in kandidaten:
+        xi, yi = int(round(x)), int(round(y))
+        if not (ring_r <= xi < W - ring_r and ring_r <= yi < H - ring_r):
+            continue
+        kern = a[yi - r:yi + r + 1, xi - r:xi + r + 1]
+        if float(kern.max()) < thresh:
+            continue                                  # gar nicht gesaettigt -> nichts zu tun
+        umfeld = a[yi - ring_r:yi + ring_r + 1, xi - ring_r:xi + ring_r + 1]
+        # Ringmaske: ausserhalb des Kerns, innerhalb des Umfelds
+        yy, xx = np.mgrid[0:umfeld.shape[0], 0:umfeld.shape[1]]
+        dist = np.sqrt((xx - ring_r) ** 2 + (yy - ring_r) ** 2)
+        ring = (dist > r) & (dist <= ring_r)
+        if ring.sum() < 8:
+            continue
+        # Hintergrund aus dem aeussersten Rand, Flankenamplitude als Ring minus Hintergrund
+        rand = dist > ring_r - 1
+        if rand.sum() < 4:
+            continue
+        bg = np.array([float(np.median(umfeld[..., c][rand])) for c in range(3)], np.float32)
+        flanke = np.array([float(np.median(umfeld[..., c][ring])) for c in range(3)], np.float32) - bg
+        if not np.all(np.isfinite(flanke)) or flanke.max() <= 1e-4:
+            continue
+        # Nur behandeln, wenn die Flanke selbst NICHT gesaettigt ist — sonst ist auch dort
+        # keine Farbinformation mehr und jede "Rekonstruktion" waere geraten.
+        if float(np.max([np.max(umfeld[..., c][ring]) for c in range(3)])) >= thresh:
+            continue
+        verh = flanke / float(flanke.max())            # Kanalverhaeltnis der Flanke
+        kern_bg = kern - bg.reshape(1, 1, 3)
+        spitze = float(np.max(kern_bg))
+        if spitze <= 1e-4:
+            continue
+        # weiche Gewichtung: nur der wirklich gesaettigte Bereich wird umgefaerbt
+        ky, kx = np.mgrid[0:kern.shape[0], 0:kern.shape[1]]
+        kd = np.sqrt((kx - r) ** 2 + (ky - r) ** 2)
+        w_ = np.clip(1.0 - kd / float(r + 1e-6), 0, 1)[..., None]
+        neu_kern = bg.reshape(1, 1, 3) + spitze * verh.reshape(1, 1, 3) *             np.clip(kern_bg.max(axis=2, keepdims=True) / spitze, 0, 1)
+        a[yi - r:yi + r + 1, xi - r:xi + r + 1] = kern * (1 - w_) + neu_kern * w_
+        behandelt += 1
+    log(f"    Sternkerne entsättigt: {behandelt} gesättigte Sterne eingefärbt")
+    return np.clip(a, 0, 1)
+
 def _rolling_median(werte, fenster):
     """Gleitender Median über ein 1D-Profil (Randbereiche gespiegelt).
 

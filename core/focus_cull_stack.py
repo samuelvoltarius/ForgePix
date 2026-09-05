@@ -1217,6 +1217,10 @@ def main():
     ap.add_argument("--astro-align", choices=["shift", "rotate"], default="shift",
                     help="Astro-Ausrichtung: shift=Translation (Nachführung), "
                          "rotate=Translation+Feldrotation (Alt-Az-Montierung)")
+    ap.add_argument("--astro-unclip-stars", action="store_true",
+                    help="Ausgefressene Sternkerne entsaettigen: die Sternfarbe aus den intakten "
+                         "Flanken zurueckholen, damit helle Sterne nicht als weisse Scheiben "
+                         "dastehen (Siril: unclipstars/Desaturate Stars)")
     ap.add_argument("--astro-banding", type=float, default=0.0, metavar="STAERKE",
                     help="Zeilen-Banding je Sub entfernen (0=aus, 1.0=voll). Sensor-Ausleseversatz, "
                          "den Dark/Flat/Bias NICHT beseitigen — er ist je Aufnahme anders und "
@@ -1865,7 +1869,16 @@ def _astro_write(result, work_dir, paths, args, astro):
                 cal = astro.color_balance(res, color_s)
         else:
             cal = astro.color_balance(res, color_s)
-        return astro.neutralize_background(astro.remove_green_cast(cal))
+        out = astro.neutralize_background(astro.remove_green_cast(cal))
+        # Sternkerne entsaettigen — im LINEAREN Bild, vor dem Strecken: die Kanalverhaeltnisse
+        # der Flanke gelten nur hier unverfaelscht. Nach einer nichtlinearen Streckung waere
+        # das Verhaeltnis verzerrt und die zurueckgeholte Farbe falsch.
+        if getattr(args, "astro_unclip_stars", False):
+            try:
+                out = astro.unclip_stars(out)
+            except Exception as e:
+                print(f"  (Sternkern-Entsaettigung uebersprungen: {e})", file=sys.stderr)
+        return out
 
     if args.astro_stretch:
         if getattr(args, "vlm_endpoint", None):
