@@ -49,9 +49,22 @@ not per-pixel source-frame painting. → 🟡 (rarely needed thanks to halofix).
 | Binning, multi-session, live preview | mixed | ✓ | ✅ |
 
 | Deconvolution / PSF sharpening | PixInsight | **Richardson-Lucy** (`--astro-deconv`, PSF from stars) | ✅ |
+| Comet stacking on the nucleus | PI/Siril (click it) | `--astro-komet` (**found automatically**) | ✅ |
+| Star shape repair | Siril `synthstar` | `--astro-synthstar` (round Moffat, flux preserved) | ✅ |
+| Mixed exposure times | DSS/PI | exposure scaling + SNR weighting, switched on automatically | ✅ |
+| Masks (star / background / nebula / range) | PixInsight | `core/masken.py`, wired into the astro steps | 🟡 |
+| Offline photometric colour | — | own local Gaia extract, ~100× faster than a server query | ✅ |
+| Incremental live stacking | Siril live stacking | `--live` (state saved, preview after every sub) | ✅ |
+| Light curves / AAVSO | PI scripts | `--photometrie` + AAVSO Extended File Format | ✅ |
+| **PixelMath** | PixInsight | — | ❌ |
 
-**Remaining:** no PixelMath scripting engine; comet-mode stacking (align on the comet) not in the astro
-path. The core stack→calibrate→deconvolve→stretch→color chain is complete. → ✅.
+**Process-by-process comparison against PixInsight:** [PIXINSIGHT.md](PIXINSIGHT.md) — all 91
+processes enumerated from the PCL source (the official docs return HTTP 403), each mapped to its
+ForgePix counterpart or marked as missing.
+
+**Remaining:** no PixelMath expression engine; masks exist but are wired only into the astro
+steps, not into every process the way PixInsight does it; no device control (INDI/ASCOM). The core
+stack→calibrate→deconvolve→stretch→colour chain is complete. → ✅.
 
 ## 📷 HDR — vs Photomatix / Lightroom HDR
 
