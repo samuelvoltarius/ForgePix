@@ -7,6 +7,79 @@ All notable changes to ForgePix. Format based on
 [SemVer](https://semver.org/).
 
 ## [Unreleased]
+### Astro pass on real data — stretching, filter knowledge, equipment
+Everything below was measured on Alfred's own frames (ASI294MC Pro, 120 s, gain 121, −10 °C,
+SVBONY SV220 7 nm dual-band — without darks and flats, which do not exist for this camera).
+
+**The core finding: stars too bright and nebula too weak are THE SAME problem.**
+The white point of a stretch is always set by the brightest pixels — and those are stars. The
+nebula signal sat only 6 % above the sky; after normalising to the 99.9 % quantile (= a star),
+the nebula was left at 3.5 % of the value range.
+- **Starless stretch** (`--astro-starless-stretch`): remove the stars, stretch the nebula (which
+  now sets the white point itself), bring the stars back **linearly**. Measured: nebula
+  0.513 → 0.628, blown pixels 0.573 % → 0.041 %.
+  Important: the star layer must **not** be stretched with the same curve — the first attempt did
+  exactly that and cancelled the benefit (5.0 % of pixels above 0.8, practically as without it).
+- **Colour-preserving stretch** (`--astro-color-stretch`): only the brightness runs through the
+  curve, the channel ratios stay. A per-channel stretch desaturates heavily because the strongest
+  channel runs towards white and everything converges to grey — saturation fell from 0.257 to
+  0.075, and the stretch's own saturation control recovered only 0.108 even at 2.0.
+  Colour-preserving: **saturation 0.510, cyan share 39 % → 55 %** at the same nebula brightness.
+
+**Further fixes:**
+- **Background extraction could not remove coloured gradients.** It estimated ONE greyscale
+  surface and subtracted it from all three channels alike. On real dual-band data that made the
+  red channel **twice as bad** (11.6 % → 24.0 %), because red sits much lower than blue. Now
+  per channel: all below 0.2 %.
+- **The gradient only appeared during stretching.** Both linear exports were completely flat
+  (0.0 %), the finished JPG had 35.6 %. The existing correction ran only in the broadband branch —
+  in the dual-band path nothing happened after the stretch. Now for both, and after a
+  colour-preserving stretch by **division** instead of subtraction (the residual is multiplicative
+  there): 47.4 % → 3.0 %.
+- **Star desaturation drained the colour from the whole image.** The fixed 13×13 halo dilation
+  merged into a blanket in star-rich fields: 1.3 % real star cores → 33 % mask → 65 % affected
+  area, and saturation fell from 0.472 to 0.257. Now capped: 0.460, with stars still neutralised.
+- **`winsor` barely clipped outliers.** It used the thresholds from the first, uncleaned pass — an
+  outlier inflates the spread itself and ends up inside its own threshold. On the stack 16.7 % of
+  a cosmic hit survived, nearly as much as a plain mean (19.6 %). With iterative refinement: 0.46 %.
+
+**New features:**
+- **Filter knowledge** (`core/filters.py`, `--filter`): 20 entries with the emission lines they
+  pass, bandwidth and an unmixing starting value. Documented manufacturer figures — SVBONY SV220
+  7 nm, Optolong L-eXtreme 7 nm / L-Ultimate 3 nm, Antlia ALP-T 3/5 nm, ZWO Duo-Band
+  Hα 15 nm / OIII 35 nm. Detected from the FITS `FILTER` field, brand names included. Plus the
+  honest statement: an SHO palette from dual-band data is synthetic, because SII was never measured.
+- **Equipment maths** (`core/equipment.py`): image scale from focal length, pixel size and
+  corrector — and from that the decision ForgePix used to make blind. Well sampled is 2–3 px per
+  star FWHM; below that drizzle helps, above it binning. The seeing is not estimated but measured.
+  Reducers/flatteners/barlows, telescope and camera presets, and all of it **user-editable** (an
+  own entry with the same key replaces the preset).
+- **Dither detection**: the condition under which drizzle helps at all. Previously only mentioned
+  in comments.
+- **Row banding** (`--astro-banding`): sensor readout offset that dark/flat/bias do not remove.
+  Measured factor 4–12 reduction, the real gradient preserved.
+- **Recolour blown star cores** (`--astro-unclip-stars`): recover the colour from the intact
+  wings. 12 of 16 colourless cores → 0, colour error −82 %, brightness unchanged.
+- **Shrink stars** (`--astro-star-reduce`), **best sub as registration reference**, **second merge
+  and slabs as retouching brush sources** (`--alt-merge`, `--slabs`).
+
+**Interface:** the astro tools are wired up — but as **one plain-language choice** (true to nature ·
+emphasise nebula · emphasise stars · clean up sensor defects), not a wall of sliders. The
+individual values appear only under "Advanced". If an external tool is missing, a button opens its
+download page.
+
+**What was NOT shipped although tried** — each failed on measurement:
+a glow master from the median of the unregistered subs (removed 99 % of the glow but ate the
+nebula: 2.2 % left), a higher ghosting threshold (blinded the detector for small ghosts), a
+star-free normalisation (65 % of the image blew out), automatic slabbing (measurably pointless —
+flat 59.6 versus slabs 58.9–59.1 against a target of 60.0), and framing modes (the edges were
+already clean, edge noise identical to the centre).
+
+**Honest limit:** in the 14 subs examined, Hα sits at SNR 0.75 and OIII at 0.72 — both below 1, the
+signal is weaker than the noise. Real OIII regions exist, but they drown. More colour needs more
+exposure time, not more computation. And without darks/flats the residual glow and vignetting stay
+uncalibrated — no post-processing can replace them.
+
 ### New features — from the comparison with Zerene, Helicon and Siril
 - **Best sub as the registration reference** instead of the middle one. The reference determines
   what every frame is fitted to; sub grading only removed outliers so far, not mediocrity. The

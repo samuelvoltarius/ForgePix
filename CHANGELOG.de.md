@@ -7,6 +7,81 @@ Alle nennenswerten Änderungen an ForgePix. Format orientiert an
 [SemVer](https://semver.org/lang/de/).
 
 ## [Unreleased]
+### Astro-Pass an echten Daten — Streckung, Filterkunde, Ausrüstung
+Alles Folgende wurde an Alfreds eigenen Aufnahmen gemessen (ASI294MC Pro, 120 s, Gain 121,
+−10 °C, SVBONY SV220 7 nm Dual-Band — ohne Darks und Flats, die es für diese Kamera nicht gibt).
+
+**Der Kernbefund: zu helle Sterne und zu schwacher Nebel sind DASSELBE Problem.**
+Der Weißpunkt einer Streckung wird immer von den hellsten Pixeln bestimmt — und das sind Sterne.
+Das Nebelsignal lag nur 6 % über dem Himmel; nach der Normierung auf das 99,9-%-Quantil (= ein
+Stern) blieb der Nebel bei 3,5 % des Wertebereichs liegen.
+- **Starless-Streckung** (`--astro-starless-stretch`): Sterne raus, Nebel strecken (der jetzt
+  selbst den Weißpunkt setzt), Sterne **linear** zurück. Gemessen: Nebel 0,513 → 0,628,
+  ausgebrannte Pixel 0,573 % → 0,041 %.
+  Wichtig: die Sternebene darf **nicht** mit derselben Kurve gestreckt werden — der erste Versuch
+  tat das und hob die Wirkung auf (5,0 % der Pixel über 0,8, praktisch wie ganz ohne Starless).
+- **Farberhaltende Streckung** (`--astro-color-stretch`): nur die Helligkeit läuft durch die
+  Kurve, die Kanalverhältnisse bleiben. Eine kanalweise Streckung entsättigt massiv, weil der
+  stärkste Kanal gegen Weiß läuft und alles zu Grau konvergiert — gemessen fiel die Sättigung
+  von 0,257 auf 0,075, und der Sättigungsregler holte selbst auf 2,0 nur 0,108 zurück.
+  Farberhaltend: **Sättigung 0,510, Cyan-Anteil 39 % → 55 %** bei gleicher Nebelhelligkeit.
+
+**Weitere behobene Fehler:**
+- **Die Hintergrund-Entfernung konnte farbige Verläufe nicht entfernen.** Sie schätzte EINE
+  Graustufen-Fläche und zog sie von allen drei Kanälen gleich ab. An echten Dual-Band-Daten
+  machte das den Rotkanal sogar **doppelt so schlecht** (11,6 % → 24,0 %), weil Rot viel
+  niedriger liegt als Blau. Jetzt je Kanal: alle unter 0,2 %.
+- **Der Gradient entstand erst beim Strecken.** Beide Linear-Exporte waren vollkommen flach
+  (0,0 %), das fertige JPG hatte 35,6 %. Die vorhandene Nachkorrektur lief nur im Breitband-Zweig
+  — im Dual-Band-Pfad passierte nach dem Strecken gar nichts. Jetzt für beide, und nach
+  farberhaltender Streckung per **Division** statt Subtraktion (der Rest ist dort multiplikativ):
+  47,4 % → 3,0 %.
+- **Die Sternentsättigung entfärbte das ganze Bild.** Die feste 13×13-Hofaufweitung verschmolz in
+  sternreichen Feldern zu einer Decke: 1,3 % echte Sternkerne → 33 % Maske → 65 % Wirkfläche, und
+  die Sättigung fiel von 0,472 auf 0,257. Jetzt gedeckelt: 0,460 bei weiterhin neutralen Sternen.
+- **`winsor` beschnitt Ausreißer praktisch nicht.** Es rechnete mit den Schwellen des ersten,
+  unbereinigten Durchlaufs — ein Ausreißer bläht die Streuung selbst auf und landet innerhalb
+  seiner eigenen Schwelle. Am Stack blieben 16,7 % eines kosmischen Treffers stehen, fast so viel
+  wie beim simplen Mittelwert (19,6 %). Mit der iterativen Nachschätzung: 0,46 %.
+
+**Neue Funktionen:**
+- **Filterkunde** (`core/filters.py`, `--filter`): 20 Einträge mit durchgelassenen
+  Emissionslinien, Halbwertsbreite und Entmischungs-Startwert. Belegte Herstellerangaben — SVBONY
+  SV220 7 nm, Optolong L-eXtreme 7 nm / L-Ultimate 3 nm, Antlia ALP-T 3/5 nm, ZWO Duo-Band
+  Hα 15 nm / OIII 35 nm. Erkennung aus dem FITS-Feld `FILTER`, inklusive Markennamen. Und die
+  ehrliche Ansage: eine SHO-Palette aus Dual-Band-Daten ist synthetisch, weil SII gar nicht
+  gemessen wurde.
+- **Ausrüstungsrechnung** (`core/equipment.py`): Abbildungsskala aus Brennweite, Pixelgröße und
+  Korrektor — und daraus die Entscheidung, die ForgePix bisher blind traf. Gut abgetastet sind
+  2–3 px pro Sternhalbwertsbreite; darunter hilft Drizzle, darüber Binning. Das Seeing wird nicht
+  geschätzt, sondern gemessen. Reducer/Flattener/Barlow, Teleskop- und Kamera-Vorgaben, und alles
+  **selbst eintragbar** (eigener Eintrag mit gleichem Schlüssel ersetzt die Vorgabe).
+- **Dithering-Erkennung**: die Bedingung, unter der Drizzle überhaupt etwas bringt. Stand vorher
+  nur in Kommentaren.
+- **Zeilen-Banding** (`--astro-banding`): Sensor-Ausleseversatz, den Dark/Flat/Bias nicht
+  beseitigen. Gemessen Faktor 4–12 weniger, Gradient bleibt erhalten.
+- **Ausgefressene Sternkerne einfärben** (`--astro-unclip-stars`): Farbe aus den intakten Flanken
+  zurückholen. 12 von 16 farblosen Kernen → 0, Farbfehler −82 %, Helligkeit unverändert.
+- **Sterne verkleinern** (`--astro-star-reduce`), **bestes Sub als Registrier-Referenz**,
+  **zweite Verschmelzung und Slabs als Retusche-Pinselquellen** (`--alt-merge`, `--slabs`).
+
+**Oberfläche:** die Astro-Werkzeuge sind angebunden — aber als **eine Auswahl in Klartext**
+(Naturgetreu · Nebel betonen · Sterne betonen · Sensorfehler bereinigen), nicht als Reglerwand.
+Die Einzelwerte erscheinen erst über „Erweitert". Fehlt ein externes Werkzeug, öffnet ein Knopf
+die Download-Seite.
+
+**Was NICHT eingebaut wurde, obwohl ausprobiert** — jeweils an Messungen gescheitert:
+ein Glow-Master aus dem Median der unregistrierten Subs (entfernte 99 % des Glühens, fraß aber
+den Nebel: 2,2 % Restamplitude), eine höhere Ghosting-Schwelle (machte den Detektor blind für
+kleine Geister), eine sternfreie Normierung (65 % des Bildes brannten aus), automatisches
+Slabbing (messbar wirkungslos — flach 59,6 gegen Slabs 58,9–59,1 bei Sollwert 60,0), und
+Framing-Modi (die Ränder waren bereits sauber, Rauschen am Rand exakt wie in der Mitte).
+
+**Ehrliche Grenze:** in den geprüften 14 Subs liegt Hα bei SNR 0,75 und OIII bei 0,72 — beide
+unter 1, das Signal ist schwächer als das Rauschen. Es gibt echte OIII-Gebiete, aber sie ersaufen.
+Mehr Farbe braucht mehr Belichtungszeit, nicht mehr Rechnung. Und ohne Darks/Flats bleiben
+Restglühen und Vignettierung unkalibriert — das kann keine Nachbearbeitung ersetzen.
+
 ### Neue Funktionen — aus dem Vergleich mit Zerene, Helicon und Siril
 - **Bestes Sub als Registrier-Referenz** statt des mittleren. Die Referenz bestimmt, worauf alle
   Frames gefittet werden; die Sub-Bewertung sortierte bisher nur Ausreißer aus, nicht das
