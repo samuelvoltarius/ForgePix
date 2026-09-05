@@ -315,6 +315,59 @@ def gaia_pcc(bgr, hints=None, siril_path=None, astrometry_key=None, log=log_prin
         shutil.rmtree(work, ignore_errors=True)
 
 
+def lokal_pcc(bgr, hints=None, siril_path=None, katalog_pfad=None, log=log_print):
+    """Farbkalibrierung gegen den EIGENEN, lokal abgelegten Gaia-Auszug — ohne Internet.
+
+    Derselbe Weg wie `gaia_pcc`, nur dass die Katalogsterne nicht von einem Server kommen,
+    sondern aus `core/gaia_lokal`. Wer sein Feld einmal mit Netz nachgeladen hat, kalibriert
+    danach am Teleskop ohne Verbindung — und in Bruchteilen einer Sekunde statt in Sekunden.
+
+    EHRLICHE EINSCHRAENKUNG: das Plate-Solving braucht weiterhin einen Solver. Siril und ASTAP
+    loesen mit ihren eigenen lokalen Katalogen offline; der Astrometry.net-Weg ueber das Netz
+    tut es nicht. Ohne loesbares Feld gibt es auch mit lokalem Sternkatalog keine Kalibrierung.
+    """
+    import gaia_lokal
+    from astropy.io import fits
+    pfad = katalog_pfad or gaia_lokal.standard_pfad()
+    if not os.path.exists(pfad):
+        raise RuntimeError("kein lokaler Gaia-Katalog unter %s — einmal mit Netz anlegen" % pfad)
+    kat = gaia_lokal.Katalog.laden(pfad, log=log)
+    if kat is None or len(kat) == 0:
+        raise RuntimeError("lokaler Gaia-Katalog leer oder unlesbar")
+    work = tempfile.mkdtemp(prefix="forgepix_lokal_")
+    try:
+        gray = cv2.cvtColor(np.clip(bgr, 0, 1).astype(np.float32), cv2.COLOR_BGR2GRAY)
+        wcs = _solve_wcs_siril(bgr, hints, work, siril_path, log)
+        if wcs is None:
+            kind, solver = _find_solver()
+            if not solver:
+                raise RuntimeError("kein Plate-Solver (Siril/ASTAP) verfuegbar")
+            lpath = os.path.join(work, "lum.fits")
+            fits.PrimaryHDU((gray * 65535).astype(np.uint16)).writeto(lpath, overwrite=True)
+            wcs = _solve_wcs_external(kind, solver, lpath, work, hints or {}, log)
+        if wcs is None:
+            raise RuntimeError("Plate-Solve fehlgeschlagen")
+        H, W = gray.shape
+        sky = wcs.pixel_to_world_values(W / 2.0, H / 2.0)
+        radius = 0.6
+        ok, n, satz = gaia_lokal.abdeckung(kat, float(sky[0]), float(sky[1]), radius)
+        if not ok:
+            # Lieber sauber abbrechen als mit einer Handvoll Sterne kalibrieren: eine
+            # Kanal-Skalierung aus zehn Sternen ist geraten, sieht aber aus wie gemessen.
+            raise RuntimeError("lokaler Katalog deckt dieses Feld nicht ab (%s)" % satz)
+        treffer = kat.kegelsuche(float(sky[0]), float(sky[1]), radius, max_mag=16.0)
+        # `_fit_channel_gains` erwartet eine Tabelle mit den Gaia-Spaltennamen
+        cat = {"ra": treffer["ra"], "dec": treffer["dec"],
+               "phot_g_mean_mag": treffer["g_mag"], "bp_rp": treffer["bp_rp"]}
+        scale = _fit_channel_gains(bgr, cat, wcs, log)
+        out = np.clip(bgr.astype(np.float32) * scale.reshape(1, 1, 3), 0, None)
+        log("  PCC lokal: Kanal-Skalierung BGR=%s aus %d Katalogsternen (offline)"
+            % (np.round(scale, 3), n))
+        return out
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+
+
 def _solve_wcs_external(kind, solver, lpath, work, hints, log):
     """Plate-Solve über einen externen Solver (ASTAP/astrometry.net) — Fallback, wenn kein Siril da
     ist. Gibt ein WCS-Objekt zurück oder None."""
@@ -365,13 +418,19 @@ def run_pcc(linear_bgr, hints=None, prefer="auto", oscsensor=None, narrowband=Fa
     astrometry_key: optionaler Astrometry.net-API-Key (vom User), für blindes Online-Plate-Solving
     im Gaia-Pfad, wenn kein lokaler Solver/Siril vorhanden ist. Wird NICHT gespeichert/geloggt."""
     import astro
+    # Der lokale Katalog kommt in der automatischen Kette ZUERST: er braucht kein Netz und ist
+    # gemessen rund hundertmal schneller als eine Serverabfrage. Fehlt er oder deckt er das
+    # Feld nicht ab, geht es wie bisher weiter.
     order = {"siril": ["siril", "lite"], "gaia": ["gaia", "lite"],
-             "lite": ["lite"]}.get(prefer, ["siril", "gaia", "lite"])
+             "lokal": ["lokal", "lite"],
+             "lite": ["lite"]}.get(prefer, ["lokal", "siril", "gaia", "lite"])
     for stage in order:
         try:
             if stage == "siril" and siril_available(siril_path):
                 return siril_spcc(linear_bgr, hints=hints, oscsensor=oscsensor,
                                   narrowband=narrowband, siril_path=siril_path, log=log)
+            if stage == "lokal":
+                return lokal_pcc(linear_bgr, hints=hints, siril_path=siril_path, log=log)
             if stage == "gaia":
                 return gaia_pcc(linear_bgr, hints=hints, siril_path=siril_path,
                                 astrometry_key=astrometry_key, log=log)

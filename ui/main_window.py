@@ -486,7 +486,9 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         self.astro_tps = QCheckBox(tr("TPS-Feinregistrierung (lokale Restverzeichnung korrigieren)"))
         self.astro_pcc = QCheckBox(tr("Photometrischer Farbabgleich (PCC)"))
         self.astro_pcc_backend = QComboBox()
-        self.astro_pcc_backend.addItem(tr("Auto (Siril → Gaia → Lite)"), "auto")
+        self.astro_pcc_backend.addItem(tr("Auto (eigener Katalog → Siril → Gaia → Lite)"),
+                                       "auto")
+        self.astro_pcc_backend.addItem(tr("Eigener Gaia-Auszug (ohne Netz)"), "lokal")
         self.astro_pcc_backend.addItem(tr("Siril-SPCC (Gaia DR3)"), "siril")
         self.astro_pcc_backend.addItem(tr("Eigener Gaia-Pfad (astroquery)"), "gaia")
         self.astro_pcc_backend.addItem(tr("Lite (stern-basiert, offline)"), "lite")

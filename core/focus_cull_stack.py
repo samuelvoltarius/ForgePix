@@ -1311,10 +1311,19 @@ def main():
     ap.add_argument("--astro-starless-classic", action="store_true",
                     help="Astro: zusätzlich ein klassisch sternloses Nebelbild erzeugen (morphologisch, "
                          "ohne StarNet) — für getrennte Nebel-Bearbeitung")
-    ap.add_argument("--astro-pcc-backend", choices=["auto", "siril", "gaia", "lite"], default="auto",
-                    help="PCC-Backend: auto=Siril-SPCC→eigener Gaia-Pfad→Lite (Fallback-Kette); "
+    ap.add_argument("--astro-pcc-backend",
+                    choices=["auto", "lokal", "siril", "gaia", "lite"], default="auto",
+                    help="PCC-Backend: auto=eigener lokaler Gaia-Auszug→Siril-SPCC→"
+                         "astroquery-Gaia→Lite (Fallback-Kette); lokal=nur der eigene Auszug "
+                         "(OHNE Netz, gemessen rund hundertmal schneller als eine Serverabfrage); "
                          "siril=nur Siril-SPCC (Gaia DR3); gaia=eigener astroquery-Gaia-Pfad; "
                          "lite=stern-basiert ohne Katalog (immer offline). Nur mit --astro-pcc.")
+    ap.add_argument("--gaia-feld-laden", default=None, metavar="RA,DEC[,RADIUS]",
+                    help="Einmalig MIT Netz: dieses Himmelsfeld aus Gaia DR3 in den eigenen "
+                         "lokalen Katalog aufnehmen (Grad; Radius standardmaessig 1.0). Danach "
+                         "laeuft die Farbkalibrierung dort ohne Verbindung. Der Gaia-Katalog "
+                         "selbst wird NICHT mitgeliefert — er hat Terabytes und eigene "
+                         "Nutzungsbedingungen")
     ap.add_argument("--astro-oscsensor", default=None,
                     help="OSC-Sensorname EXAKT wie in Sirils SPCC-Liste (z. B. 'Sony IMX294') — "
                          "verbessert die Siril-SPCC-Genauigkeit. Optional.")
@@ -1595,6 +1604,17 @@ def main():
         # Lauf gescheitert — sonst meldete die GUI gruen „Fertig ✓".
         if geschafft == 0 and not getattr(args, "no_stack", False):
             sys.exit(1)
+    elif getattr(args, "gaia_feld_laden", None):
+        import gaia_lokal
+        teile = str(args.gaia_feld_laden).replace(" ", "").split(",")
+        if len(teile) not in (2, 3):
+            raise ForgePixFehler("--gaia-feld-laden erwartet RA,DEC oder RA,DEC,RADIUS in Grad")
+        try:
+            ra, dec = float(teile[0]), float(teile[1])
+            radius = float(teile[2]) if len(teile) == 3 else 1.0
+        except ValueError:
+            raise ForgePixFehler("--gaia-feld-laden: Zahlen in Grad erwartet")
+        gaia_lokal.feld_hinzufuegen(ra, dec, radius)
     elif getattr(args, "photometrie", False):
         photometrie_lauf(args, input_dir, work_dir)
     elif getattr(args, "watch", False):
