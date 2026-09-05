@@ -2,6 +2,25 @@
 
 ## Public FITS seed data
 
+Expanded acquisition: `python -m training.collect_archive` on the Spark, using
+`~/forgepix-training/data-env/bin/python` (isolated Astropy environment).
+Output: `~/forgepix-training/datasets/hst-diverse-001`.
+Eight fields have fixed object-level splits: M101/M42/M8/M82/NGC7009 training,
+M16/M13 validation, NGC6543 final test. Existing M51 seed remains training-only.
+Each field selects up to six distinct optical-filter combined products and two
+calibrated exposures from at most 1,000 search results. This is a bounded diverse
+sample, not an exhaustive archive mirror or a complete camera-general dataset.
+Limits: 25 GiB total, 1 GiB per file, 80 GiB disk reserve. Each FITS has a provenance
+sidecar; a process lock avoids duplicate runs. Inspect failures in collection.log.
+
+Task suitability: science planes can supply realistic scene structure for
+synthetic degradation. Real noise pairs require matching independent exposures
+and alignment; combined images may already contain those exposures. Background
+and starless targets require separate trusted labels/simulation. Deblurring needs
+known PSFs and flux-preservation tests. Do not label downloaded frames as noiseless
+truth or automatically train all restoration tasks on them. HST alone does not
+represent ground-based camera/readout/seeing conditions.
+
 `python -m training.fetch_mast --output DATA_DIRECTORY` retrieves four public
 HST/WFPC2 M51 single-filter drizzled products from MAST (programme 7375).
 The manifest records archive identifiers, SHA-256 hashes, filters, exposure,

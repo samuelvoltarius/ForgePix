@@ -56,6 +56,12 @@ No real-data training, ONNX release model or camera-generalization evidence yet.
 
 ## Next acceptance gates
 
+The active hourly continuation now targets a Release Candidate. Use
+RC_ACCEPTANCE.md as the release gate; research must not expand RC scope forever.
+Expanded public FITS acquisition is implemented in training/collect_archive.py.
+Inspect ~/forgepix-training/datasets/hst-diverse-001 and collection.log on Spark
+before starting another collector. Limits and fixed splits are in training/README.md.
+
 1. Review current diff; run full tests after latest UI changes and packaged GUI
    startup checks. Commit coherent tested changes before triggering release builds.
 2. Finish professional workspace layout and beginner flow, visually verify both
