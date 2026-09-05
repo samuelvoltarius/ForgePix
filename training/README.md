@@ -1,5 +1,22 @@
 # ForgePix model development
 
+## Public FITS seed data
+
+`python -m training.fetch_mast --output DATA_DIRECTORY` retrieves four public
+HST/WFPC2 M51 single-filter drizzled products from MAST (programme 7375).
+The manifest records archive identifiers, SHA-256 hashes, filters, exposure,
+image planes and data-use policy: https://archive.stsci.edu/publishing/data-use.
+These are science FITS products, not JPEG press images or noiseless ground truth.
+Credit NASA/ESA Hubble, the original observing programme and STScI/MAST.
+
+Keep all M51 products and derivatives in the same training-candidate group.
+Never split patches from this same object between training and independent tests.
+Use the SCI extension and mask non-finite pixels and non-positive WHT coverage.
+The first verified image has only about 40% finite SCI coverage; black-filled
+invalid borders must not become training examples. Do not pass these multi-HDU
+files directly to a loader that expects the primary HDU to contain the image.
+No current model has yet been trained on this downloaded seed dataset.
+
 ## Automatic experiments
 
 `python -m training.run_queue --output runs/multi-task-001 --steps 10000`
