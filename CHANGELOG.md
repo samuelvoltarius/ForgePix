@@ -7,6 +7,32 @@ All notable changes to ForgePix. Format based on
 [SemVer](https://semver.org/).
 
 ## [Unreleased]
+### New features — from the comparison with Zerene, Helicon and Siril
+- **Best sub as the registration reference** instead of the middle one. The reference determines
+  what every frame is fitted to; sub grading only removed outliers so far, not mediocrity. The
+  data (FWHM, eccentricity, star count) was already being measured.
+  Measured: ±0 % with comparable subs, **7 % tighter stars** when the middle sub is weak
+  (48 instead of 85 stars, eccentricity 1.14 — still passing the grading).
+- **Row banding removal** (`--astro-banding`). Sensor readout offset that dark/flat/bias do NOT
+  remove: it differs per shot and does not average out in the stack either.
+  Measured against known ground truth: banding reduced by a **factor of 4–12**, the real
+  gradient preserved (left/right 0.0801/0.1510 → 0.0800/0.1508). Column banding too.
+- **A second merge as a brush source** (`--alt-merge`). The standard move in Zerene/Helicon: the
+  depth map keeps colours and smooth areas clean, the pyramid picks up detail in hair and
+  bristles — take one as the base and paint in the strengths of the other. Computed during the
+  stack, not when the dialog opens: one merge takes a measured 30 s at 24 MP × 16 frames, which
+  would freeze the interface.
+- **Slabbing** (`--slabs N`): partial merges over groups of neighbouring shots, also as brush
+  sources ("Group 2 (shots 04-06)"). The final result deliberately stays unchanged — measurements
+  show grouping brings no benefit to the automatic merge (flat 59.6, tree merge 58.7, slabs of
+  3/4/6: 59.0/58.9/59.1 against a target of 60.0). The value is in the painting, not the merging.
+
+### Fixed
+- **Retouching sources only covered the start of the focus series.** The FIRST 16 frames were
+  loaded — in a 150-frame series those all sit in the frontmost focus plane, so nothing in the
+  rear half of the subject could be painted over. Now spread evenly across the series, at
+  unchanged memory cost.
+
 ### Quality pass — measured against synthetic ground truth, not estimated
 - **The stack score rated gapped focus series BETTER than complete ones.** Measured on a
   focus series built from a known sharp original: 9 gap-free frames scored 85/100 at 144 % of

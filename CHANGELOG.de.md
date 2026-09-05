@@ -7,6 +7,33 @@ Alle nennenswerten Änderungen an ForgePix. Format orientiert an
 [SemVer](https://semver.org/lang/de/).
 
 ## [Unreleased]
+### Neue Funktionen — aus dem Vergleich mit Zerene, Helicon und Siril
+- **Bestes Sub als Registrier-Referenz** statt des mittleren. Die Referenz bestimmt, worauf alle
+  Frames gefittet werden; die Sub-Bewertung sortierte bisher nur Ausreißer aus, nicht das
+  Mittelmaß. Die Daten (FWHM, Elongation, Sternzahl) lagen längst vor.
+  Gemessen: bei gleichwertigen Subs ±0 %, bei schwachem mittleren Sub (48 statt 85 Sterne,
+  Elongation 1,14 — besteht die Bewertung noch) **7 % kompaktere Sterne**.
+- **Zeilen-Banding entfernen** (`--astro-banding`). Sensor-Ausleseversatz, den Dark/Flat/Bias
+  NICHT beseitigen: er ist je Aufnahme anders und mittelt sich auch im Stack nicht weg.
+  Gemessen gegen die bekannte Wahrheit: Banding um **Faktor 4–12** reduziert, der echte
+  Gradient bleibt erhalten (links/rechts 0,0801/0,1510 → 0,0800/0,1508). Auch spaltenweise.
+- **Zweite Verschmelzung als Pinselquelle** (`--alt-merge`). Der Standardgriff bei
+  Zerene/Helicon: die Tiefenkarte hält Farben und glatte Flächen sauber, die Pyramide holt
+  Detail an Haaren und Borsten — eine als Basis, die Stärken der anderen hineinpinseln. Läuft
+  während des Stacks, nicht beim Öffnen des Dialogs: eine Verschmelzung dauert bei 24 MP ×
+  16 Frames gemessen 30 s, das wäre ein Einfrieren der Oberfläche.
+- **Slabbing** (`--slabs N`): Teilverschmelzungen über Gruppen benachbarter Aufnahmen, ebenfalls
+  als Pinselquellen („Gruppe 2 (Aufnahmen 04-06)"). Das Endergebnis bleibt bewusst unverändert —
+  nachgemessen bringt Gruppieren beim automatischen Verschmelzen keinen Vorteil (flach 59,6,
+  Baum-Merge 58,7, Slabs zu 3/4/6: 59,0/58,9/59,1 bei Sollwert 60,0). Der Nutzen liegt im
+  Übermalen, nicht im Zusammenrechnen.
+
+### Behoben
+- **Retusche-Quellen deckten nur den Anfang der Fokusreihe ab.** Es wurden die ERSTEN 16 Frames
+  geladen — bei einer 150er-Serie liegen die alle in der vordersten Fokusebene, in der hinteren
+  Hälfte des Motivs ließ sich nichts übermalen. Jetzt gleichmäßig über die Serie verteilt, bei
+  unverändertem Speicherbedarf.
+
 ### Qualitäts-Pass — an synthetischer Wahrheit gemessen, nicht geschätzt
 - **Die Stack-Note bewertete lückenhafte Fokusserien BESSER als lückenlose.** Gemessen an
   einer Fokusreihe aus einem bekannten scharfen Original: 9 Aufnahmen ohne Lücken bekamen
