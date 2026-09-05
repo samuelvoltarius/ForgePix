@@ -617,5 +617,8 @@
   "🤖  KI schlägt Settings vor": "🤖  AI suggests settings",
   "🤖 Effekt vorschlagen": "🤖 Suggest effect",
   "🧩  Panorama: Kontrollpunkte (manuell)": "🧩  Panorama: control points (manual)",
-  "🧩 Zusammensetzen": "🧩 Stitch"
+  "🧩 Zusammensetzen": "🧩 Stitch",
+  "Zweite Verschmelzung als Retusche-Quelle mitrechnen": "Also compute a second merge as a retouching source",
+  "Verschmelzung: %s": "Merge: %s",
+  "Rechnet das Bild zusätzlich mit dem gegenteiligen Verfahren (Pyramide ↔ Tiefenkarte) und legt es als Pinselquelle in der Retusche ab. Der Profi-Griff: die Tiefenkarte hält Farben und glatte Flächen sauber, die Pyramide holt Detail an Haaren und Borsten — eine als Basis nehmen, die Stärken der anderen hineinpinseln. Kostet einen zweiten Verschmelzungs-Durchgang.": "Also merges the image with the opposite method (pyramid ↔ depth map) and stores it as a brush source for retouching. The pro move: the depth map keeps colours and smooth areas clean, the pyramid picks up detail in hair and bristles — take one as the base and paint in the strengths of the other. Costs a second merging pass."
 }

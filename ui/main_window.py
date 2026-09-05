@@ -873,6 +873,7 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         self.ai_enhance = QCheckBox(tr("KI-Feinschliff (Schärfen/Klarheit/Entrauschen, treu)"))
         self.ghost_map = QCheckBox(tr("Geister-Karte erzeugen (zeigt Bewegungszonen)"))
         self.deghost = QCheckBox(tr("Deghost (Bewegungszonen entdoppeln)"))
+        self.alt_merge = QCheckBox(tr("Zweite Verschmelzung als Retusche-Quelle mitrechnen"))
         self.prefix = QLineEdit("stack_")
         self.nostack = QCheckBox(tr("Nur Auswahl (nicht zusammenrechnen)"))
         kg.addWidget(QLabel(tr("Nachschärfen")), 0, 0); kg.addWidget(self.sharpen, 0, 1)
@@ -910,6 +911,13 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
                               "das schärfste Foto — stark bei harten Tiefenkanten (Insekten, Münzen, "
                               "Platinen). „halofix“ = Dual-Output-Halo-Retusche (Schärfe ohne Halos). "
                               "„wavelet“ = à-trous-Detailfusion."), 10, 2)
+        kg.addWidget(self.alt_merge, 11, 0, 1, 2)
+        kg.addWidget(help_btn("Rechnet das Bild zusätzlich mit dem gegenteiligen Verfahren "
+                              "(Pyramide ↔ Tiefenkarte) und legt es als Pinselquelle in der "
+                              "Retusche ab. Der Profi-Griff: die Tiefenkarte hält Farben und "
+                              "glatte Flächen sauber, die Pyramide holt Detail an Haaren und "
+                              "Borsten — eine als Basis nehmen, die Stärken der anderen "
+                              "hineinpinseln. Kostet einen zweiten Verschmelzungs-Durchgang."), 11, 2)
         self.focus_radius = QDoubleSpinBox(); self.focus_radius.setRange(-1.0, 50.0)
         self.focus_radius.setSingleStep(1.0); self.focus_radius.setValue(-1.0)
         self.focus_smoothing = QDoubleSpinBox(); self.focus_smoothing.setRange(-1.0, 20.0)
@@ -1650,6 +1658,8 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
             args += ["--ghost-map"]
         if self.deghost.isChecked():
             args += ["--deghost"]
+        if self.alt_merge.isChecked():
+            args += ["--alt-merge"]
         if self.dedup.isChecked():
             args += ["--dedup", "--dup-thresh", str(self.dupthresh.value())]
         if self.reject_blurry.isChecked():
@@ -2559,9 +2569,38 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         dlg.show()
         self._adjust_dlg = dlg
 
+    def _alt_merge_sources(self):
+        """Die zweite Verschmelzung (--alt-merge) als Pinselquelle, falls vorhanden.
+
+        Der Profi-Griff bei Zerene/Helicon: das eine Verfahren als Basis nehmen und die
+        Stärken des anderen hineinpinseln — glatte Farben aus der Tiefenkarte, Detail an
+        Haaren/Borsten aus der Pyramide. Die Datei entsteht bereits WÄHREND des Stacks
+        (bei 24 MP × 16 Frames dauert eine Verschmelzung ~30 s — das hier nachzurechnen
+        würde die Oberfläche einfrieren)."""
+        srcs, names = [], []
+        # Arbeitsordner AUS DEM ERGEBNISPFAD ableiten (<work>/stack/<name>_stk.jpg), genau wie
+        # cull_report.json gefunden wird. `_work_dir()` haengt an den Eingabefeldern und zeigt
+        # woanders hin, sobald ein aelteres Ergebnis geoeffnet wurde.
+        try:
+            wd = os.path.dirname(os.path.dirname(self.result_path or ""))
+            for fn in sorted(os.listdir(wd)) if wd and os.path.isdir(wd) else []:
+                if not fn.startswith("altmerge_"):
+                    continue
+                im = imread(os.path.join(wd, fn), cv2.IMREAD_UNCHANGED)
+                if im is None:
+                    continue
+                verfahren = os.path.splitext(fn)[0].replace("altmerge_", "")
+                srcs.append(im)
+                names.append(tr("Verschmelzung: %s") % verfahren)
+        except OSError:
+            pass
+        return srcs, names
+
     def _gather_sources(self):
         """Ausgerichtete Quell-Frames fürs Retuschieren holen — bevorzugt aus der
-        Mehrschicht-Datei (Seite 0 = Ergebnis), sonst aus den behaltenen Fotos."""
+        Mehrschicht-Datei (Seite 0 = Ergebnis), sonst aus den behaltenen Fotos.
+        Eine per --alt-merge erzeugte zweite Verschmelzung kommt IMMER dazu und steht
+        bewusst vorne in der Liste — sie ist die nützlichste Pinselquelle."""
         ml_dir = os.path.join(self._work_dir(), "multilayer")
         if os.path.isdir(ml_dir):
             tifs = [os.path.join(ml_dir, f) for f in os.listdir(ml_dir)
@@ -2572,7 +2611,8 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
                     pages = tifffile.imread(max(tifs, key=os.path.getmtime))
                     if pages.ndim == 4 and len(pages) > 1:  # (N,h,w,3) RGB
                         srcs = [cv2.cvtColor(p, cv2.COLOR_RGB2BGR) for p in pages[1:]]
-                        return srcs, [f"Foto {i + 1}" for i in range(len(srcs))]
+                        a_s, a_n = self._alt_merge_sources()
+                        return a_s + srcs, a_n + [f"Foto {i + 1}" for i in range(len(srcs))]
                 except Exception:
                     pass
         # Fallback: behaltene Frames aus dem Report — werden ON-THE-FLY aufs Ergebnis ausgerichtet
@@ -2614,7 +2654,11 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
                     self._append("\n✏️ Quellfotos für die Retusche aufs Ergebnis ausgerichtet.\n")
             except Exception:
                 pass                                     # zur Not unausgerichtet (besser als nichts)
-        return srcs, names
+        # Die zweite Verschmelzung stammt aus DENSELBEN bereits ausgerichteten Frames wie das
+        # Ergebnis — sie liegt also schon deckungsgleich und wird bewusst NACH der Ausrichtung
+        # angehaengt, damit sie nicht unnoetig ein zweites Mal verzogen wird.
+        a_s, a_n = self._alt_merge_sources()
+        return a_s + srcs, a_n + names
 
     def open_retouch(self):
         if not self.result_path or cv2 is None:

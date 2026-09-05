@@ -990,6 +990,27 @@ def run_own_engine(selected_dir, work_dir, args):
         else:
             print(f"  Verschmelzen ({_fm}) …")
             result = _merge1(imgs)
+        # Komplementaeres Verfahren als zweite Verschmelzung — Pinselquelle fuer die Retusche.
+        # Der Profi-Griff bei Zerene/Helicon: die Tiefenkarten-Variante haelt Farben und glatte
+        # Flaechen sauber, die Pyramide holt Detail an Haaren/Borsten. Man nimmt eine als Basis
+        # und pinselt die Staerken der anderen hinein. Wird HIER gerechnet, nicht beim Oeffnen
+        # des Retusche-Dialogs: bei 24 MP x 16 Frames dauert eine Verschmelzung ~30 s, das wuerde
+        # die Oberflaeche einfrieren.
+        if getattr(args, "alt_merge", False) and len(imgs) >= 2:
+            _alt_name = "depthmap" if _fm in ("pyramid", "pyramid-consistent", "wavelet") else "pyramid-consistent"
+            try:
+                print(f"  Zweite Verschmelzung fuer die Retusche ({_alt_name}) …")
+                _alt = (stacker.focus_stack_depthmap(imgs, log=lambda *a: None, **_dm_kw)
+                        if _alt_name == "depthmap"
+                        else stacker.focus_stack_pyramid_consistent(imgs, log=lambda *a: None))
+                _alt_path = os.path.join(work_dir, f"altmerge_{_alt_name}.tif")
+                if imwrite(_alt_path, to_uint8(_alt) if _alt.dtype != np.uint8 else _alt):
+                    print(f"  Retusche-Quelle: {_alt_path}")
+                else:
+                    print("  (zweite Verschmelzung konnte nicht geschrieben werden)", file=sys.stderr)
+            except Exception as e:
+                print(f"  (zweite Verschmelzung uebersprungen: {e})", file=sys.stderr)
+
         if getattr(args, "ghost_map", False) and len(imgs) >= 3:
             gm = stacker.ghost_overlay(result, imgs)
             gm_path = os.path.join(work_dir, "ghostmap.jpg")
@@ -1305,6 +1326,10 @@ def main():
                     help="Paarweise/sequenzielle Ausrichtung (jedes Frame auf den Nachbarn, "
                          "aufkumuliert) statt aufs globale Referenzbild — robuster bei großem "
                          "Fokusbereich / Stativ-Reihen")
+    ap.add_argument("--alt-merge", action="store_true",
+                    help="Zusaetzlich mit dem KOMPLEMENTAEREN Verfahren verschmelzen und ablegen "
+                         "(Pyramide <-> Tiefenkarte). Dient als Pinselquelle in der Retusche: "
+                         "glatte Farben als Basis, Detail an Haaren/Borsten drueberpinseln")
     ap.add_argument("--merge", choices=["flat", "tree"], default="flat",
                     help="Verschmelzungs-Reihenfolge: flat=alle auf einmal (Standard); "
                          "tree=hierarchisch paarweise (1+2,3+4,… gutmütiger bei vielen Frames)")

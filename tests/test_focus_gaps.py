@@ -15,6 +15,8 @@ beobachtbare Verhalten der neuen Engine-Funktionen — nicht die Implementierung
 """
 import os
 import sys
+import shutil
+import tempfile
 import unittest
 
 import numpy as np
@@ -330,6 +332,78 @@ class TestGhostingStaffelung(unittest.TestCase):
     def test_f7_schwelle_vorhanden(self):
         import focus_analysis as fa
         self.assertGreater(fa.GHOST_HINWEIS, 0)
+
+
+class TestZweiteVerschmelzung(unittest.TestCase):
+    """F8 — `--alt-merge`: zweite Verschmelzung mit dem GEGENTEILIGEN Verfahren als
+    Pinselquelle für die Retusche.
+
+    Der Standardgriff bei Zerene/Helicon: die Tiefenkarten-Variante hält Farben und glatte
+    Flächen sauber, die Pyramide holt Detail an Haaren/Borsten — eine als Basis nehmen, die
+    Stärken der anderen hineinpinseln. Bewusst WÄHREND des Stacks gerechnet: bei 24 MP × 16
+    Frames dauert eine Verschmelzung gemessen ~30 s, im Retusche-Dialog nachgerechnet würde
+    das die Oberfläche einfrieren."""
+
+    def _serie(self, n=4, h=120, w=160):
+        rng = np.random.RandomState(23)
+        base = cv2.GaussianBlur((rng.rand(h, w, 3) * 255).astype(np.uint8), (0, 0), 0.6)
+        tiefe = np.tile(np.linspace(0, 1, w, dtype=np.float32), (h, 1))
+        out = []
+        for i in range(n):
+            d = np.abs(tiefe - i / (n - 1)) * 4.0
+            f = np.zeros_like(base, np.float32)
+            stufen = np.linspace(0, 4.0, 6)
+            for s_ in stufen:
+                b = base.astype(np.float32) if s_ < 0.05 else cv2.GaussianBlur(base.astype(np.float32), (0, 0), s_)
+                halb = (stufen[1] - stufen[0]) / 2
+                f += b * ((d >= s_ - halb) & (d < s_ + halb)).astype(np.float32)[..., None]
+            out.append(np.clip(f, 0, 255).astype(np.uint8))
+        return out
+
+    def test_f8_alt_merge_erzeugt_datei_mit_gegenteiligem_verfahren(self):
+        """Echter Pipeline-Lauf: --alt-merge muss altmerge_<verfahren>.tif ablegen, und zwar
+        mit dem KOMPLEMENTAEREN Verfahren zum gewaehlten."""
+        import subprocess
+        import glob
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        d = tempfile.mkdtemp(prefix="fp_alt_")
+        try:
+            ein = os.path.join(d, "in"); os.makedirs(ein)
+            for i, f in enumerate(self._serie()):
+                cv2.imencode(".jpg", f)[1].tofile(os.path.join(ein, "f_%02d.jpg" % i))
+            wd = os.path.join(d, "work")
+            r = subprocess.run([sys.executable, "-u", os.path.join(root, "core", "focus_cull_stack.py"),
+                                "--input", ein, "--work", wd, "--alt-merge"],
+                               capture_output=True, cwd=root, timeout=600)
+            self.assertEqual(r.returncode, 0, r.stderr.decode("utf-8", "replace")[-500:])
+            treffer = glob.glob(os.path.join(wd, "altmerge_*.tif"))
+            self.assertTrue(treffer, "keine zweite Verschmelzung abgelegt")
+            # Standardverfahren ist die Pyramide -> die Alternative muss die Tiefenkarte sein
+            self.assertIn("depthmap", os.path.basename(treffer[0]))
+            bild = cv2.imdecode(np.fromfile(treffer[0], np.uint8), cv2.IMREAD_UNCHANGED)
+            self.assertIsNotNone(bild, "abgelegte Verschmelzung ist nicht lesbar")
+            self.assertEqual(bild.shape[:2], (120, 160))
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+    def test_f8_ohne_schalter_keine_zweite_datei(self):
+        """Gegenprobe: ohne --alt-merge darf der zweite Durchgang nicht laufen (er kostet Zeit)."""
+        import subprocess
+        import glob
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        d = tempfile.mkdtemp(prefix="fp_alt2_")
+        try:
+            ein = os.path.join(d, "in"); os.makedirs(ein)
+            for i, f in enumerate(self._serie()):
+                cv2.imencode(".jpg", f)[1].tofile(os.path.join(ein, "f_%02d.jpg" % i))
+            wd = os.path.join(d, "work")
+            r = subprocess.run([sys.executable, "-u", os.path.join(root, "core", "focus_cull_stack.py"),
+                                "--input", ein, "--work", wd],
+                               capture_output=True, cwd=root, timeout=600)
+            self.assertEqual(r.returncode, 0)
+            self.assertEqual(glob.glob(os.path.join(wd, "altmerge_*.tif")), [])
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
 
 
 if __name__ == "__main__":
