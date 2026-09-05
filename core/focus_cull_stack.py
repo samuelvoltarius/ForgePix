@@ -1965,8 +1965,13 @@ def _astro_write(result, work_dir, paths, args, astro):
         # hatte bisher ueberhaupt keine Nachkorrektur (das `if not dualband` oben).
         if getattr(args, "bg_extract", False):
             try:
-                view = astro.background_extract(view, log=lambda *a: None)
-                print("  Rest-Gradient nach dem Strecken entfernt")
+                # Bei farberhaltender Streckung wird der Rest-Gradient MULTIPLIKATIV: dort
+                # skaliert jeder Kanal mit L'/L, und weil die Kurve nahe Null steil ist, wird
+                # aus einer winzigen Hintergrunddifferenz ein Faktor. Subtrahieren hilft dann
+                # kaum (gemessen 47.4 % Rest), Dividieren schon (3.0 %).
+                _korr = "div" if _cs > 0 else "sub"
+                view = astro.background_extract(view, korrektur=_korr, log=lambda *a: None)
+                print(f"  Rest-Gradient nach dem Strecken entfernt ({_korr})")
             except Exception as e:
                 print(f"  (Nachkorrektur uebersprungen: {e})", file=sys.stderr)
         _sr = float(getattr(args, "astro_star_reduce", 0.0) or 0.0)

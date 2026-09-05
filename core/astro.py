@@ -1465,7 +1465,21 @@ def _star_desat(out, ha_n, oiii_n, strength=0.92):
     detail = np.clip(lum - smooth, 0, 1)
     core = np.clip(detail * 6.0, 0, 1) * np.clip((lum - 0.06) / 0.06, 0, 1)   # kompakte Sternkerne
     coreb = (core > 0.25).astype(np.uint8)
-    halo = cv2.dilate(coreb, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (13, 13)))  # Hof drumherum
+    # Hof-Aufweitung MIT Deckel. Eine feste 13x13-Dilation verschmilzt in sternreichen Feldern
+    # die Hoefe zu einer Decke ueber das ganze Bild: gemessen wuchs die Maske von 1.3 % echten
+    # Sternkernen auf 33 %, nach dem Weichzeichnen wirkte sie auf 65 % der Flaeche. Ergebnis war
+    # eine halbierte Saettigung des GANZEN Bildes (0.472 -> 0.257) — der Nebel wurde mit
+    # entfaerbt, obwohl nur Sterne gemeint waren.
+    kern_anteil = float(coreb.mean())
+    halo = coreb
+    for k in (13, 9, 7, 5):
+        kandidat = cv2.dilate(coreb, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k, k)))
+        # hoechstens das Vierfache der Kernflaeche und nie mehr als 10 % des Bildes
+        if float(kandidat.mean()) <= min(max(4.0 * kern_anteil, 0.01), 0.10):
+            halo = kandidat
+            break
+    else:
+        halo = coreb  # Hof drumherum
     mask = np.maximum(core, halo.astype(np.float32))
     mask = cv2.GaussianBlur(mask, (0, 0), 3)[..., None]
     gray = out.mean(axis=2, keepdims=True)

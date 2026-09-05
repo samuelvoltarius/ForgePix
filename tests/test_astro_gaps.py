@@ -605,6 +605,36 @@ class TestStrecken(unittest.TestCase):
         self.assertLess(hell(stark) - hell(schwach), 0.05,
                         "Sternstaerke wirkt zu stark — wird die Sternebene wieder gestreckt?")
 
+    def test_a12_sternentsaettigung_bleibt_lokal(self):
+        """_star_desat soll STERNE neutralisieren, nicht das Bild entfaerben.
+
+        Die feste 13x13-Hofaufweitung verschmolz in sternreichen Feldern zu einer Decke:
+        gemessen wuchs die Maske von 1.3 % echten Sternkernen auf 33 %, nach dem Weichzeichnen
+        wirkte sie auf 65 % der Flaeche — die Saettigung des GANZEN Bildes fiel dadurch von
+        0.472 auf 0.257. Jetzt ist die Aufweitung gedeckelt."""
+        h, w = 200, 260
+        rng = np.random.default_rng(7)
+        # farbiger Nebel + viele Sterne (der kritische, sternreiche Fall)
+        yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
+        neb = cv2.GaussianBlur(0.5 * np.exp(-(((xx - w / 2) / 60) ** 2 + ((yy - h / 2) / 45) ** 2)), (0, 0), 7)
+        ha = neb.astype(np.float32)
+        oiii = (neb * 0.25).astype(np.float32)
+        for _ in range(120):
+            st = np.zeros((h, w), np.float32)
+            cv2.circle(st, (int(rng.integers(6, w - 6)), int(rng.integers(6, h - 6))), 1, 1.0, -1)
+            st = cv2.GaussianBlur(st, (0, 0), 1.4)
+            ha = np.clip(ha + st * 0.8, 0, 1); oiii = np.clip(oiii + st * 0.8, 0, 1)
+        roh = np.zeros((h, w, 3), np.float32)
+        roh[..., 2] = ha; roh[..., 1] = oiii; roh[..., 0] = oiii
+        def saettigung(v):
+            hsv = cv2.cvtColor((np.clip(v, 0, 1) * 255).astype(np.uint8), cv2.COLOR_BGR2HSV)
+            m = v.mean(axis=2) > np.percentile(v.mean(axis=2), 85)
+            return float((hsv[..., 1].astype(np.float32) / 255)[m].mean())
+        vor = saettigung(roh)
+        nach = saettigung(astro._star_desat(roh.copy(), ha, oiii))
+        self.assertGreater(nach, vor * 0.8,
+                           f"Sternentsaettigung frisst die Bildfarbe: {vor:.3f} -> {nach:.3f}")
+
     def test_a12_starless_ohne_sterne_faellt_zurueck(self):
         """Findet das Star-Removal nichts, muss normal gestreckt werden — nicht scheitern."""
         flach = np.full((80, 100, 3), 0.2, np.float32)
