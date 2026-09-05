@@ -1791,9 +1791,26 @@ def run_astro(input_dir, work_dir, args):
         if _komet_erg is not None:
             result = _komet_erg
         else:
+            # Gemischte Belichtungszeiten: die Zeiten aus den Headern mitgeben. Ohne sie
+            # vergleicht das Sigma-Clipping ein 60-s-Sub mit einem 300-s-Sub und hält das kurze
+            # für einen Ausreisser — es verschwendet sein Verwurfsbudget auf die kurzen Subs und
+            # lässt dafür echte Störungen stehen. Gemessen (12 Subs, ein Satellit): Rest der
+            # Spur 0,0423 ohne, 0,0161 mit Zeiten.
+            _zeiten = [_belichtung(p) for p in paths]
+            _gewicht = getattr(args, "astro_weight", False)
+            if all(z for z in _zeiten) and max(_zeiten) / min(_zeiten) > 1.05:
+                if not _gewicht:
+                    # Skalieren OHNE Gewichtung kostet SNR (gemessen 87 auf 66), weil die
+                    # hochskalierten kurzen Subs ihr Rauschen mitbringen und dann gleich viel
+                    # zählen. Zusammen ergibt es 86 bei gleichzeitig bester Störungsunterdrückung.
+                    print("  gemischte Belichtungszeiten erkannt — SNR-Gewichtung wird "
+                          "mitgeschaltet (ohne sie kostet das Angleichen Rauschabstand)")
+                    _gewicht = True
+            else:
+                _zeiten = None
             result = astro.stack(aligned, method=args.astro_method, kappa=args.astro_kappa, normalize=True,
                                  local_norm=getattr(args, "astro_local_norm", False),
-                                 weight=getattr(args, "astro_weight", False), preview_cb=_preview_cb)
+                                 weight=_gewicht, belichtungen=_zeiten, preview_cb=_preview_cb)
     binf = int(getattr(args, "astro_bin", 1) or 1)
     if binf > 1:
         result = astro.bin_image(result, binf)
