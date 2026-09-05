@@ -392,6 +392,9 @@ def guess_module(folder):
     """Best-effort: wahrscheinlichstes Modul aus Dateitypen/-namen + einer EXIF-Stichprobe raten.
     Gibt (key, grund) mit key ∈ {makro, astro, hybrid, longexp}; Default 'makro'. Bewusst billig
     (nur ein exiftool-Aufruf auf wenige Frames) und nie blockierend bei fehlendem exiftool."""
+    from astro_input import series_folders
+    if series_folders(folder):
+        return "astro", "FITS-Aufnahmeserie erkannt"
     import glob
     import os as _os
     try:

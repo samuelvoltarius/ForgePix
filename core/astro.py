@@ -59,7 +59,7 @@ def detect_bayer(d):
         return "RGGB"
 
 
-def _read_float(path):
+def _read_float(path, debayer=True):
     """Bild als float32 [0..1] (BGR) lesen — TIFF/PNG/JPG/FITS; RAW via rawpy."""
     ext = os.path.splitext(path)[1].lower()
     if ext in (".fit", ".fits", ".fts"):
@@ -73,8 +73,8 @@ def _read_float(path):
         # OSC-Kameras (z. B. Seestar/ASI) liefern Bayer-Rohdaten als 2D-FITS -> debayern = Farbe.
         # BAYERPAT aus dem Header, sonst SELBST erkennen (gegen Dateien ohne Header-Eintrag).
         if d.ndim == 2:
-            if bayer not in _BAYER2CV:
-                bayer = detect_bayer(d)
+            if not debayer:
+                return np.nan_to_num(fits_scale01(d))
             if bayer in _BAYER2CV:
                 # FESTE Skala statt frame-eigenem Maximum: ein Hotpixel/Satellit würde sonst
                 # die Helligkeit des ganzen Subs verschieben (inkonsistent zwischen Frames).
@@ -99,22 +99,50 @@ def _read_float(path):
         img = imread(path, cv2.IMREAD_UNCHANGED)
         if img is None:
             raise RuntimeError(f"Bild nicht lesbar: {path}")
-        maxv = 65535.0 if img.dtype == np.uint16 else 255.0
+        maxv = (1.0 if np.issubdtype(img.dtype, np.floating)
+                else 65535.0 if img.dtype == np.uint16 else 255.0)
     f = img.astype(np.float32) / maxv
     if f.ndim == 2:
         f = cv2.cvtColor(f, cv2.COLOR_GRAY2BGR)
     return f
 
 
-def _master(paths):
+def _master(paths, raw=False):
     """Master-Frame (Median) aus mehreren Kalibrier-Frames, oder einzelnes Frame."""
     if isinstance(paths, str):
-        return _read_float(paths)
-    fs = [_read_float(p) for p in paths]
+        return _read_float(paths, debayer=not raw)
+    fs = [_read_float(p, debayer=not raw) for p in paths]
     return np.median(np.stack(fs), axis=0)
 
 
+def read_calibrated(path, dark=None, flat=None):
+    """FITS-Sensordaten zuerst kalibrieren, danach debayern (keine interpolierten Masters)."""
+    is_fits = os.path.splitext(path)[1].lower() in (".fit", ".fits", ".fts")
+    if is_fits and all(m is None or m.ndim == 2 for m in (dark, flat)):
+        raw = _read_float(path, debayer=False)
+        if raw.ndim == 2:
+            calibrated = calibrate(raw, dark, flat)
+            fits = require_astropy("FITS-Kalibrierung")
+            header = fits.getheader(path)
+            pattern = str(header.get("BAYERPAT", "")).strip().upper()
+            if pattern in _BAYER2CV:
+                # Offsets ändern die Phase des 2x2-Sensorrasters.
+                tile = np.array(list(pattern)).reshape(2, 2)
+                tile = np.roll(tile, (-int(header.get("YBAYROFF", 0)) % 2,
+                                      -int(header.get("XBAYROFF", 0)) % 2), axis=(0, 1))
+                pattern = "".join(tile.ravel())
+                u16 = np.clip(calibrated * 65535, 0, 65535).astype(np.uint16)
+                return cv2.cvtColor(u16, _BAYER2CV[pattern]).astype(np.float32) / 65535
+            # Ohne explizites CFA-Muster ist ein FITS monochrom; keine erfundene Farbe.
+            return cv2.cvtColor(calibrated.astype(np.float32), cv2.COLOR_GRAY2BGR)
+    return calibrate(_read_float(path), dark, flat)
+
+
 def calibrate(f, dark=None, flat=None):
+    for name, master in (("Dark", dark), ("Flat", flat)):
+        if master is not None and master.shape != f.shape:
+            raise ForgePixFehler("%s-Master passt nicht zur Aufnahme: %s statt %s"
+                                 % (name, master.shape, f.shape))
     out = f
     if dark is not None:
         out = out - dark
@@ -658,7 +686,7 @@ def register_and_cache(paths, out_dir, dark=None, flat=None, do_register=True,
     from parallel import pmap
     os.makedirs(out_dir, exist_ok=True)
     drizzle = max(1, int(drizzle))
-    ref = calibrate(_read_float(_ref_path(paths, ref_path)), dark, flat)
+    ref = read_calibrated(_ref_path(paths, ref_path), dark, flat)
     if banding:
         ref = fix_banding(ref, strength=banding)
     if cosmetic:
@@ -670,7 +698,7 @@ def register_and_cache(paths, out_dir, dark=None, flat=None, do_register=True,
         log("    TPS-Feinregistrierung aktiv (lokale Restverzeichnung wird korrigiert)")
 
     def _prep(i):
-        f = calibrate(_read_float(paths[i]), dark, flat)
+        f = read_calibrated(paths[i], dark, flat)
         if f.shape[:2] != ref.shape[:2]:
             f = cv2.resize(f, (ref.shape[1], ref.shape[0]))
         if banding:
@@ -742,7 +770,7 @@ def register_and_cache(paths, out_dir, dark=None, flat=None, do_register=True,
                 rescued += 1
         if rescued:
             log(f"    +{rescued} weit geditherte Frames über Cluster-Brücke zurückgeholt ({len(aligned)}/{len(paths)})")
-    return aligned
+    return sorted(aligned)
 
 
 def drizzle_stack(paths, scale=2, pixfrac=0.7, dark=None, flat=None, cosmetic=False,
@@ -758,7 +786,7 @@ def drizzle_stack(paths, scale=2, pixfrac=0.7, dark=None, flat=None, cosmetic=Fa
     braucht aber mehr Frames für volle Abdeckung; 0.7 ist ein guter Kompromiss)."""
     scale = int(max(2, scale))
     pf = float(np.clip(pixfrac, 0.1, 1.0))
-    ref = calibrate(_read_float(_ref_path(paths, ref_path)), dark, flat)
+    ref = read_calibrated(_ref_path(paths, ref_path), dark, flat)
     if banding:
         ref = fix_banding(ref, strength=banding)
     if cosmetic:
@@ -772,7 +800,7 @@ def drizzle_stack(paths, scale=2, pixfrac=0.7, dark=None, flat=None, cosmetic=Fa
     yy, xx = np.mgrid[0:OH, 0:OW].astype(np.float32)
     used = 0
     for k, p in enumerate(paths):
-        f = calibrate(_read_float(p), dark, flat)
+        f = read_calibrated(p, dark, flat)
         if f.shape[:2] != (H, W):
             f = cv2.resize(f, (W, H))
         if banding:

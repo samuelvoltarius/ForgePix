@@ -23,7 +23,7 @@ from PySide6.QtWidgets import (
     QGroupBox, QLabel, QLineEdit, QPushButton, QFileDialog, QPlainTextEdit,
     QDoubleSpinBox, QSpinBox, QCheckBox, QMessageBox, QSplitter, QFrame, QComboBox,
     QScrollArea, QProgressBar, QToolButton, QDialog, QSlider, QStackedWidget,
-    QMenu,
+    QMenu, QInputDialog,
 )
 
 try:
@@ -53,7 +53,7 @@ from ui.workers import _AnalyzeWorker, _ToolWorker, _UpdateChecker, _version_new
 class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle(tr("ForgePix — Fokus-Stacking mit KI"))
+        self.setWindowTitle(tr("ForgePix — Astrofotos einfach entwickeln"))
         self.resize(1440, 900)  # großzügig, damit nichts abgeschnitten ist
         if os.path.isfile(ICON):
             self.setWindowIcon(QIcon(ICON))
@@ -401,7 +401,7 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         self.astro_stretch_mode.addItem(tr("GHS (Generalised Hyperbolic)"), "ghs")
         self.astro_local_norm = QCheckBox(tr("Lokale Normalisierung (gegen Gradienten/Mehrfach-Sessions)"))
         self.astro_bg = QCheckBox(tr("Hintergrund/Gradient entfernen"))
-        self.astro_fits = QCheckBox(tr("Auch als FITS speichern"))
+        self.astro_fits = QCheckBox(tr("Auch als FITS speichern")); self.astro_fits.setChecked(True)
         self.astro_align = QComboBox()
         self.astro_align.addItem(tr("Translation (Nachführung)"), "shift")
         self.astro_align.addItem(tr("Translation + Feldrotation (Alt-Az)"), "rotate")
@@ -1244,9 +1244,7 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         # One-Click „Veredeln": GraXpert (Gradient + Entrauschen) auf das lineare Ergebnis —
         # der übliche Schritt nach dem Stacken. Nur bei Himmels-Modulen sinnvoll.
         self.enhance_btn = QPushButton(tr("✨  Veredeln"))
-        self.enhance_btn.setToolTip(tr("Ein Klick: GraXpert entfernt Gradienten und entrauscht das "
-                                       "Bild (kostenloses Tool). Nicht installiert? ForgePix sagt dir, "
-                                       "wo es das gibt."))
+        self.enhance_btn.setToolTip(tr("Eigene Bildverarbeitung: Hintergrund ausgleichen und Rauschen reduzieren."))
         self.enhance_btn.setEnabled(False); self.enhance_btn.clicked.connect(self.enhance_result)
 
         self.tools_btn = QToolButton()
@@ -1273,6 +1271,9 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         cp = QAction(tr("🧩  Panorama: Kontrollpunkte (manuell)"), self)
         cp.triggered.connect(self.open_controlpoints)
         menu.addAction(cp)
+        pixelmath_action = QAction(tr("PixelMath: Bildformeln"), self)
+        pixelmath_action.triggered.connect(self.open_pixelmath)
+        menu.addAction(pixelmath_action)
         self.tools_btn.setMenu(menu)
 
         for b in (self.cmp_btn, self.adjust_btn, self.enhance_btn, self.export_btn, self.tools_btn):
@@ -1803,8 +1804,8 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
             if self.astro_fits.isChecked():
                 args += ["--fits-out"]
             args += ["--astro-align", self.astro_align.currentData()]
-        if getattr(self, "astro_komet", None) is not None and self.astro_komet.isChecked():
-            args += ["--astro-komet"]
+            if getattr(self, "astro_komet", None) is not None and self.astro_komet.isChecked():
+                args += ["--astro-komet"]
             if self.astro_cosmetic.isChecked():
                 args += ["--astro-cosmetic"]
             if self.astro_drizzle.currentData() and int(self.astro_drizzle.currentData()) > 1:
@@ -1975,6 +1976,22 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         if not inp or not os.path.isdir(inp):
             QMessageBox.warning(self, tr("Fehler"), tr("Bitte einen gültigen Eingabe-Ordner wählen."))
             return
+        if self.astro_group.isChecked() or auto:
+            from astro_input import series_folders
+            series = series_folders(inp)
+            if series:
+                if len(series) == 1:
+                    inp = series[0][0]
+                else:
+                    labels = ["%s — %d FITS" % (os.path.relpath(p, inp), n) for p, n in series]
+                    selected, ok = QInputDialog.getItem(
+                        self, tr("Astro-Serie auswählen"),
+                        tr("Welches Objekt möchtest du entwickeln?"), labels, 0, False)
+                    if not ok:
+                        return
+                    inp = series[labels.index(selected)][0]
+                self.in_edit.setText(inp)
+                self._guess_from_folder(inp)
         # Vorab-Check: genug Bilder vorhanden? (Astro/Langzeit/Mosaik brauchen ≥2)
         try:
             import focus_cull_stack as F
@@ -1993,6 +2010,11 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         except Exception:
             pass
         args = self._build_args(auto)
+        self._live_stop_file = None
+        if "--live" in args:
+            import uuid
+            self._live_stop_file = os.path.join(tempfile.gettempdir(), "forgepix-stop-" + uuid.uuid4().hex)
+            args += ["--stop-file", self._live_stop_file]
         self.log.clear()
         # erst Pixmap leeren, DANN Text setzen — umgekehrt löscht setPixmap den Text sofort wieder
         self.preview.setPixmap(QPixmap()); self.preview.setText(tr("— läuft —"))
@@ -2002,7 +2024,7 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         self.result_path = None; self.before_path = None; self._last_rationale = ""
         self.progress.setRange(0, 0); self.progress.show()  # erst „beschäftigt“
         if auto:
-            self._append("⚡ AUTOMATIK — die KI bestimmt alle Einstellungen, max. Qualität.\n")
+            self._append(tr("Automatik: Aufnahmen prüfen, ausrichten und zusammenrechnen. KI ist optional.") + "\n")
         # API-Schlüssel im Log-Echo maskieren (Nutzer teilen Logs bei Bugreports)
         shown = list(args)
         for flag in ("--vlm-key", "--astrometry-key"):
@@ -2023,6 +2045,12 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
 
     def stop(self):
         if self.proc and self.proc.state() != QProcess.NotRunning:
+            if getattr(self, "_live_stop_file", None):
+                with open(self._live_stop_file, "w", encoding="utf-8") as f:
+                    f.write("stop")
+                self.stop_btn.setEnabled(False)
+                self._append(tr("Live-Aufnahme wird beendet. Das Ergebnis wird noch gespeichert.") + "\n")
+                return
             # SIGTERM zuerst (Watch-Modus beendet sauber zwischen zwei Stacks); danach hart
             self.proc.terminate()
             if not self.proc.waitForFinished(3000):
@@ -2215,6 +2243,10 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
             self._show_result()
 
     def _on_finished(self, code, _status):
+        stop_file = getattr(self, "_live_stop_file", None)
+        if stop_file and os.path.exists(stop_file):
+            os.unlink(stop_file)
+        self._live_stop_file = None
         self.run_btn.setEnabled(True); self.auto_btn.setEnabled(True); self.stop_btn.setEnabled(False)
         self.progress.setRange(0, 100); self.progress.setValue(100 if code == 0 else 0)
         self._append(f"\n[fertig, exit {code}]\n")
@@ -2477,42 +2509,69 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         wk.start()
         busy.exec()
 
+    def open_pixelmath(self):
+        """Evaluate native image expressions on explicitly selected linear files."""
+        dialog = QDialog(self)
+        dialog.setWindowTitle(tr("PixelMath: Bildformeln"))
+        dialog.resize(640, 320)
+        layout = QVBoxLayout(dialog)
+        description = QLabel(tr("Bilder als A, B oder C verwenden. Beispiel: 0.8*A + 0.2*B. "
+                                "Alle Bilder müssen gleich groß und bereits ausgerichtet sein."))
+        description.setWordWrap(True)
+        layout.addWidget(description)
+        fields = {}
+        for name in ("A", "B", "C"):
+            edit = QLineEdit()
+            button = QPushButton(tr("Wählen…"))
+            def pick(checked=False, field=edit):
+                path, _ = QFileDialog.getOpenFileName(dialog, "FITS / TIFF", "", "FITS / TIFF (*.fit *.fits *.fts *.tif *.tiff)")
+                if path:
+                    field.setText(path)
+            button.clicked.connect(pick)
+            row = _row(name, edit)
+            row.addWidget(button)
+            layout.addLayout(row)
+            fields[name] = edit
+        formula = QLineEdit("A")
+        layout.addLayout(_row(tr("Formel"), formula))
+        run = QPushButton(tr("Berechnen und speichern"))
+        run.setObjectName("primary")
+        layout.addWidget(run)
+        def execute():
+            paths = {key: field.text().strip() for key, field in fields.items() if field.text().strip()}
+            if not paths:
+                return
+            destination, _ = QFileDialog.getSaveFileName(dialog, tr("Berechnen und speichern"), "pixelmath.tif", "TIFF (*.tif)")
+            if not destination:
+                return
+            if any(os.path.normcase(os.path.abspath(destination)) == os.path.normcase(os.path.abspath(p)) for p in paths.values()):
+                QMessageBox.warning(dialog, "PixelMath", tr("Bitte eine neue Ausgabedatei wählen."))
+                return
+            expression = formula.text()
+            def calculate(log):
+                import astro
+                import pixelmath
+                import tifffile
+                arrays = {name: astro._read_float(path) for name, path in paths.items()}
+                output = pixelmath.evaluate(expression, arrays)
+                tifffile.imwrite(destination, output[..., ::-1], photometric="rgb")
+                return destination
+            dialog.accept()
+            self._run_tool_async("PixelMath", calculate,
+                                 lambda out: self._adopt_result(out, next(iter(paths.values()))))
+        run.clicked.connect(execute)
+        dialog.exec()
+
     def enhance_result(self):
-        """One-Click „Veredeln". **Anfänger** (+ StarNet installiert): voller Starless-Workflow
-        automatisch (Sterne raus → Nebel verstärken → zurück). **Profi** oder ohne StarNet: nur
-        GraXpert (Gradient + Entrauschen). Den vollen Workflow gibt's für Profis im Werkzeuge-Menü."""
-        try:
-            import tools_engine
-        except Exception as e:
-            QMessageBox.warning(self, tr("Veredeln"), f"{e}"); return
+        """Ein Klick, ausschließlich eigene Verfahren auf dem linearen Ergebnis."""
+        import own_astro
         f = self._best_export_file(bits=32)
         if not f or not os.path.isfile(f):
             QMessageBox.information(self, tr("Veredeln"), tr("Erst ein Astro-Ergebnis erzeugen."))
             return
-        beginner = self.mode_box.currentIndex() == 0
-        sn = (self.starnet_path.text().strip() or None)
-        if beginner and tools_engine.find_starnet(sn):
-            self._append(tr("\nℹ️ Anfänger-Modus: voller Starless-Workflow (Sterne werden getrennt, "
-                            "der Nebel verstärkt und die Sterne sauber zurückgesetzt).\n"))
-            self._run_starless_workflow(f)
-            return
-        cfg = self.graxpert_path.text().strip() or None
-        if not tools_engine.find_graxpert(cfg):
-            self._tool_missing_hint("graxpert", f)
-            return
-        self._append(tr("\n⏳ Veredeln mit GraXpert (Gradient + Entrauschen) … (kann 1–2 min dauern)\n"))
-        if not beginner and tools_engine.find_starnet(sn):
-            self._append(tr("   Tipp: Für den vollen Starless-Workflow → Werkzeuge → "
-                            "Starless-Workflow.\n"))
-
-        def ok(out):
-            self._adopt_result(out, f)
-            self._append(f"\n✅ Veredelt & reimportiert: {os.path.basename(out)}\n")
-
-        self._run_tool_async(tr("Veredeln"),
-                             lambda log: tools_engine.run_graxpert_enhance(f, path=cfg,
-                                                                           denoise=True, log=log),
-                             ok)
+        self._append(tr("Eigene Bildverarbeitung: Hintergrund ausgleichen und Rauschen reduzieren.") + "\n")
+        self._run_tool_async(tr("Veredeln"), lambda log: own_astro.run(f, log=log),
+                             lambda out: self._adopt_result(out, f))
 
     def _run_starless_workflow(self, linear=None):
         """Voller Starless-Workflow (GraXpert-Gradient → Palette/Strecken → StarNet → Nebel
@@ -3058,6 +3117,11 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
 
     # ---------- Einstellungen merken ----------
     def closeEvent(self, e):
+        if (self.proc and self.proc.state() != QProcess.NotRunning
+                and getattr(self, "_live_stop_file", None)):
+            self.stop()
+            e.ignore()
+            return
         # Laufende Subprozesse/Threads sauber beenden (sonst Orphan-Prozess / QThread-Warnung)
         if self.proc and self.proc.state() != QProcess.NotRunning:
             self.proc.terminate()

@@ -21,103 +21,75 @@ class WelcomeMixin:
     """Startbildschirm-Aufbau, Modul-Auswahl, Resume und „Über ForgePix"."""
 
     def _build_welcome(self):
-        """Start-Auswahlbildschirm: aufgeräumt, mit Logo, Modul-Karten und 3-Schritt-Ablauf."""
+        """Astro-first workspace entry with a clear primary action."""
         page = QWidget()
         outer = QVBoxLayout(page)
-        outer.setContentsMargins(16, 12, 16, 12)
-        # Top-Bar: Einstellungen schon am Start erreichbar (Sprache/Anfänger-Profi/KI)
-        topbar = QHBoxLayout()
-        # Update-Hinweis (links, erscheint nur wenn eine neuere Version gefunden wurde)
-        self.update_lbl = QLabel(""); self.update_lbl.setTextFormat(Qt.RichText)
-        self.update_lbl.setOpenExternalLinks(True); self.update_lbl.setVisible(False)
-        self.update_lbl.setStyleSheet("background:#1c2a1c;border:1px solid #2f5a32;border-radius:9px;"
-                                      "padding:5px 12px;color:#9be39b;font-size:12px;font-weight:600;")
-        topbar.addWidget(self.update_lbl)
-        topbar.addStretch(1)
-        info_btn = QPushButton(tr("ℹ️  Was ist das?"))
-        info_btn.setToolTip(tr("Kurz erklärt, was ForgePix macht."))
-        info_btn.clicked.connect(self._show_about)
-        wset_btn = QPushButton(tr("⚙  Einstellungen"))
-        wset_btn.setToolTip(tr("Sprache, Anfänger/Profi, KI-Server — schon vor dem Start einstellbar."))
-        wset_btn.clicked.connect(self.settings_dialog.show)
-        topbar.addWidget(info_btn); topbar.addWidget(wset_btn)
-        outer.addLayout(topbar)
-        outer.addStretch(1)
-
-        # zentrierter Inhalts-Container mit fester Maximalbreite (auch auf breiten Screens schön)
-        center = QHBoxLayout(); outer.addLayout(center)
-        center.addStretch(1)
-        box = QWidget(); box.setMaximumWidth(880); center.addWidget(box); center.addStretch(1)
-        lay = QVBoxLayout(box); lay.setContentsMargins(24, 0, 24, 0); lay.setSpacing(0)
-
-        # Logo + Titel
-        if os.path.isfile(ICON_PNG):
-            logo = QLabel(); logo.setAlignment(Qt.AlignCenter)
-            logo.setPixmap(QPixmap(ICON_PNG).scaled(64, 64, Qt.KeepAspectRatio, Qt.SmoothTransformation))
-            lay.addWidget(logo); lay.addSpacing(8)
-        head = QLabel("ForgePix")
-        head.setStyleSheet("font-size:32px;font-weight:800;letter-spacing:0.5px;")
-        head.setAlignment(Qt.AlignCenter); lay.addWidget(head)
-        tag = QLabel(tr("Fotos rein – fertiges Bild raus."))
-        tag.setStyleSheet("color:#9aa09a;font-size:13px;"); tag.setAlignment(Qt.AlignCenter)
-        lay.addWidget(tag); lay.addSpacing(20)
-        sub = QLabel(tr("Schritt 1: Wähle ein Modul"))
-        sub.setStyleSheet("color:#7bd36a;font-size:14px;font-weight:700;letter-spacing:0.3px;")
-        sub.setAlignment(Qt.AlignCenter); lay.addWidget(sub); lay.addSpacing(16)
-
-        grid = QGridLayout(); grid.setSpacing(18)
-        # (Modul, großes Emoji, Titel, Kategorie, Beispiele, Empfehlungs-Pill)
-        cards = [
-            (0, "🔬", tr("Makro"), tr("Fokus-Stacking"),
-             tr("Produkte · Münzen · Insekten · Food"), tr("10–40 Aufnahmen")),
-            (1, "🌌", tr("Astro"), tr("Deep-Sky / Sterne"),
-             tr("Milchstraße · Nebel · Galaxien"), tr("20–100+ Lights")),
-            (2, "🌗", tr("Hybrid"), tr("Mosaik & Fokus+Astro"),
-             tr("Mond · Sonne · große Panoramen"), tr("4–20+ Kacheln")),
-            (3, "📷", tr("Langzeit"), tr("Belichtung ohne ND-Filter"),
-             tr("Wasser · Wolken · Lichtspuren"), tr("10–300+ Bilder")),
-        ]
-        for n, (idx, emoji, name, cat, examples, pill) in enumerate(cards):
-            card = QPushButton(); card.setCursor(Qt.PointingHandCursor); card.setMinimumHeight(212)
-            card.setObjectName("card")
-            cv = QVBoxLayout(card); cv.setContentsMargins(20, 20, 20, 18); cv.setSpacing(4)
-            el = QLabel(emoji); el.setAlignment(Qt.AlignCenter); el.setStyleSheet("font-size:54px;")
-            tl = QLabel(name); tl.setAlignment(Qt.AlignCenter)
-            tl.setStyleSheet("font-size:22px;font-weight:800;color:#e8eae6;")
-            cl = QLabel(cat); cl.setAlignment(Qt.AlignCenter)
-            cl.setStyleSheet("color:#7bd36a;font-size:13px;font-weight:600;")
-            xl = QLabel(examples); xl.setWordWrap(True); xl.setAlignment(Qt.AlignCenter)
-            xl.setStyleSheet("color:#9aa09a;font-size:12px;")
-            pl = QLabel(pill); pl.setAlignment(Qt.AlignCenter)
-            pl.setStyleSheet("color:#7bd36a;background:#1c2a1c;border-radius:9px;"
-                             "padding:3px 12px;font-size:11px;font-weight:600;")
-            for w in (el, tl, cl, xl, pl):
-                w.setAttribute(Qt.WA_TransparentForMouseEvents)  # Klicks gehen an die Karte
-            cv.addWidget(el); cv.addSpacing(2); cv.addWidget(tl); cv.addWidget(cl)
-            cv.addSpacing(4); cv.addWidget(xl); cv.addStretch(1)
-            row = QHBoxLayout(); row.addStretch(1); row.addWidget(pl); row.addStretch(1); cv.addLayout(row)
-            card.clicked.connect(lambda _=False, t=idx: self._choose_module(t))
-            grid.addWidget(card, n // 2, n % 2)
-        lay.addLayout(grid)
-        lay.addSpacing(20)
-        steps = QLabel(tr("So geht's:&nbsp;&nbsp; <b style='color:#7bd36a'>1</b> Modul wählen &nbsp;→&nbsp; "
-                          "<b style='color:#7bd36a'>2</b> Ordner wählen oder aufs Fenster ziehen &nbsp;→&nbsp; "
-                          "<b style='color:#7bd36a'>3</b> ⚡ Automatik"))
-        steps.setTextFormat(Qt.RichText); steps.setAlignment(Qt.AlignCenter)
-        steps.setStyleSheet("font-size:13px;color:#b9bdb6;")
-        lay.addWidget(steps)
-
-        # „Weiter wo du warst" — zuletzt verwendeten Ordner mit einem Klick wieder laden
+        outer.setContentsMargins(48, 32, 48, 32)
+        top = QHBoxLayout()
+        brand = QLabel("ForgePix")
+        brand.setStyleSheet("font-size:24px;font-weight:700;")
+        top.addWidget(brand)
+        self.update_lbl = QLabel("")
+        self.update_lbl.setTextFormat(Qt.RichText)
+        self.update_lbl.setOpenExternalLinks(True)
+        self.update_lbl.hide()
+        top.addWidget(self.update_lbl)
+        top.addStretch()
+        about = QPushButton(tr("Über ForgePix"))
+        about.clicked.connect(self._show_about)
+        settings = QPushButton(tr("Einstellungen"))
+        settings.clicked.connect(self.settings_dialog.show)
+        top.addWidget(about)
+        top.addWidget(settings)
+        outer.addLayout(top)
+        outer.addStretch()
+        body = QWidget()
+        body.setMaximumWidth(880)
+        content = QVBoxLayout(body)
+        content.setContentsMargins(0, 0, 0, 0)
+        content.setSpacing(18)
+        eyebrow = QLabel(tr("ASTROFOTOGRAFIE"))
+        eyebrow.setObjectName("sectionHeader")
+        content.addWidget(eyebrow)
+        title = QLabel(tr("Mehr aus deinen Aufnahmen."))
+        title.setWordWrap(True)
+        title.setStyleSheet("font-size:36px;font-weight:600;")
+        content.addWidget(title)
+        description = QLabel(tr("FITS-Aufnahmen prüfen, ausrichten und zusammenfügen. "
+                               "Danach entwickelst du dein Bild Schritt für Schritt."))
+        description.setWordWrap(True)
+        description.setObjectName("hint")
+        content.addWidget(description)
+        start = QPushButton(tr("Astro-Projekt starten"))
+        start.setObjectName("primary")
+        start.setMinimumHeight(46)
+        start.clicked.connect(lambda: self._choose_module(1))
+        content.addWidget(start)
+        workflow = QLabel(tr("01  Aufnahmen     /     02  Kalibrierung & Stack     /     03  Entwicklung & Export"))
+        workflow.setWordWrap(True)
+        workflow.setObjectName("hint")
+        content.addWidget(workflow)
         last = app_settings().value("in", "") or ""
         if last and os.path.isdir(last):
-            lay.addSpacing(14)
-            rrow = QHBoxLayout(); rrow.addStretch(1)
-            resume = QPushButton("↩  " + tr("Weiter") + ":  " + os.path.basename(last.rstrip("/")))
-            resume.setObjectName("chip"); resume.setCursor(Qt.PointingHandCursor)
-            resume.setToolTip(tr("Zuletzt verwendeten Ordner wieder öffnen") + ":\n" + last)
+            resume = QPushButton(tr("Letzten Ordner öffnen") + ": " + os.path.basename(last.rstrip("/")))
             resume.clicked.connect(lambda: self._resume_last(last))
-            rrow.addWidget(resume); rrow.addStretch(1); lay.addLayout(rrow)
-
+            content.addWidget(resume)
+        content.addSpacing(28)
+        other = QLabel(tr("Weitere Arbeitsbereiche"))
+        other.setObjectName("hint")
+        content.addWidget(other)
+        tools = QHBoxLayout()
+        for index, label in [(0, tr("Fokus-Stacking")), (2, tr("Mosaik")),
+                             (3, tr("Langzeitbelichtung")), (4, tr("HDR"))]:
+            button = QPushButton(label)
+            button.clicked.connect(lambda checked=False, value=index: self._choose_module(value))
+            tools.addWidget(button)
+        content.addLayout(tools)
+        center = QHBoxLayout()
+        center.addStretch()
+        center.addWidget(body, 1)
+        center.addStretch()
+        outer.addLayout(center)
         outer.addStretch(2)
         return page
 

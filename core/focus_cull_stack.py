@@ -1533,6 +1533,7 @@ def main():
                          "aktuelles Vorschaubild bereit. Gemessen (12 Subs): 2,8 s statt 7,5 s, "
                          "und der Abstand waechst mit jeder weiteren Aufnahme. Das Ergebnis "
                          "stimmt mit dem Stapeln am Ende auf 0,08 %% der Bildspanne ueberein")
+    ap.add_argument("--stop-file", default=None, help=argparse.SUPPRESS)
     ap.add_argument("--watch-settle", type=int, default=5,
                     help="Sekunden ohne Änderung, bevor gestackt wird (Default 5)")
     args = ap.parse_args()
@@ -1563,6 +1564,16 @@ def main():
         return
 
     input_dir = os.path.abspath(args.input)
+    if getattr(args, "astro", False) or getattr(args, "auto", False):
+        from astro_input import series_folders
+        series = series_folders(input_dir)
+        if len(series) == 1:
+            input_dir = series[0][0]
+            args.astro = True
+            print("  Astro-Serie erkannt: %s (%d FITS-Aufnahmen)" % (os.path.basename(input_dir), series[0][1]))
+        elif len(series) > 1 and not list_images(input_dir) and not args.batch:
+            raise ForgePixFehler("Mehrere Astro-Serien gefunden. Bitte den Ordner eines Objekts waehlen: "
+                                 + ", ".join(os.path.relpath(p, input_dir) for p, _ in series[:8]))
     work_dir = os.path.abspath(args.work) if args.work else \
         os.path.join(os.path.dirname(input_dir), "stack_work")
     os.makedirs(work_dir, exist_ok=True)
@@ -1656,32 +1667,25 @@ def _autodetect_calibration(input_dir):
 def _gather_session_paths(input_dir, args):
     """Light-Frames aus dem Haupt-Ordner plus optionalen weiteren Sessions/Nächten (args.also)
     zu EINEM Stack zusammenführen (mehr Integration = besseres Ergebnis)."""
-    paths = list_images(input_dir)
+    from astro_input import light_paths
+    paths = light_paths(input_dir, list_images)
     extra = getattr(args, "also", None) or []
     for d in extra:
         if d and os.path.isdir(d):
-            more = list_images(d)
+            more = light_paths(d, list_images)
             if more:
                 print(f"  + Session {os.path.basename(d.rstrip('/'))}: {len(more)} Frames")
                 paths += more
-    return paths
+    return list(dict.fromkeys(paths))
 
 
-def run_astro(input_dir, work_dir, args):
-    """Astro-Stacking: Kalibrierung -> Registrierung -> Rejection-Stacking -> Stretch."""
+def _load_astro_calibration(input_dir, args, paths):
+    """Gemeinsame Kalibrierung für Offline- und Live-Stacking."""
     import astro
-    paths = _gather_session_paths(input_dir, args)
-    if len(paths) < 2:
-        print("Zu wenige Bilder für Astro.", file=sys.stderr); return None
-    print(f"== Astro-Modus: {len(paths)} Frames, Methode={args.astro_method} ==")
-    # Kalibrier-Frames automatisch finden, wenn nicht explizit gesetzt
     if not getattr(args, "no_auto_calib", False):
-        ad, af, ab = _autodetect_calibration(input_dir)
-        for attr, val, label in (("dark", ad, "Dark"), ("flat", af, "Flat"), ("bias", ab, "Bias")):
-            if val and not getattr(args, attr, None):
-                setattr(args, attr, val)
-                print(f"  Kalibrierung automatisch erkannt: {label}-Ordner „{os.path.basename(val)}“")
-
+        for attr, value in zip(("dark", "flat", "bias"), _autodetect_calibration(input_dir)):
+            if value and not getattr(args, attr, None):
+                setattr(args, attr, value)
     def load_master(spec, name):
         if not spec:
             return None
@@ -1690,9 +1694,65 @@ def run_astro(input_dir, work_dir, args):
             if not ims:
                 return None
             print(f"  Master-{name} aus {len(ims)} Frames")
-            return astro._master(ims)
+            return astro._master(ims, raw=True)
         print(f"  Master-{name}: {os.path.basename(spec)}")
-        return astro._master(spec)
+        return astro._master(spec, raw=True)
+
+    dark = load_master(getattr(args, "dark", None), "Dark")
+    flat = load_master(getattr(args, "flat", None), "Flat")
+    bias = load_master(getattr(args, "bias", None), "Bias")
+    if bias is not None:
+        # Bias verrechnen (astro.calibrate kennt nur Dark/Flat, wurde bisher still ignoriert):
+        # - Flat VOR der Normierung bias-korrigieren, sonst verfälscht der Offset die
+        #   Vignettierungs-Korrektur (Flat-Signal = Flat − Bias).
+        # - Ohne Dark den Bias direkt vom Licht abziehen (als „Dark“ durchreichen).
+        #   MIT Dark enthält der Dark-Master den Bias bereits → nicht doppelt abziehen.
+        if flat is not None and flat.shape == bias.shape:
+            flat = np.clip(flat - bias, 1e-6, None)
+        if dark is None:
+            dark = bias
+        else:
+            print("  (Bias steckt im Dark-Master — nur das Flat wird bias-korrigiert)")
+
+    # Belichtungszeiten von Lights und Darks vergleichen. Ein Dark mit anderer Zeit zieht
+    # entweder zu wenig oder zu viel ab — beides sieht man später im Hintergrund. Skaliert
+    # wird aber NUR auf ausdrückliche Anweisung: für manche Sensoren (IMX294) raten die
+    # Hersteller davon ab, weil ihr Glow nicht linear mitläuft.
+    if dark is not None:
+        _lp = paths[0] if paths else None
+        _dp, _dt = None, None
+        _dspec = getattr(args, "dark", None)
+        if _dspec:
+            _dp = (list_images(_dspec) or [None])[0] if os.path.isdir(_dspec) else _dspec
+            _dt = _belichtung(_dp)
+        _lt = _belichtung(_lp)
+        if _lt and _dt and abs(_lt - _dt) > max(0.05 * _dt, 0.5):
+            if getattr(args, "dark_skalieren", False):
+                dark = astro.dark_skalieren(dark, _lt, _dt, bias=bias,
+                                            ziel_temp=_ccd_temp(_lp), dark_temp=_ccd_temp(_dp))
+            else:
+                print("  Achtung: Lights %.0f s, Darks %.0f s — das Dark passt nicht. "
+                      "Mit --dark-skalieren umrechnen (bei IMX294/ASI294MC Pro besser NICHT)."
+                      % (_lt, _dt), file=sys.stderr)
+
+    return dark, flat, bias
+
+
+def run_astro(input_dir, work_dir, args):
+    """Astro-Stacking: Kalibrierung -> Registrierung -> Rejection-Stacking -> Stretch."""
+    import astro
+    paths = _gather_session_paths(input_dir, args)
+    if len(paths) < 2:
+        print("Zu wenige Bilder für Astro.", file=sys.stderr); return None
+    original_paths = list(paths)
+    print(f"== Astro-Modus: {len(paths)} Frames, Methode={args.astro_method} ==")
+    # Kalibrier-Frames automatisch finden, wenn nicht explizit gesetzt
+    if not getattr(args, "no_auto_calib", False):
+        ad, af, ab = _autodetect_calibration(input_dir)
+        for attr, val, label in (("dark", ad, "Dark"), ("flat", af, "Flat"), ("bias", ab, "Bias")):
+            if val and not getattr(args, attr, None):
+                setattr(args, attr, val)
+                print(f"  Kalibrierung automatisch erkannt: {label}-Ordner „{os.path.basename(val)}“")
 
     # Sub-Qualität bewerten + schlechte aussortieren (FWHM/Sterne/Guiding/Wolken/Spuren)
     _bestref = None          # ohne Sub-Bewertung (--no-astro-qc) bleibt es beim mittleren Sub
@@ -1749,42 +1809,10 @@ def run_astro(input_dir, work_dir, args):
             except Exception as e:
                 print(f"  Siril fehlgeschlagen ({e}) — nutze eigene Engine", file=sys.stderr)
 
-    dark = load_master(getattr(args, "dark", None), "Dark")
-    flat = load_master(getattr(args, "flat", None), "Flat")
-    bias = load_master(getattr(args, "bias", None), "Bias")
-    if bias is not None:
-        # Bias verrechnen (astro.calibrate kennt nur Dark/Flat, wurde bisher still ignoriert):
-        # - Flat VOR der Normierung bias-korrigieren, sonst verfälscht der Offset die
-        #   Vignettierungs-Korrektur (Flat-Signal = Flat − Bias).
-        # - Ohne Dark den Bias direkt vom Licht abziehen (als „Dark“ durchreichen).
-        #   MIT Dark enthält der Dark-Master den Bias bereits → nicht doppelt abziehen.
-        if flat is not None and flat.shape == bias.shape:
-            flat = np.clip(flat - bias, 1e-6, None)
-        if dark is None:
-            dark = bias
-        else:
-            print("  (Bias steckt im Dark-Master — nur das Flat wird bias-korrigiert)")
-
-    # Belichtungszeiten von Lights und Darks vergleichen. Ein Dark mit anderer Zeit zieht
-    # entweder zu wenig oder zu viel ab — beides sieht man später im Hintergrund. Skaliert
-    # wird aber NUR auf ausdrückliche Anweisung: für manche Sensoren (IMX294) raten die
-    # Hersteller davon ab, weil ihr Glow nicht linear mitläuft.
-    if dark is not None:
-        _lp = paths[0] if paths else None
-        _dp, _dt = None, None
-        _dspec = getattr(args, "dark", None)
-        if _dspec:
-            _dp = (list_images(_dspec) or [None])[0] if os.path.isdir(_dspec) else _dspec
-            _dt = _belichtung(_dp)
-        _lt = _belichtung(_lp)
-        if _lt and _dt and abs(_lt - _dt) > max(0.05 * _dt, 0.5):
-            if getattr(args, "dark_skalieren", False):
-                dark = astro.dark_skalieren(dark, _lt, _dt, bias=bias,
-                                            ziel_temp=_ccd_temp(_lp), dark_temp=_ccd_temp(_dp))
-            else:
-                print("  Achtung: Lights %.0f s, Darks %.0f s — das Dark passt nicht. "
-                      "Mit --dark-skalieren umrechnen (bei IMX294/ASI294MC Pro besser NICHT)."
-                      % (_lt, _dt), file=sys.stderr)
+    dark, flat, bias = _load_astro_calibration(input_dir, args, paths)
+    if dark is None and flat is None and bias is None:
+        print("  Keine Kalibrierungsbilder vorhanden: Stack ohne Dark-/Flat-Korrektur. "
+              "Hotpixel und Vignettierung koennen im Ergebnis bleiben.")
 
     reg_dir = os.path.join(work_dir, "registered")
     if os.path.isdir(reg_dir):
@@ -1859,7 +1887,7 @@ def run_astro(input_dir, work_dir, args):
             # für einen Ausreisser — es verschwendet sein Verwurfsbudget auf die kurzen Subs und
             # lässt dafür echte Störungen stehen. Gemessen (12 Subs, ein Satellit): Rest der
             # Spur 0,0423 ohne, 0,0161 mit Zeiten.
-            _zeiten = [_belichtung(p) for p in paths]
+            _zeiten = [_belichtung(paths[int(os.path.basename(p)[4:8])]) for p in aligned]
             _gewicht = getattr(args, "astro_weight", False)
             if all(z for z in _zeiten) and max(_zeiten) / min(_zeiten) > 1.05:
                 if not _gewicht:
@@ -1878,7 +1906,21 @@ def run_astro(input_dir, work_dir, args):
     if binf > 1:
         result = astro.bin_image(result, binf)
         print(f"  {binf}×-Binning → {result.shape[1]}×{result.shape[0]} (besseres SNR, rundere Sterne)")
-    out = _astro_write(result, work_dir, paths, args, astro)
+    used_paths = paths if drizzle_true else [paths[int(os.path.basename(p)[4:8])] for p in aligned]
+    out = _astro_write(result, work_dir, used_paths, args, astro)
+    from constants import VERSION
+    report = {"version": VERSION, "input_frames": len(original_paths),
+              "quality_kept": len(paths), "registered_frames": len(used_paths),
+              "source_files": [os.path.basename(p) for p in used_paths],
+              "integration_seconds": sum(_belichtung(p) or 0 for p in used_paths),
+              "method": args.astro_method,
+              "calibration": {k: bool(getattr(args, k, None)) for k in ("dark", "flat", "bias")},
+              "warnings": (["No dark/flat/bias calibration frames supplied"]
+                           if dark is None and flat is None and bias is None else [])}
+    with open(os.path.join(out, "processing_report.json"), "w", encoding="utf-8") as f:
+        json.dump(report, f, ensure_ascii=False, indent=2)
+    print("  Ergebnis: %d von %d Aufnahmen, %.1f Minuten Gesamtbelichtung." %
+          (len(used_paths), len(original_paths), report["integration_seconds"] / 60))
     shutil.rmtree(reg_dir, ignore_errors=True)
     return out
 
@@ -2846,14 +2888,19 @@ def live_loop(args, input_dir, work_dir):
         vorschau = os.path.join(work_dir, "_live_preview.jpg")
         ls = livestack.LiveStack.laden(zustand) if os.path.exists(zustand) else None
         if ls is None:
-            ls = livestack.LiveStack(kappa=getattr(args, "astro_kappa", 2.5))
+            ls = livestack.LiveStack(kappa=getattr(args, "astro_kappa", 2.5),
+                                     registrieren=not getattr(args, "no_register", False))
         else:
             print(f"  fortgesetzt: {ls.n} Frames aus einem frueheren Lauf")
+        dark, flat, _ = _load_astro_calibration(input_dir, args, list_images(input_dir))
+        ls.reader = lambda path: astro.read_calibrated(path, dark, flat)
         bekannt = set(ls.pfade)
         beobachtet = {}
         print(f"== LIVE-Modus == Ordner: {input_dir}")
         print("(jeder neue Sub wird einmal verrechnet; Strg-C, SIGTERM oder Stop zum Beenden)")
         while not stop["flag"]:
+            if getattr(args, "stop_file", None) and os.path.exists(args.stop_file):
+                break
             try:
                 neu = livestack.neue_dateien(input_dir, bekannt, beobachtet=beobachtet,
                                                  settle=max(2, getattr(args, "watch_settle", 5)))
@@ -2873,6 +2920,8 @@ def live_loop(args, input_dir, work_dir):
         erg = ls.ergebnis()
         if erg is not None:
             _astro_write(erg, work_dir, ls.pfade or [input_dir], args, astro)
+        if erg is not None:
+            done(os.path.join(work_dir, "stack"))
         print("Live-Modus beendet.")
 
     finally:

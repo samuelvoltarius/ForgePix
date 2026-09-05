@@ -42,6 +42,7 @@ class LiveStack:
         self.gewichten = bool(gewichten)
         self.registrieren = bool(registrieren)
         self.log = log
+        self.reader = astro._read_float
         self.summe = None          # Σ w·x
         self.quadr = None          # Σ w·x²
         self.gewicht = None        # Σ w je Pixel und Farbkanal
@@ -82,7 +83,11 @@ class LiveStack:
         """Einen Frame verrechnen. Gibt True zurück, wenn er im Stapel gelandet ist."""
         if isinstance(bild_oder_pfad, str):
             pfad = bild_oder_pfad
-            f = astro._read_float(pfad)
+            try:
+                f = self.reader(pfad)
+            except (OSError, ValueError, RuntimeError) as e:
+                self.log("    Live: Aufnahme noch nicht lesbar, wird erneut versucht: %s (%s)" % (pfad, e))
+                return False
             if f is not None and f.ndim == 2:
                 f = cv2.cvtColor(f, cv2.COLOR_GRAY2BGR)
         else:

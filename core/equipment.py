@@ -128,6 +128,12 @@ KAMERAS = [
     ("asi533mc", "ZWO ASI533MC Pro (IMX533)", 3.76),
     ("asi183mc", "ZWO ASI183MC Pro (IMX183)", 2.4),
     ("asi2600mc", "ZWO ASI2600MC Pro (IMX571)", 3.76),
+    ("asi2600mm", "ZWO ASI2600MM Pro (IMX571)", 3.76),
+    ("atr2600c", "ToupTek Astro ATR2600C (IMX571)", 3.76),
+    ("atr533c", "ToupTek Astro ATR533C (IMX533)", 3.76),
+    ("atr533m", "ToupTek Astro ATR533M (IMX533)", 3.76),
+    ("qhy268c", "QHY268C (IMX571)", 3.76),
+    ("qhy268m", "QHY268M (IMX571)", 3.76),
     ("asi6200mc", "ZWO ASI6200MC Pro (IMX455)", 3.76),
     ("asi1600mm", "ZWO ASI1600MM Pro (Panasonic MN34230)", 3.8),
     ("seestar_s30_cam", "Seestar S30 (IMX662)", 2.90),      # aus echten Headern: XPIXSZ 2.90

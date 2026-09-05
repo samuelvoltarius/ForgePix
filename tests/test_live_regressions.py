@@ -95,7 +95,7 @@ class LiveRegressions(unittest.TestCase):
                     handlers[signal.SIGINT](None, None)
             args = SimpleNamespace(prefix="", astro_stretch=6.0, vlm_endpoint="", vlm_model="")
             with patch("livestack.LiveStack", return_value=state), \
-                 patch("livestack.astro._read_float", side_effect=[None, base]), \
+                 patch("livestack.astro._read_float", side_effect=[OSError("file still being written"), base]), \
                  patch("livestack.neue_dateien", side_effect=scan), \
                  patch("signal.signal", side_effect=register), \
                  patch("time.sleep", side_effect=poll):
