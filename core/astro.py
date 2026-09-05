@@ -292,7 +292,13 @@ def _star_centroids(g, max_stars=200):
     MAD-Schwelle findet zuverlässig 100–200 Sterne — genug für robustes Offset-Voting + RANSAC."""
     a = (np.clip(g, 0, 1) * 255).astype(np.uint8)
     bg = cv2.medianBlur(a, 31)
-    sub = cv2.subtract(a, bg).astype(np.float32)
+    # VORZEICHENBEHAFTET rechnen. `cv2.subtract` schneidet negative Werte auf 0 ab — damit ist
+    # die halbe Rauschverteilung platt, Median und MAD fallen auf 0, und die Schwelle rutscht auf
+    # ihren Notwert von 3/255. Auf LINEAREN Subs faellt das nicht auf (das Rauschen liegt ohnehin
+    # darunter, gemessen 0,10 % Maske so wie so), auf GESTRECKTEN Bildern ist es verheerend:
+    # an einem echten Sub lag die MAD bei 0,000 statt 10,378, die Schwelle bei 3,0 statt 51,9,
+    # und 39,9 % der Pixel galten als Sternkandidat statt 4,0 %.
+    sub = a.astype(np.float32) - bg.astype(np.float32)
     med = float(np.median(sub))
     mad = float(np.median(np.abs(sub - med))) * 1.4826 + 1e-6
     th = (sub > max(med + 5.0 * mad, 3.0)).astype(np.uint8) * 255
@@ -1739,7 +1745,7 @@ def _star_desat(out, ha_n, oiii_n, strength=0.92):
     return np.clip(out * (1 - strength * mask) + gray * (strength * mask), 0, 1)
 
 
-def remove_stars(bgr, sensitivity=5.0, max_size=600, iterations=2, log=log_print):
+def remove_stars(bgr, sensitivity=5.0, max_size=600, min_size=4, iterations=2, log=log_print):
     """A6 — Klassisches (nicht-ML) Star-Removal: liefert ein (teilweise) STERNLOSES Nebelbild plus
     die Sternmaske. Reines OpenCV/NumPy.
 
@@ -1787,7 +1793,11 @@ def remove_stars(bgr, sensitivity=5.0, max_size=600, iterations=2, log=log_print
     for i in range(1, n):
         area = int(stats[i, cv2.CC_STAT_AREA])
         bw = int(stats[i, cv2.CC_STAT_WIDTH]); bh = int(stats[i, cv2.CC_STAT_HEIGHT])
-        if area < 1 or area > max_size:
+        # Mindestfläche: ein einzelnes helles Pixel ist ein Treffer, kein Stern. Bisher stand
+        # hier `area < 1`, was nichts ausschloss. Gemessen an einem echten Sub sank die Zahl der
+        # Blobs dadurch von 165 auf 70 (linear, Maske 0,26 % auf 0,18 %) und auf einem
+        # gestreckten Bild von 8313 auf 2079 (11,2 % auf 6,4 %).
+        if area < min_size or area > max_size:
             continue
         # Kompaktheit: Sterne sind etwa rund; sehr langgezogene Strukturen (Nebelfilamente) raus
         if bw > 0 and bh > 0 and 0.3 <= bw / bh <= 3.3:
@@ -1925,6 +1935,18 @@ def synthstar(bgr, groesse=1.0, beta=2.5, sensitivity=5.0, min_fwhm=1.2, log=log
     starless, maske = remove_stars(a, sensitivity=sensitivity, log=lambda *x: None)
     if maske is None:
         log("    synthstar: keine Sterne gefunden — Bild unverändert")
+        return a
+    deckung = float((np.asarray(maske) > 0.5).mean())
+    if deckung > 0.10:
+        # NOTBREMSE. Deckt die "Sternmaske" mehr als ein Zehntel des Bildes ab, ist sie keine
+        # Sternmaske — dann steht dort Rauschen oder Nebel drin, und das Neusetzen wuerde das
+        # Bild zerstoeren statt es zu verbessern. Gemessen an einem gestreckten Stack: Maske
+        # 65 %, danach 27 % des Gesamtflusses weg und der Himmel halbiert. Ursache ist fast
+        # immer, dass synthstar auf GESTRECKTE Daten losgelassen wurde; es gehoert auf die
+        # linearen.
+        log("    synthstar: Sternmaske deckt %.0f %% des Bildes ab — das sind keine Sterne. "
+            "Bild unveraendert (synthstar gehört auf die LINEAREN Daten, nicht auf gestreckte)."
+            % (100 * deckung))
         return a
     rest = np.clip(a - starless, 0, None)
     sterne = _stern_liste(rest, maske)

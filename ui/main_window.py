@@ -429,6 +429,10 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         self.astro_unpurple.setSingleStep(0.1); self.astro_unpurple.setValue(0.0)
         self.dark_skalieren = QCheckBox(tr("Dark auf die Belichtungszeit der Lights umrechnen"))
         self.astro_synthstar = QCheckBox(tr("Sternformen neu setzen (rund)"))
+        self.astro_hg_denoise = QDoubleSpinBox(); self.astro_hg_denoise.setRange(0.0, 1.0)
+        self.astro_hg_denoise.setSingleStep(0.1); self.astro_hg_denoise.setValue(0.0)
+        self.astro_nebelkontrast = QDoubleSpinBox(); self.astro_nebelkontrast.setRange(0.0, 4.0)
+        self.astro_nebelkontrast.setSingleStep(0.5); self.astro_nebelkontrast.setValue(0.0)
         self.astro_unmix = QDoubleSpinBox(); self.astro_unmix.setRange(-1.0, 0.5)
         self.astro_unmix.setSingleStep(0.02); self.astro_unmix.setValue(-1.0)   # -1 = vom Filter
 
@@ -621,6 +625,21 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
                               "darum bleibt um helle Sterne ein magentafarbener Hof stehen "
                               "(0 = aus, 1.0 = voll). Behandelt wird nur, wo BEIDE Kanäle über "
                               "Grün liegen — roter Hα-Nebel bleibt unangetastet."), 29, 3)
+        _lbl_hgd = QLabel(tr("Hintergrund entrauschen"))
+        ar.addWidget(_lbl_hgd, 32, 0)
+        ar.addWidget(self.astro_hg_denoise, 32, 1)
+        ar.addWidget(help_btn("Entrauscht NUR den leeren Himmel und lässt Sterne und Nebel in "
+                              "Ruhe (0 = aus, 0,5–0,8 sinnvoll). An echten Daten sank das "
+                              "Himmelsrauschen von 0,0252 auf 0,0161, während die Sternspitze "
+                              "bei 0,938 blieb — ohne Maske fiel sie auf 0,919, das "
+                              "Entrauschen frisst dann die Sterne mit."), 32, 3)
+        _lbl_nk = QLabel(tr("Nebelkontrast anheben"))
+        ar.addWidget(_lbl_nk, 33, 0)
+        ar.addWidget(self.astro_nebelkontrast, 33, 1)
+        ar.addWidget(help_btn("Hebt den lokalen Kontrast NUR im Nebel an (0 = aus, 1,0–2,0 "
+                              "sinnvoll). Ohne Maske verstärkt derselbe Schritt vor allem das "
+                              "Himmelsrauschen: gemessen stieg es von 0,0252 auf 0,0640, mit "
+                              "Maske blieb es bei 0,0255."), 33, 3)
         ar.addWidget(self.astro_synthstar, 30, 0, 1, 3)
         ar.addWidget(help_btn("Misst jeden Stern, entfernt ihn und setzt ihn als rundes Profil "
                               "mit demselben Fluss zurück — gegen Koma am Rand, Verkippung und "
@@ -639,6 +658,7 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
             self.astro_unclip, _lbl_red, self.astro_star_reduce,
             _lbl_sl, self.astro_starless_stretch, _lbl_col, self.astro_color_stretch,
             _lbl_pur, self.astro_unpurple, self.astro_synthstar, self.dark_skalieren,
+            _lbl_hgd, self.astro_hg_denoise, _lbl_nk, self.astro_nebelkontrast,
         ]
         for _w in self._astro_erweitert_widgets:
             _w.setVisible(False)
@@ -1612,13 +1632,17 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
     # "sterne" bewusst voll — wer Sterne betont, sieht den Saum am staerksten.
     _ASTRO_STILE = {
         "natur":  {"banding": 0.0, "unclip": False, "star_reduce": 0.0,
-                   "starless": -1.0, "color": 0.0, "unpurple": 0.0},
+                   "starless": -1.0, "color": 0.0, "unpurple": 0.0,
+                   "hg_denoise": 0.0, "nebelkontrast": 0.0},
         "nebel":  {"banding": 0.0, "unclip": True, "star_reduce": 0.4,
-                   "starless": 0.35, "color": 1.8, "unpurple": 0.5},
+                   "starless": 0.35, "color": 1.8, "unpurple": 0.5,
+                   "hg_denoise": 0.6, "nebelkontrast": 1.5},
         "sterne": {"banding": 0.0, "unclip": True, "star_reduce": 0.0,
-                   "starless": -1.0, "color": 1.3, "unpurple": 1.0},
+                   "starless": -1.0, "color": 1.3, "unpurple": 1.0,
+                   "hg_denoise": 0.5, "nebelkontrast": 0.0},
         "sauber": {"banding": 1.0, "unclip": True, "star_reduce": 0.3,
-                   "starless": 0.35, "color": 1.5, "unpurple": 0.7},
+                   "starless": 0.35, "color": 1.5, "unpurple": 0.7,
+                   "hg_denoise": 0.7, "nebelkontrast": 0.0},
     }
 
     def _stil_anwenden(self):
@@ -1634,6 +1658,8 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         self.astro_starless_stretch.setValue(werte["starless"])
         self.astro_color_stretch.setValue(werte["color"])
         self.astro_unpurple.setValue(werte.get("unpurple", 0.0))
+        self.astro_hg_denoise.setValue(werte.get("hg_denoise", 0.0))
+        self.astro_nebelkontrast.setValue(werte.get("nebelkontrast", 0.0))
 
     def _erweitert_umschalten(self, an):
         """Einzelregler ein-/ausblenden. Standardmaessig sind sie versteckt — wer sie nicht
@@ -1888,6 +1914,12 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         if (getattr(self, "astro_unpurple", None) is not None
                 and self.astro_unpurple.value() > 0):
             args += ["--astro-unpurple", str(self.astro_unpurple.value())]
+        if (getattr(self, "astro_hg_denoise", None) is not None
+                and self.astro_hg_denoise.value() > 0):
+            args += ["--astro-hintergrund-entrauschen", str(self.astro_hg_denoise.value())]
+        if (getattr(self, "astro_nebelkontrast", None) is not None
+                and self.astro_nebelkontrast.value() > 0):
+            args += ["--astro-nebelkontrast", str(self.astro_nebelkontrast.value())]
         if getattr(self, "astro_synthstar", None) is not None and self.astro_synthstar.isChecked():
             args += ["--astro-synthstar"]
         if getattr(self, "dark_skalieren", None) is not None and self.dark_skalieren.isChecked():

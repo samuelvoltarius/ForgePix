@@ -1250,6 +1250,16 @@ def main():
                          "bewegten Fleck suchen, eine Gerade durch die Fundorte legen. Danach "
                          "sind die STERNE Streifen und der Komet scharf. Gemessen: "
                          "Spitzenhelligkeit des Kerns 3,8-fach")
+    ap.add_argument("--astro-hintergrund-entrauschen", type=float, default=0.0, metavar="STAERKE",
+                    help="Nach dem Strecken NUR im Hintergrund entrauschen (0=aus, 0.5-0.8 "
+                         "sinnvoll) — kantenerhaltend, durch eine Hintergrundmaske. An echten "
+                         "Daten: Himmelrauschen 0,0252 auf 0,0161, dabei bleibt die "
+                         "Sternspitze bei 0,938 statt auf 0,919 zu fallen wie ohne Maske")
+    ap.add_argument("--astro-nebelkontrast", type=float, default=0.0, metavar="STAERKE",
+                    help="Lokalen Kontrast NUR im Nebel anheben (0=aus, 1.0-2.0 sinnvoll), "
+                         "durch eine Nebelmaske. Ohne Maske verstaerkt derselbe Schritt vor "
+                         "allem das Himmelsrauschen — gemessen 0,0252 auf 0,0640, mit Maske "
+                         "bleibt es bei 0,0255")
     ap.add_argument("--astro-synthstar", action="store_true",
                     help="Sternformen neu setzen: Sterne messen, entfernen und als runde "
                          "Moffat-Profile mit demselben Fluss zurueckschreiben (Siril: synthstar). "
@@ -1978,6 +1988,13 @@ def _astro_write(result, work_dir, paths, args, astro):
         result = astro.deconvolve(result, iterations=getattr(args, "astro_deconv_iter", 15),
                                   star_protect=getattr(args, "astro_deconv_protect", 0.85),
                                   regularize=getattr(args, "astro_deconv_regularize", 0.0))
+    if getattr(args, "astro_synthstar", False):
+        # Auf den LINEAREN Daten, nicht auf dem gestreckten Bild: die Sternerkennung braucht
+        # den linearen Kontrast, und der Fluss, den synthstar erhaelt, ist nur hier physikalisch
+        # einer. Auf gestreckten Daten deckte die "Sternmaske" gemessen 65 % des Bildes ab und
+        # das Neusetzen kostete 27 % des Gesamtflusses.
+        print("  Sternformen neu setzen (rund, auf den linearen Daten) …")
+        result = astro.synthstar(result)
     _dn = float(getattr(args, "astro_denoise", 0.0) or 0.0)
     if _dn > 0:
         # Luminanz-Rauschreduktion auf den LINEAREN Daten (vor dem Strecken — PixInsight-MMT-Prinzip):
@@ -2152,8 +2169,28 @@ def _astro_write(result, work_dir, paths, args, astro):
                 print(f"  Rest-Gradient nach dem Strecken entfernt ({_korr})")
             except Exception as e:
                 print(f"  (Nachkorrektur uebersprungen: {e})", file=sys.stderr)
-        if getattr(args, "astro_synthstar", False):
-            view = astro.synthstar(view)
+        # Maskiert arbeiten: Entrauschen gehört in den Hintergrund, lokaler Kontrast in den
+        # Nebel. Beides ungefiltert aufs ganze Bild loszulassen ist der kuerzeste Weg zu einem
+        # rauschigen Ergebnis — lokaler Kontrast ohne Maske hat das Himmelsrauschen im Test
+        # von 0,0252 auf 0,0640 gehoben.
+        _hg = float(getattr(args, "astro_hintergrund_entrauschen", 0.0) or 0.0)
+        _nk = float(getattr(args, "astro_nebelkontrast", 0.0) or 0.0)
+        if _hg > 0 or _nk > 0:
+            try:
+                import masken as _mk
+                _sm = _mk.sterne(view)                    # einmal rechnen, zweimal benutzen
+                if _hg > 0:
+                    _m = _mk.hintergrund(view, stern_maske=_sm)
+                    view = _mk.anwenden(view, _m, astro.tv_denoise(view, _hg, 6))
+                    print("  Hintergrund entrauscht (Maske deckt %.1f %% ab)"
+                          % (100 * _mk.anteil(_m)))
+                if _nk > 0:
+                    _m = _mk.nebel(view, stern_maske=_sm)
+                    view = _mk.anwenden(view, _m, astro.local_contrast(view, _nk))
+                    print("  Nebelkontrast angehoben (Maske deckt %.1f %% ab)"
+                          % (100 * _mk.anteil(_m)))
+            except Exception as e:
+                print(f"  (maskierte Nachbearbeitung uebersprungen: {e})", file=sys.stderr)
         _sr = float(getattr(args, "astro_star_reduce", 0.0) or 0.0)
         if _sr > 0:
             view = astro.reduce_stars(view, strength=_sr)

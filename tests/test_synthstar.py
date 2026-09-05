@@ -132,6 +132,20 @@ class TestSynthstar(unittest.TestCase):
                         "Strich-Feld liefert eine ganz andere Zielbreite (%.2f gegen %.2f) — "
                         "dann wird die lange Achse mitgemessen" % (b_strich, b_rund))
 
+    def test_notbremse_bei_unsinniger_sternmaske(self):
+        """Auf GESTRECKTE Daten losgelassen deckte die "Sternmaske" an einem echten Stack 65 %
+        des Bildes ab; das Neusetzen kostete 27 % des Gesamtflusses und halbierte den Himmel.
+        Ueber 10 % Deckung muss die Funktion die Finger davon lassen."""
+        f = _feld()
+        gestreckt = astro.autostretch(f)
+        _sl, m = astro.remove_stars(gestreckt, log=lambda *a: None)
+        deckung = float((m > 0.5).mean())
+        if deckung <= 0.10:
+            self.skipTest("Testszene loest die Notbremse nicht aus (Deckung %.2f)" % deckung)
+        o = astro.synthstar(gestreckt, log=lambda *a: None)
+        self.assertTrue(np.allclose(o, gestreckt, atol=1e-6),
+                        "Bild wurde trotz unsinniger Maske veraendert")
+
     def test_ohne_sterne_bleibt_das_bild_unveraendert(self):
         leer = np.full((120, 120, 3), 0.03, np.float32)
         o = astro.synthstar(leer, log=lambda *a: None)
