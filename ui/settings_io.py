@@ -63,6 +63,7 @@ class SettingsMixin:
                                 self.astro_synthstar.isChecked),
             "astro_komet": (lambda v: self.astro_komet.setChecked(bool(v)),
                             self.astro_komet.isChecked),
+            "live": (lambda v: self.live.setChecked(bool(v)), self.live.isChecked),
             "astro_hg_denoise": (lambda v: self.astro_hg_denoise.setValue(float(v)),
                                  self.astro_hg_denoise.value),
             "astro_nebelkontrast": (lambda v: self.astro_nebelkontrast.setValue(float(v)),
