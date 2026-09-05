@@ -7,6 +7,70 @@ Alle nennenswerten Änderungen an ForgePix. Format orientiert an
 [SemVer](https://semver.org/lang/de/).
 
 ## [Unreleased]
+### Live-Stacking, Messphotometrie, lokaler Gaia-Katalog — und der belegte PixInsight-Vergleich
+
+**Inkrementelles Live-Stacking** (`--live`, nur zusammen mit `--watch`). Der bisherige
+Beobachtungsmodus stapelt bei JEDER neuen Aufnahme den ganzen Bestand neu: beim 200. Sub werden
+200 Dateien gelesen, obwohl sich genau eine geändert hat. Jetzt werden laufende Summen
+fortgeschrieben. An echten Subs gemessen: **Abweichung zum Stapeln am Ende 0,077 % der
+Bildspanne, SNR 62,90 gegen 62,94**, und für ein Ergebnis nach jeder Aufnahme 2,8 s statt 7,5 s
+(12 Subs — der Abstand wächst, weil das Neustapeln quadratisch zulegt: *n* gegen *n(n+1)/2*
+Lesevorgänge). Der Zustand wird nach jedem Sub gesichert; ein Absturz um drei Uhr nachts kostet
+nicht die halbe Nacht. Drei Entscheidungen stehen begründet im Code: Ausreisser-Verwurf erst ab
+5 Frames (vorher ist die laufende Statistik zu dünn), das Gewicht je PIXEL statt je Frame (ein
+Sub mit Satellitenspur soll nur an der Spur wegfallen), und ein Frame, der sich nicht ausrichten
+lässt, kommt NICHT unverschoben in den Stapel — er würde die Sterne verdoppeln.
+
+**Messphotometrie** (`--photometrie`, `core/photometrie.py`). Blenden-Photometrie mit
+Ringhintergrund, differentiell gegen mehrere Vergleichssterne: veränderliche Sterne,
+Bedeckungen, Exoplaneten-Transite. Gegen eine bekannte Wahrheit geprüft (40 Aufnahmen über 6 h,
+3-h-Periode, 0,35 mag Amplitude, dazu eine Durchsicht-Schwankung und eine wandernde Bildlage):
+
+| | Restabweichung |
+|---|---|
+| differentiell gegen drei Vergleichssterne | **0,058 mag** |
+| dieselbe Reihe roh gemessen | 0,189 mag |
+
+Der Faktor 3,3 *ist* der Grund für das Verfahren — die Durchsicht trifft alle Sterne gleich und
+fällt heraus. Die Periode kam mit 2,95 h gegen 3,00 h heraus. Drei Stellen, an denen bewusst
+nicht geschummelt wird: eine **tote Zeitachse** wird erkannt (die Test-TIFFs trugen kein
+`DATE-OBS`, alle hatten dieselbe Schreibsekunde — die Lichtkurve sah völlig normal aus, die
+Periodensuche lieferte 24,00 h statt 3,00 h), **ausgefressene Sterne** liefern einen systematisch
+zu kleinen Fluss und werden aus der Meldedatei herausgehalten, und **ohne Katalogbezug** sind die
+Werte instrumentell — das steht im Kopf der AAVSO-Datei UND im Bemerkungsfeld jeder Zeile.
+Keine Oberfläche: die Wahl von Ziel- und Vergleichssternen ist eine Expertenentscheidung, und
+das ehrlich zu sagen ist besser als eine Oberfläche, die rät.
+
+**Lokaler Gaia-Katalog** (`core/gaia_lokal.py`, `--gaia-feld-laden`, PCC-Backend `lokal`).
+Farbkalibrierung ohne Internet. Der Gaia-Katalog wird **nicht** mitgeliefert — Terabytes und
+eigene Nutzungsbedingungen; stattdessen lädt man einmal mit Netz die Himmelsgegenden nach, die
+man fotografiert. An 300 000 Sternen gemessen: **Abfrage 0,2 ms statt 22 ms** (Faktor rund 100),
+Datei 22 Byte je Stern. Kein HEALPix, und zwar begründet: es bräuchte `healpy` oder
+`astropy_healpix` und bringt bei dieser Grösse nichts — Deklinationsbänder mit 1/cos-skalierten
+Zellen leisten dasselbe. Deckt der eigene Katalog ein Feld nicht ab, wird sauber abgebrochen
+statt aus zehn Sternen eine Kanal-Skalierung zu raten, die aussieht wie gemessen.
+*Ehrliche Einschränkung:* das Plate-Solving braucht weiterhin einen Solver; Siril und ASTAP lösen
+offline, der Astrometry.net-Weg nicht.
+
+**Der Test hat dabei genau den Fehler gefunden, der sonst nie auffällt:** die Zellenbreite wurde
+aus der Deklination des EINZELNEN STERNS gerechnet statt aus seinem Band. Damit hatten zwei
+Sterne im selben Band verschiedene Raster, und bei Deklination 78° gingen **sechs von 21 Sternen
+verloren**, ohne dass irgendetwas fehlgeschlagen wäre. Dazu wurde die Rektaszensions-Spanne an
+der polfernsten statt an der polnächsten Stelle des Kreises gerechnet. Jeder Test prüft jetzt
+gegen die stumpfe Vollsuche auf exakte Gleichheit, an acht Feldern einschliesslich Pol,
+Nullpunkt der Rektaszension und grossem Radius.
+
+**PixInsight-Vergleich, Prozess für Prozess** ([docs/PIXINSIGHT.de.md](docs/PIXINSIGHT.de.md)).
+Beim letzten Anlauf kam die Liste aus einem abgebrochenen Agenten, dessen elf heruntergeladene
+Seiten allesamt 404-Fehlerseiten waren — das war eine unbelegte Behauptung. Diesmal aus dem
+**Quelltext**: die PixInsight Class Library ist offen, jeder Prozess liegt dort als
+`…Process.cpp`. Vier öffentliche Spiegel ausgezählt, Vereinigung **91 Prozesse**, jeder mit Datei
+belegt. Die offizielle Dokumentation antwortet weiterhin mit HTTP 403 — auch das steht im
+Dokument, ebenso dass die geschlossenen Module (Deconvolution, TGVDenoise, SCNR, StarMask,
+StarAlignment …) dort nicht auftauchen und darum als *aus Kenntnis* gekennzeichnet sind.
+Die drei echten Lücken, klar benannt: **PixelMath**, **allgemeine Maskenlogik** (die Bausteine
+stehen, aber nur die Astro-Schritte sind angebunden) und **Gerätesteuerung**.
+
 ### Sternformen, Kometen, gemischte Belichtungen und ein Maskensystem
 
 **Sternformen neu setzen** (`--astro-synthstar`). Koma am Bildrand, Sensorverkippung und

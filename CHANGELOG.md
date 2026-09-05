@@ -7,6 +7,69 @@ All notable changes to ForgePix. Format based on
 [SemVer](https://semver.org/).
 
 ## [Unreleased]
+### Live stacking, measurement photometry, a local Gaia catalogue — and a sourced PixInsight comparison
+
+**Incremental live stacking** (`--live`, together with `--watch`). The previous watch mode
+re-stacks the entire set for EVERY new frame: at the 200th sub it reads 200 files although
+exactly one changed. Running sums are carried forward instead. Measured on real subs: **deviation
+from stacking at the end 0.077 % of the image range, SNR 62.90 against 62.94**, and for a result
+after every frame 2.8 s instead of 7.5 s (12 subs — the gap widens because re-stacking grows
+quadratically: *n* against *n(n+1)/2* read operations). The state is saved after every sub; a
+crash at three in the morning does not cost half the night. Three decisions are argued in the
+code: outlier rejection only from 5 frames on (before that the running statistics are too thin),
+the weight per PIXEL rather than per frame (a sub with a satellite trail should only drop out
+along the trail), and a frame that cannot be aligned does NOT go into the stack unshifted — it
+would double the stars.
+
+**Measurement photometry** (`--photometrie`, `core/photometrie.py`). Aperture photometry with an
+annulus background, differential against several comparison stars: variable stars, eclipses,
+exoplanet transits. Checked against a known truth (40 frames over 6 h, 3 h period, 0.35 mag
+amplitude, plus a transparency variation and a drifting field):
+
+| | residual |
+|---|---|
+| differential against three comparison stars | **0.058 mag** |
+| the same series measured raw | 0.189 mag |
+
+The factor of 3.3 *is* the reason for the method — transparency hits every star equally and drops
+out. The period came out at 2.95 h against 3.00 h. Three places where nothing is glossed over: a
+**dead time axis** is detected (the test TIFFs carried no `DATE-OBS` and all shared one write
+second — the light curve looked entirely normal and the period search returned 24.00 h instead of
+3.00 h), **blown stars** give a systematically too-small flux and are kept out of the report file,
+and **without a catalogue reference** the values are instrumental — stated in the AAVSO header AND
+in the notes field of every line. No interface: choosing target and comparison stars is an expert
+decision, and saying so honestly beats an interface that guesses.
+
+**Local Gaia catalogue** (`core/gaia_lokal.py`, `--gaia-feld-laden`, PCC backend `lokal`). Colour
+calibration without internet. The Gaia catalogue is **not** bundled — terabytes and its own terms
+of use; instead you fetch the regions of sky you photograph once while online. Measured on
+300 000 stars: **query 0.2 ms instead of 22 ms** (about 100×), file size 22 bytes per star. No
+HEALPix, and for a stated reason: it would require `healpy` or `astropy_healpix` and brings
+nothing at this size — declination bands with 1/cos-scaled cells do the same job. If the local
+catalogue does not cover a field, the process stops cleanly instead of guessing a channel scaling
+from ten stars that would look measured.
+*Honest limitation:* plate solving still needs a solver; Siril and ASTAP solve offline, the
+Astrometry.net route does not.
+
+**The test found exactly the kind of defect that otherwise never surfaces:** the cell width was
+computed from the declination of the INDIVIDUAL STAR rather than from its band. Two stars in the
+same band therefore had different grids, and at declination 78° **six out of 21 stars went
+missing** without anything failing. On top of that, the right-ascension span was computed at the
+pole-farthest rather than the pole-nearest point of the circle. Every test now checks against
+brute-force search for exact equality, across eight fields including the pole, the
+right-ascension origin and a large radius.
+
+**PixInsight comparison, process by process** ([docs/PIXINSIGHT.md](docs/PIXINSIGHT.md)). The
+previous attempt produced a list from an aborted agent whose eleven downloaded pages were all 404
+error pages — an unsourced claim. This time from the **source code**: the PixInsight Class
+Library is open and every process sits there as a `…Process.cpp`. Four public mirrors enumerated,
+union **91 processes**, each backed by a file. The official documentation still answers with HTTP
+403 — that is stated in the document too, as is the fact that the closed modules (Deconvolution,
+TGVDenoise, SCNR, StarMask, StarAlignment …) do not appear there and are therefore marked *from
+knowledge*.
+The three real gaps, named plainly: **PixelMath**, **general mask logic** (the building blocks
+exist but only the astro steps are wired to them) and **device control**.
+
 ### Star shapes, comets, mixed exposures and a mask system
 
 **Re-rendering star shapes** (`--astro-synthstar`). Coma at the edges, sensor tilt and tracking
