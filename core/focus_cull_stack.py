@@ -1173,6 +1173,12 @@ def main():
     ap.add_argument("--astro-align", choices=["shift", "rotate"], default="shift",
                     help="Astro-Ausrichtung: shift=Translation (Nachführung), "
                          "rotate=Translation+Feldrotation (Alt-Az-Montierung)")
+    ap.add_argument("--astro-banding", type=float, default=0.0, metavar="STAERKE",
+                    help="Zeilen-Banding je Sub entfernen (0=aus, 1.0=voll). Sensor-Ausleseversatz, "
+                         "den Dark/Flat/Bias NICHT beseitigen — er ist je Aufnahme anders und "
+                         "mittelt sich auch im Stack nicht weg (klassisch bei Canon-DSLRs)")
+    ap.add_argument("--astro-banding-vertical", action="store_true",
+                    help="Banding spaltenweise statt zeilenweise korrigieren")
     ap.add_argument("--astro-cosmetic", action="store_true",
                     help="Astro: Hot-/Cold-Pixel vor dem Stacken entfernen (kosmetische Korrektur)")
     ap.add_argument("--astro-drizzle", type=int, choices=[1, 2], default=1,
@@ -1619,14 +1625,16 @@ def run_astro(input_dir, work_dir, args):
                                      pixfrac=getattr(args, "astro_pixfrac", 0.7),
                                      dark=dark, flat=flat, cosmetic=cosmetic,
                                      detector=getattr(args, "detector", "ORB"),
-                                     ref_path=_bestref)
+                                     ref_path=_bestref,
+                                     banding=getattr(args, "astro_banding", 0.0))
     else:
         aligned = astro.register_and_cache(paths, reg_dir, dark, flat,
                                            do_register=not args.no_register,
                                            align_mode=align_mode, cosmetic=cosmetic,
                                            drizzle=drizzle, detector=getattr(args, "detector", "ORB"),
                                            tps=getattr(args, "astro_tps", False),
-                                           ref_path=_bestref)
+                                           ref_path=_bestref,
+                                           banding=getattr(args, "astro_banding", 0.0))
         phase("stack")
         print(f"  Stacken ({args.astro_method}, kappa={args.astro_kappa}) …")
         result = astro.stack(aligned, method=args.astro_method, kappa=args.astro_kappa, normalize=True,

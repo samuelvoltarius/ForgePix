@@ -141,6 +141,74 @@ def cosmetic_correct(f, strength=3.0):
     return out
 
 
+
+
+def _rolling_median(werte, fenster):
+    """Gleitender Median über ein 1D-Profil (Randbereiche gespiegelt).
+
+    Nicht cv2.medianBlur: das kann bei float32 nur Fenstergröße 3 und 5. Das Profil hat
+    nur so viele Werte wie das Bild Zeilen — ein Python-Fenster ist hier unkritisch."""
+    v = np.asarray(werte, np.float32)
+    n = v.size
+    r = max(1, int(fenster) // 2)
+    pad = np.pad(v, r, mode="reflect")
+    return np.array([np.median(pad[i:i + 2 * r + 1]) for i in range(n)], np.float32)
+
+
+def fix_banding(f, strength=1.0, vertical=False, protect_sigma=3.0):
+    """Zeilen-/Spalten-Banding entfernen (Sensor-Ausleserauschen).
+
+    Viele Kameras (klassisch Canon-DSLRs, aber auch etliche CMOS-Astrokameras) legen ein
+    schwaches, ZEILENWEISE konstantes Offset über das Bild. Dark/Flat/Bias beseitigen das
+    NICHT: der Versatz ist von Aufnahme zu Aufnahme verschieden, mittelt sich also auch im
+    Stack nicht weg, sondern bleibt als feines Streifenmuster im gestreckten Bild stehen.
+
+    Verfahren (klassisch, kein ML): je Zeile den robusten Median bilden, aber nur aus Pixeln
+    NAHE dem Himmelshintergrund — Sterne und heller Nebel würden den Zeilenwert sonst
+    verfälschen. Das so gewonnene Zeilenprofil enthält zwei Anteile: den echten,
+    grossflächigen Helligkeitsverlauf (Gradient, Vignette) und den zeilenweisen Versatz.
+    Nur der HOCHFREQUENTE Anteil ist Banding — er ergibt sich als Differenz zum über mehrere
+    Zeilen geglätteten Profil und wird abgezogen. Der Gradient bleibt damit unangetastet
+    (dafür ist background_extract zuständig).
+
+    strength: 0..1 = anteiliges Abziehen, 1.0 = vollständig.
+    vertical: True für spaltenweises Banding (Sensor um 90° gedreht ausgelesen).
+    protect_sigma: Pixel mehr als so viele robuste Sigma über dem Median gelten als
+                   Signal (Stern/Nebel) und gehen nicht in den Zeilenmedian ein.
+    """
+    if f is None or strength <= 0:
+        return f
+    a = np.asarray(f, np.float32)
+    einzeln = (a.ndim == 2)
+    if einzeln:
+        a = a[..., None]
+    if vertical:
+        a = np.transpose(a, (1, 0, 2))
+
+    out = a.copy()
+    for c in range(a.shape[2]):
+        k = a[..., c]
+        # Signalmaske: alles deutlich über dem Hintergrund ausklammern (Sterne, Nebelkerne)
+        med = float(np.median(k))
+        mad = float(np.median(np.abs(k - med))) * 1.4826 + 1e-9
+        himmel = k < (med + protect_sigma * mad)
+        # Zeilenmedian nur über Himmel-Pixel; Zeilen ohne genug Himmel -> Gesamtmedian
+        zeilen = np.empty(k.shape[0], np.float32)
+        for y in range(k.shape[0]):
+            werte = k[y][himmel[y]]
+            zeilen[y] = np.median(werte) if werte.size >= max(8, k.shape[1] // 20) else med
+        # grossflächigen Verlauf herausrechnen -> nur der zeilenweise Versatz bleibt
+        fenster = max(3, (min(31, k.shape[0] // 8) | 1))          # ungerade
+        glatt = _rolling_median(zeilen, fenster)
+        versatz = (zeilen - glatt).astype(np.float32) * float(np.clip(strength, 0.0, 1.0))
+        out[..., c] = k - versatz[:, None]
+
+    if vertical:
+        out = np.transpose(out, (1, 0, 2))
+    if einzeln:
+        out = out[..., 0]
+    return np.clip(out, 0, None)
+
 def _star_centroids(g, max_stars=200):
     """Sternzentren (sub-pixel) als Punktwolke: Hintergrund abziehen, **rauschadaptive Schwelle
     (Median + 5·MAD)**, kleine helle Blobs als Sterne, nach Fläche sortiert.
@@ -491,7 +559,7 @@ def _ref_path(paths, ref_path=None):
 
 def register_and_cache(paths, out_dir, dark=None, flat=None, do_register=True,
                        align_mode="shift", cosmetic=False, drizzle=1, detector="ORB",
-                       tps=False, ref_path=None, log=log_print):
+                       tps=False, ref_path=None, banding=0.0, log=log_print):
     """Frames kalibrieren + ausrichten, als 16-bit-TIFF in out_dir ablegen.
 
     align_mode: 'shift' = NUR Translation (Nachführung ohne Feldrotation, s. CLI --astro-align),
@@ -499,6 +567,9 @@ def register_and_cache(paths, out_dir, dark=None, flat=None, do_register=True,
                 bewusst NICHT genutzt — rastet bei Astro auf dem festen Fixed-Pattern statt auf
                 den gewanderten Sternen ein.
     cosmetic:   Hot-/Cold-Pixel vor dem Ausrichten entfernen.
+    banding:    Staerke der Zeilen-Banding-Korrektur je Sub (0 = aus). Muss VOR dem Ausrichten
+                laufen: der Versatz haengt am Sensor, nicht am Himmel — nach dem Verschieben
+                waere er ueber die Zeilen verschmiert und nicht mehr sauber zu fassen.
     drizzle:    Ausgabe-Hochskalierung (1=aus, 2=doppelte Kantenlänge, „Drizzle-lite").
 
     Parallel über alle Kerne (OpenCV gibt den GIL frei). Frames, die sich nicht an die Referenz
@@ -508,6 +579,8 @@ def register_and_cache(paths, out_dir, dark=None, flat=None, do_register=True,
     os.makedirs(out_dir, exist_ok=True)
     drizzle = max(1, int(drizzle))
     ref = calibrate(_read_float(_ref_path(paths, ref_path)), dark, flat)
+    if banding:
+        ref = fix_banding(ref, strength=banding)
     if cosmetic:
         ref = cosmetic_correct(ref)
     refg = _gray(ref)
@@ -520,6 +593,8 @@ def register_and_cache(paths, out_dir, dark=None, flat=None, do_register=True,
         f = calibrate(_read_float(paths[i]), dark, flat)
         if f.shape[:2] != ref.shape[:2]:
             f = cv2.resize(f, (ref.shape[1], ref.shape[0]))
+        if banding:
+            f = fix_banding(f, strength=banding)
         if cosmetic:
             f = cosmetic_correct(f)
         return f
@@ -591,7 +666,7 @@ def register_and_cache(paths, out_dir, dark=None, flat=None, do_register=True,
 
 
 def drizzle_stack(paths, scale=2, pixfrac=0.7, dark=None, flat=None, cosmetic=False,
-                  detector="ORB", ref_path=None, log=log_print):
+                  detector="ORB", ref_path=None, banding=0.0, log=log_print):
     """ECHTES Drizzle (Variable-Pixel Linear Reconstruction, Fruchter & Hook — Punktkernel,
     inverse Formulierung). Anders als „Drizzle-lite“ (jeden Frame einzeln hochskalieren und mitteln,
     was die Interpolation verschmiert) wird hier das Resampling AUFGESCHOBEN: jeder Roh-Frame wird
@@ -604,6 +679,8 @@ def drizzle_stack(paths, scale=2, pixfrac=0.7, dark=None, flat=None, cosmetic=Fa
     scale = int(max(2, scale))
     pf = float(np.clip(pixfrac, 0.1, 1.0))
     ref = calibrate(_read_float(_ref_path(paths, ref_path)), dark, flat)
+    if banding:
+        ref = fix_banding(ref, strength=banding)
     if cosmetic:
         ref = cosmetic_correct(ref)
     refg = _gray(ref)
@@ -618,6 +695,8 @@ def drizzle_stack(paths, scale=2, pixfrac=0.7, dark=None, flat=None, cosmetic=Fa
         f = calibrate(_read_float(p), dark, flat)
         if f.shape[:2] != (H, W):
             f = cv2.resize(f, (W, H))
+        if banding:
+            f = fix_banding(f, strength=banding)
         if cosmetic:
             f = cosmetic_correct(f)
         if f.ndim == 2:

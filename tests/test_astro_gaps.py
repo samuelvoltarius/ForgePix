@@ -349,5 +349,84 @@ class TestReferenzwahl(unittest.TestCase):
         self.assertEqual(astro._ref_path(pfade, "/gibtsnicht.fit"), pfade[len(pfade) // 2])
 
 
+class TestBanding(unittest.TestCase):
+    """A9 — Zeilen-Banding entfernen (Sensor-Ausleseversatz).
+
+    Viele Kameras legen ein zeilenweise konstantes Offset über das Bild. Dark/Flat/Bias
+    beseitigen das NICHT: der Versatz ist je Aufnahme anders, mittelt sich also auch im
+    Stack nicht weg, sondern bleibt als Streifenmuster im gestreckten Bild.
+    Gemessen gegen die bekannte Wahrheit: Banding um Faktor 4–12 reduziert, der echte
+    Gradient bleibt erhalten."""
+
+    def _szene(self, h=200, w=260, seed=13):
+        """Sternfeld + echter Gradient + Nebel, OHNE Banding."""
+        rng = np.random.default_rng(seed)
+        yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
+        wahr = (0.05 + 0.08 * xx / w + 0.03 * yy / h).astype(np.float32)
+        wahr += cv2.GaussianBlur(0.15 * np.exp(-(((xx - w / 2) / (w / 4)) ** 2
+                                                 + ((yy - h / 2) / (h / 4)) ** 2)), (0, 0), 7)
+        for _ in range(50):
+            cv2.circle(wahr, (int(rng.integers(10, w - 10)), int(rng.integers(10, h - 10))),
+                       2, float(rng.uniform(0.3, 0.9)), -1)
+        return cv2.GaussianBlur(wahr, (0, 0), 1.1).astype(np.float32), rng
+
+    def _bandstaerke(self, img):
+        z = np.median(img, axis=1).astype(np.float32)
+        return float(np.std(z - astro._rolling_median(z, 31)))
+
+    def test_a9_entfernt_zeilen_banding(self):
+        wahr, rng = self._szene()
+        band = rng.normal(0, 0.006, wahr.shape[0]).astype(np.float32)
+        mit = np.clip(wahr + band[:, None], 0, 1)
+        ohne = astro.fix_banding(mit, strength=1.0)
+        vor, nach = self._bandstaerke(mit), self._bandstaerke(ohne)
+        self.assertLess(nach, vor / 3.0, f"Banding kaum reduziert: {vor:.5f} -> {nach:.5f}")
+
+    def test_a9_echter_gradient_bleibt(self):
+        """Der grossflaechige Helligkeitsverlauf gehoert NICHT zum Banding — dafuer ist
+        background_extract da. fix_banding darf ihn nicht anfassen."""
+        wahr, rng = self._szene()
+        band = rng.normal(0, 0.006, wahr.shape[0]).astype(np.float32)
+        mit = np.clip(wahr + band[:, None], 0, 1)
+        ohne = astro.fix_banding(mit, strength=1.0)
+        for name, a, b in (("links/rechts", mit[:, :40], ohne[:, :40]),
+                           ("rechts", mit[:, -40:], ohne[:, -40:])):
+            self.assertAlmostEqual(float(np.median(a)), float(np.median(b)), places=2,
+                                   msg=f"Gradient bei {name} veraendert")
+
+    def test_a9_sauberes_bild_bleibt_nahezu_unveraendert(self):
+        wahr, _ = self._szene()
+        ohne = astro.fix_banding(wahr, strength=1.0)
+        spanne = float(np.percentile(wahr, 99) - np.percentile(wahr, 1))
+        self.assertLess(float(np.abs(ohne - wahr).mean()) / spanne, 0.01,
+                        "bandingfreies Bild wird zu stark veraendert")
+
+    def test_a9_staerke_null_ist_identitaet(self):
+        wahr, _ = self._szene()
+        self.assertIs(astro.fix_banding(wahr, strength=0.0), wahr)
+        self.assertIsNone(astro.fix_banding(None, strength=1.0))
+
+    def test_a9_farbe_und_grau_und_vertikal(self):
+        """Form und Wertebereich muessen erhalten bleiben — 2D wie 3D, beide Richtungen."""
+        wahr, rng = self._szene()
+        bgr = np.dstack([wahr, wahr, wahr])
+        for name, bild in (("grau", wahr), ("bgr", bgr)):
+            for vert in (False, True):
+                out = astro.fix_banding(bild, strength=1.0, vertical=vert)
+                with self.subTest(bild=name, vertikal=vert):
+                    self.assertEqual(out.shape, bild.shape)
+                    self.assertGreaterEqual(float(out.min()), 0.0)
+
+    def test_a9_spalten_banding_mit_vertical(self):
+        wahr, rng = self._szene()
+        band = rng.normal(0, 0.006, wahr.shape[1]).astype(np.float32)
+        mit = np.clip(wahr + band[None, :], 0, 1)
+        ohne = astro.fix_banding(mit, strength=1.0, vertical=True)
+        def staerke(img):
+            z = np.median(img, axis=0).astype(np.float32)
+            return float(np.std(z - astro._rolling_median(z, 31)))
+        self.assertLess(staerke(ohne), staerke(mit) / 3.0)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
