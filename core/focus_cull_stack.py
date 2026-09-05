@@ -1243,6 +1243,13 @@ def main():
                     help="Ausgefressene Sternkerne entsaettigen: die Sternfarbe aus den intakten "
                          "Flanken zurueckholen, damit helle Sterne nicht als weisse Scheiben "
                          "dastehen (Siril: unclipstars/Desaturate Stars)")
+    ap.add_argument("--astro-synthstar", action="store_true",
+                    help="Sternformen neu setzen: Sterne messen, entfernen und als runde "
+                         "Moffat-Profile mit demselben Fluss zurueckschreiben (Siril: synthstar). "
+                         "Gegen Koma, Verkippung und Nachfuehrfehler — an echten Daten "
+                         "(M27, 7 px Nachfuehrfehler) Exzentrizitaet 0,79 auf 0,39, also auf das "
+                         "Niveau derselben Aufnahme OHNE Fehler (0,42). ACHTUNG: die Sternform "
+                         "wird dabei erfunden, fuer Photometrie/Astrometrie unbrauchbar")
     ap.add_argument("--astro-unpurple", type=float, default=0.0, metavar="STAERKE",
                     help="Violettsaum um helle Sterne daempfen (0=aus, 1.0=voll). Die Optik "
                          "buendelt Blau und Rot in einer anderen Ebene als Gruen; behandelt wird "
@@ -2102,6 +2109,8 @@ def _astro_write(result, work_dir, paths, args, astro):
                 print(f"  Rest-Gradient nach dem Strecken entfernt ({_korr})")
             except Exception as e:
                 print(f"  (Nachkorrektur uebersprungen: {e})", file=sys.stderr)
+        if getattr(args, "astro_synthstar", False):
+            view = astro.synthstar(view)
         _sr = float(getattr(args, "astro_star_reduce", 0.0) or 0.0)
         if _sr > 0:
             view = astro.reduce_stars(view, strength=_sr)

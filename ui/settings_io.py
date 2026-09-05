@@ -59,6 +59,8 @@ class SettingsMixin:
                                self.astro_unpurple.value),
             "dark_skalieren": (lambda v: self.dark_skalieren.setChecked(bool(v)),
                                self.dark_skalieren.isChecked),
+            "astro_synthstar": (lambda v: self.astro_synthstar.setChecked(bool(v)),
+                                self.astro_synthstar.isChecked),
             "astro_unmix": (lambda v: self.astro_unmix.setValue(float(v)), self.astro_unmix.value),
             "astro_bright": (lambda v: self.astro_bright.setValue(float(v)), self.astro_bright.value),
             "astro_sat": (lambda v: self.astro_sat.setValue(float(v)), self.astro_sat.value),

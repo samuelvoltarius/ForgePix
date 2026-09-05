@@ -1795,6 +1795,134 @@ def remove_stars(bgr, sensitivity=5.0, max_size=600, iterations=2, log=log_print
     return starless, mask.astype(np.float32)
 
 
+def _moffat_kern(radius, fwhm, beta=2.5):
+    """Moffat-Profil als Kern, Summe 1. FWHM = 2·alpha·sqrt(2^(1/beta) − 1).
+
+    Warum Moffat und nicht Gauss: echte Sterne haben durch Seeing breitere Flanken, als eine
+    Gauss-Kurve sie hergibt. Setzt man Gauss-Sterne ein, wirken sie wie aufgeklebte Punkte.
+    beta steuert genau diese Flanken (kleiner = breiter; 2.5 ist ein üblicher Himmelswert).
+    """
+    n = int(2 * radius + 1)
+    y, x = np.mgrid[-radius:radius + 1, -radius:radius + 1].astype(np.float32)
+    alpha = max(float(fwhm), 0.8) / (2.0 * np.sqrt(2.0 ** (1.0 / max(beta, 0.6)) - 1.0))
+    k = (1.0 + (x * x + y * y) / (alpha * alpha)) ** (-float(beta))
+    s = float(k.sum())
+    return (k / s).astype(np.float32) if s > 1e-9 else np.zeros((n, n), np.float32)
+
+
+def _stern_liste(rest, maske, min_flaeche=3, max_flaeche=900, halb=8):
+    """Aus Restbild (Original − sternlos) und Sternmaske eine Liste (x, y, fwhm_px, fluss_bgr).
+
+    Zwei Entscheidungen, die den Unterschied machen:
+
+    1. **Gemessen wird auf einem FENSTER um den Stern, nicht innerhalb der Maske.** Die Maske ist
+       eine Schwelle; wer nur über ihr rechnet, schneidet die Flanken ab und unterschätzt die
+       Breite systematisch. Im ersten Entwurf kam so über ein ganzes Feld eine Zielbreite von
+       1,2 px heraus — die Sterne verschwanden danach unter der Nachweisgrenze.
+
+    2. **Als Breite zählt die KLEINERE Hauptachse.** Bei nachgeführten Strichen ist die lange
+       Achse der Fehler, die kurze das echte Seeing. Nur so wird beim Neusetzen keine Schärfe
+       vorgetäuscht und kein Nachführfehler nachgebaut.
+
+    Die Maske wird vorher leicht geweitet, damit ein zerrissener Strich EIN Stern bleibt und
+    nicht in Dutzende Bruchstücke zerfällt (ungeweitet: 1770 „Sterne" statt 60).
+    """
+    lum = _gray(rest) if rest.ndim == 3 else rest
+    h, w = lum.shape[:2]
+    m = (np.asarray(maske) > 0.5).astype(np.uint8)
+    m = cv2.dilate(m, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5)))
+    n, lab, stats, mitte = cv2.connectedComponentsWithStats(m, 8)
+    sterne = []
+    for i in range(1, n):
+        if not (min_flaeche <= int(stats[i, cv2.CC_STAT_AREA]) <= max_flaeche):
+            continue
+        x0, y0 = int(stats[i, cv2.CC_STAT_LEFT]), int(stats[i, cv2.CC_STAT_TOP])
+        x1 = min(w, x0 + int(stats[i, cv2.CC_STAT_WIDTH]))
+        y1 = min(h, y0 + int(stats[i, cv2.CC_STAT_HEIGHT]))
+        # Gerechnet wird über den EIGENEN Bereich des Sterns, nicht über ein festes Fenster.
+        # Ein festes Fenster ist in beide Richtungen falsch: 8 px schnitten bei hellen Sternen
+        # die Flanken ab (5 % Fluss zu wenig), mitwachsende Fenster überlappten bei Nachbarn und
+        # zählten doppelt (9 % zu viel). Der Bereich der geweiteten Maske hat beide Probleme
+        # nicht — ausserhalb davon ist `rest` ohnehin null, weil `remove_stars` nur dort ändert.
+        sel = (lab[y0:y1, x0:x1] == i)
+        wgt = np.where(sel, np.clip(lum[y0:y1, x0:x1], 0, None), 0.0).astype(np.float64)
+        summe = float(wgt.sum())
+        if summe <= 1e-8:
+            continue
+        yy, xx = np.mgrid[0:(y1 - y0), 0:(x1 - x0)].astype(np.float64)
+        cx, cy = float((wgt * xx).sum() / summe), float((wgt * yy).sum() / summe)
+        dx, dy = xx - cx, yy - cy
+        vxx = float((wgt * dx * dx).sum() / summe)
+        vyy = float((wgt * dy * dy).sum() / summe)
+        vxy = float((wgt * dx * dy).sum() / summe)
+        spur, det = vxx + vyy, vxx * vyy - vxy * vxy
+        wurzel = np.sqrt(max(spur * spur / 4.0 - det, 0.0))
+        klein = max(spur / 2.0 - wurzel, 0.05)                  # kleinere Hauptachse
+        fwhm = 2.3548 * np.sqrt(klein)
+        if rest.ndim == 3:
+            fluss = [float(np.where(sel, np.clip(rest[y0:y1, x0:x1, c], 0, None), 0.0).sum())
+                     for c in range(rest.shape[2])]
+        else:
+            fluss = [summe]
+        sterne.append((x0 + cx, y0 + cy, float(fwhm), fluss))
+    return sterne
+
+
+def synthstar(bgr, groesse=1.0, beta=2.5, sensitivity=5.0, min_fwhm=1.2, log=log_print):
+    """Sternprofile durch synthetische, runde PSFs ersetzen (Siril `synthstar`).
+
+    Wogegen das hilft: Koma am Bildrand, Nachführfehler, Verkippung — alles Fehler, die die
+    STERNE verformen, während der Nebel es kaum zeigt. Rechnerisch lässt sich das nicht
+    „entzerren"; man kann die Sterne aber neu setzen. Vorgehen:
+      1. Sterne entfernen (klassisch, ohne ML) → sternloses Bild + Maske.
+      2. Aus dem Restbild je Stern Ort, Breite und Fluss messen (flussgewichtete Momente).
+      3. Als Zielbreite die MEDIAN-Breite des Feldes nehmen — nicht die kleinste. Die kleinste
+         wäre schärfer, würde aber überall dort, wo die Optik es nicht hergibt, Schärfe
+         vortäuschen, die nie aufgenommen wurde.
+      4. Runde Moffat-Profile mit demselben Fluss ins sternlose Bild zurücksetzen.
+
+    Der Fluss bleibt je Kanal erhalten — die Sternfarben ändern sich also nicht, nur die Form.
+
+    EHRLICHE GRENZE: das Verfahren erfindet die Sternform. Was auf dem Sensor eine Linie war,
+    wird zu einem runden Punkt — das ist eine Darstellungsentscheidung, keine Rekonstruktion.
+    Für Messzwecke (Photometrie, Astrometrie) ist das Ergebnis unbrauchbar.
+    """
+    if bgr is None:
+        return bgr
+    a = np.clip(np.asarray(bgr, np.float32), 0, 1)
+    starless, maske = remove_stars(a, sensitivity=sensitivity, log=lambda *x: None)
+    if maske is None:
+        log("    synthstar: keine Sterne gefunden — Bild unverändert")
+        return a
+    rest = np.clip(a - starless, 0, None)
+    sterne = _stern_liste(rest, maske)
+    if len(sterne) < 5:
+        log("    synthstar: nur %d Sterne messbar — Bild unverändert" % len(sterne))
+        return a
+    ziel = max(float(np.median([s[2] for s in sterne])) * float(groesse), float(min_fwhm))
+    out = starless.copy()
+    h, w = out.shape[:2]
+    kan = out.shape[2] if out.ndim == 3 else 1
+    radius = max(3, int(round(3.0 * ziel)))
+    kern = _moffat_kern(radius, ziel, beta)
+    for (cx, cy, _fw, fluss) in sterne:
+        xi, yi = int(round(cx)), int(round(cy))
+        x0, y0 = max(0, xi - radius), max(0, yi - radius)
+        x1, y1 = min(w, xi + radius + 1), min(h, yi + radius + 1)
+        if x1 <= x0 or y1 <= y0:
+            continue
+        k = kern[y0 - (yi - radius):(y1 - (yi - radius)), x0 - (xi - radius):(x1 - (xi - radius))]
+        for c in range(kan):
+            f = fluss[c] if c < len(fluss) else fluss[0]
+            if out.ndim == 3:
+                out[y0:y1, x0:x1, c] += k * f
+            else:
+                out[y0:y1, x0:x1] += k * f
+    log("    synthstar: %d Sterne neu gesetzt, Zielbreite %.2f px (Moffat beta %.1f)"
+        % (len(sterne), ziel, beta))
+    return np.clip(out, 0, 1)
+
+
 def dualband_hoo(bgr, unmix=0.20):
     """HOO-Palette: Rot=Hα, Grün+Blau=OIII → rote Hα-Nebel + tealfarbene OIII-Bereiche (zwei echte
     Signale, datentreu). Sterne werden neutralisiert."""

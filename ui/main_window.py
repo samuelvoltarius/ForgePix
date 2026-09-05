@@ -425,6 +425,7 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         self.astro_unpurple = QDoubleSpinBox(); self.astro_unpurple.setRange(0.0, 1.0)
         self.astro_unpurple.setSingleStep(0.1); self.astro_unpurple.setValue(0.0)
         self.dark_skalieren = QCheckBox(tr("Dark auf die Belichtungszeit der Lights umrechnen"))
+        self.astro_synthstar = QCheckBox(tr("Sternformen neu setzen (rund)"))
         self.astro_unmix = QDoubleSpinBox(); self.astro_unmix.setRange(-1.0, 0.5)
         self.astro_unmix.setSingleStep(0.02); self.astro_unmix.setValue(-1.0)   # -1 = vom Filter
 
@@ -610,18 +611,24 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
                               "darum bleibt um helle Sterne ein magentafarbener Hof stehen "
                               "(0 = aus, 1.0 = voll). Behandelt wird nur, wo BEIDE Kanäle über "
                               "Grün liegen — roter Hα-Nebel bleibt unangetastet."), 29, 3)
-        ar.addWidget(self.dark_skalieren, 30, 0, 1, 3)
+        ar.addWidget(self.astro_synthstar, 30, 0, 1, 3)
+        ar.addWidget(help_btn("Misst jeden Stern, entfernt ihn und setzt ihn als rundes Profil "
+                              "mit demselben Fluss zurück — gegen Koma am Rand, Verkippung und "
+                              "Nachführfehler. An echten Daten sank die Verformung von 0,79 auf "
+                              "0,39, also auf den Wert derselben Aufnahme ohne Fehler (0,42). "
+                              "Die Sternform wird dabei erfunden: für Messzwecke unbrauchbar."), 30, 3)
+        ar.addWidget(self.dark_skalieren, 31, 0, 1, 3)
         ar.addWidget(help_btn("Passt die Belichtungszeit der Darks nicht zu den Lights, wird das "
                               "Master-Dark umgerechnet. Der Bias skaliert dabei NICHT mit — "
                               "genau daran scheitert das naive Multiplizieren. Achtung: für den "
                               "IMX294 (ASI294MC Pro) rät der Hersteller davon ab, weil der Glow "
-                              "dort nicht linear mitläuft."), 30, 3)
+                              "dort nicht linear mitläuft."), 31, 3)
         # Alles Feine standardmaessig VERSTECKEN — sichtbar bleiben Filter und Bildstil.
         self._astro_erweitert_widgets = [
             _lbl_unmix, self.astro_unmix, _lbl_band, self.astro_banding, self.astro_banding_vert,
             self.astro_unclip, _lbl_red, self.astro_star_reduce,
             _lbl_sl, self.astro_starless_stretch, _lbl_col, self.astro_color_stretch,
-            _lbl_pur, self.astro_unpurple, self.dark_skalieren,
+            _lbl_pur, self.astro_unpurple, self.astro_synthstar, self.dark_skalieren,
         ]
         for _w in self._astro_erweitert_widgets:
             _w.setVisible(False)
@@ -1869,6 +1876,8 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         if (getattr(self, "astro_unpurple", None) is not None
                 and self.astro_unpurple.value() > 0):
             args += ["--astro-unpurple", str(self.astro_unpurple.value())]
+        if getattr(self, "astro_synthstar", None) is not None and self.astro_synthstar.isChecked():
+            args += ["--astro-synthstar"]
         if getattr(self, "dark_skalieren", None) is not None and self.dark_skalieren.isChecked():
             args += ["--dark-skalieren"]
         if self.dedup.isChecked():
