@@ -1496,6 +1496,28 @@ def main():
                     help="Jeder Unterordner des Eingabe-Ordners = eigener Stack")
     ap.add_argument("--watch", action="store_true",
                     help="Eingabe-Ordner beobachten und bei neuem stabilen Bestand stacken")
+    ap.add_argument("--photometrie", action="store_true",
+                    help="MESSEN statt bilden: Lichtkurve eines Sterns ueber die Aufnahmeserie "
+                         "(veraenderliche Sterne, Bedeckungen, Exoplaneten-Transite). Braucht "
+                         "--stern und --vergleich. Schreibt Lichtkurve als Bild und, mit "
+                         "--aavso, eine Meldedatei im AAVSO Extended File Format")
+    ap.add_argument("--stern", default=None, metavar="X,Y",
+                    help="Photometrie: Bildposition des Zielsterns in der ERSTEN Aufnahme")
+    ap.add_argument("--vergleich", default=None, metavar="X,Y;X,Y;...",
+                    help="Photometrie: Vergleichssterne. Mindestens einer, besser drei — ein "
+                         "einzelner Vergleichsstern, der selbst veraenderlich ist, verdirbt die "
+                         "ganze Messreihe, bei dreien faellt so einer durch die Streuung auf")
+    ap.add_argument("--blende", type=float, default=5.0, metavar="PX",
+                    help="Photometrie: Radius der Messblende in Pixeln (etwa 1,5x FWHM)")
+    ap.add_argument("--aavso", default=None, metavar="STERNNAME",
+                    help="Photometrie: zusaetzlich eine AAVSO-Meldedatei schreiben, unter diesem "
+                         "Sternnamen. Ohne --katalog-mag sind die Werte INSTRUMENTELL und werden "
+                         "in der Datei auch so gekennzeichnet")
+    ap.add_argument("--beobachter", default="UNKNOWN", metavar="CODE",
+                    help="Photometrie: AAVSO-Beobachterkuerzel fuer die Meldedatei")
+    ap.add_argument("--katalog-mag", type=float, default=None, metavar="MAG",
+                    help="Photometrie: bekannte Gesamthelligkeit der Vergleichssterne. Erst damit "
+                         "werden aus instrumentellen Werten echte Helligkeiten")
     ap.add_argument("--live", action="store_true",
                     help="Beobachtungsmodus INKREMENTELL: jeder neue Sub wird EINMAL verrechnet "
                          "statt den ganzen Bestand neu zu stapeln. Nach jedem Sub liegt ein "
@@ -1573,6 +1595,8 @@ def main():
         # Lauf gescheitert — sonst meldete die GUI gruen „Fertig ✓".
         if geschafft == 0 and not getattr(args, "no_stack", False):
             sys.exit(1)
+    elif getattr(args, "photometrie", False):
+        photometrie_lauf(args, input_dir, work_dir)
     elif getattr(args, "watch", False):
         if getattr(args, "live", False):
             live_loop(args, input_dir, work_dir)
@@ -2720,6 +2744,60 @@ def _folder_signature(folder):
         except OSError:
             pass
     return tuple(sorted(sig))
+
+
+def _punkte_lesen(text):
+    """"x,y;x,y" -> [(x, y), ...]. Gibt [] bei Unsinn zurueck, statt spaeter zu stolpern."""
+    raus = []
+    for teil in (text or "").replace(" ", "").split(";"):
+        if not teil:
+            continue
+        try:
+            x, y = teil.split(",")
+            raus.append((float(x), float(y)))
+        except ValueError:
+            raise ForgePixFehler("Position %r nicht lesbar — erwartet wird X,Y" % teil)
+    return raus
+
+
+def photometrie_lauf(args, input_dir, work_dir):
+    """Lichtkurve statt Bild: messen, zeichnen, optional an die AAVSO melden."""
+    import photometrie as _ph
+    paths = list_images(input_dir)
+    if len(paths) < 5:
+        raise ForgePixFehler("Photometrie braucht mindestens 5 Aufnahmen (%d gefunden)"
+                             % len(paths))
+    ziel = _punkte_lesen(getattr(args, "stern", None))
+    vergleich = _punkte_lesen(getattr(args, "vergleich", None))
+    if len(ziel) != 1:
+        raise ForgePixFehler("--stern erwartet GENAU eine Position (X,Y)")
+    if not vergleich:
+        raise ForgePixFehler("--vergleich braucht mindestens eine Position (besser drei)")
+    if len(vergleich) < 3:
+        print("  Hinweis: nur %d Vergleichsstern(e). Mit dreien faellt ein selbst "
+              "veraenderlicher Vergleichsstern durch die Streuung auf." % len(vergleich),
+              file=sys.stderr)
+    os.makedirs(work_dir, exist_ok=True)
+    print(f"  Photometrie: {len(paths)} Aufnahmen, Blende {args.blende:.1f} px …")
+    kurve = _ph.lichtkurve(paths, ziel[0], vergleich, r_blende=args.blende,
+                           r_innen=args.blende * 1.8, r_aussen=args.blende * 2.8,
+                           katalog_helligkeit=getattr(args, "katalog_mag", None))
+    if kurve is None:
+        raise ForgePixFehler("keine einzige Messung gelungen — stimmen die Positionen?")
+    bild = os.path.join(work_dir, "lichtkurve.png")
+    _ph.kurve_zeichnen(kurve, bild)
+    print(f"  Lichtkurve: {bild}")
+    per = _ph.periode_schaetzen(kurve["punkte"])
+    if per and per["staerke"] > 0.5:
+        print("  Periode grob geschaetzt: %.2f h (Staerke %.2f) — eine Hausnummer, keine "
+              "Analyse" % (per["periode_stunden"], per["staerke"]))
+    elif per:
+        print("  Periodensuche ohne klares Ergebnis (staerkstes Maximum nur %.2f) — zu wenig "
+              "Signal oder zu kurze Reihe" % per["staerke"])
+    if getattr(args, "aavso", None):
+        _ph.aavso_export(kurve, os.path.join(work_dir, "aavso.txt"), args.aavso,
+                         beobachter=getattr(args, "beobachter", "UNKNOWN"))
+    return work_dir
 
 
 def live_loop(args, input_dir, work_dir):
