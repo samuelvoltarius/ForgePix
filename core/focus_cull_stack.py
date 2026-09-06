@@ -2112,9 +2112,12 @@ def _astro_write(result, work_dir, paths, args, astro):
         import wavelet
         result = wavelet.wavelet_denoise(result.astype(np.float32), strength=_dn)
     stack_dir = os.path.join(work_dir, "stack")
-    if os.path.isdir(stack_dir):
-        shutil.rmtree(stack_dir)
-    os.makedirs(stack_dir)
+    os.makedirs(work_dir, exist_ok=True)
+    try:
+        os.mkdir(stack_dir)
+    except FileExistsError:
+        import tempfile
+        stack_dir = tempfile.mkdtemp(prefix="stack-", dir=work_dir)
     base = os.path.splitext(os.path.basename(paths[0]))[0]
     lin = np.clip(result * 65535, 0, 65535).astype(np.uint16)
     imwrite(os.path.join(stack_dir, f"{args.prefix}{base}_astro_linear.tif"),
@@ -2135,7 +2138,7 @@ def _astro_write(result, work_dir, paths, args, astro):
                          photometric="rgb")
         print(f"  32-bit Linear (GraXpert/StarNet++/PixInsight): {out32}")
     except Exception as e:
-        print(f"  32-bit-Export übersprungen ({e})", file=sys.stderr)
+        raise RuntimeError(f"32-bit-TIFF konnte nicht gespeichert werden: {e}") from e
     if getattr(args, "fits_out", False):
         try:
             from astropy.io import fits
@@ -2147,7 +2150,7 @@ def _astro_write(result, work_dir, paths, args, astro):
             hdu.writeto(outf, overwrite=True)
             print(f"  FITS (32-bit linear): {outf}")
         except Exception as e:
-            print(f"  FITS-Export übersprungen ({e})", file=sys.stderr)
+            raise RuntimeError(f"FITS konnte nicht gespeichert werden: {e}") from e
     # Aufbereitung NUR fürs Vorschau-Bild (lineare Exports oben bleiben faithful für PixInsight).
     # Drei Regler: Farbkalibrierung · Aufhellung · Sättigung. Reihenfolge: manuell (CLI/GUI) hat
     # Vorrang, sonst schlägt die KI vor (wenn Server da), sonst Standardwerte.

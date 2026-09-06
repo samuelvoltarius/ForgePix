@@ -16,6 +16,24 @@ from constants import imwrite
 
 
 class AstroRelease(unittest.TestCase):
+    def test_export_failure_preserves_existing_results_and_propagates(self):
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as folder:
+            old = Path(folder) / "stack"
+            old.mkdir()
+            original = old / "original.fit"
+            original.write_bytes(b"preserve me")
+            args = SimpleNamespace(prefix="", fits_out=True)
+            image = np.full((12, 12, 3), .2, np.float32)
+            with patch("tifffile.imwrite", side_effect=OSError("disk full")):
+                with self.assertRaisesRegex(RuntimeError, "32-bit-TIFF"):
+                    pipeline._astro_write(image, folder, ["Light.fit"], args, astro)
+            self.assertEqual(original.read_bytes(), b"preserve me")
+            with patch.object(fits.PrimaryHDU, "writeto", side_effect=OSError("disk full")):
+                with self.assertRaisesRegex(RuntimeError, "FITS konnte"):
+                    pipeline._astro_write(image, folder, ["Light.fit"], args, astro)
+            self.assertEqual(original.read_bytes(), b"preserve me")
+
     def test_bias_flat_mismatch_is_not_ignored(self):
         with tempfile.TemporaryDirectory() as folder:
             flat_path, bias_path = Path(folder) / "flat.fit", Path(folder) / "bias.fit"
