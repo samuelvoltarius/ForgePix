@@ -21,7 +21,6 @@ import cv2
 
 from constants import (RAW_EXTS, ForgePixFehler, imread, imwrite, log_print,
                        require_astropy)
-from siril_engine import fits_scale01   # feste FITS-Normierung (gemeinsam mit den Engine-Brücken)
 
 # OSC-Bayer-Muster (FITS BAYERPAT) -> OpenCV-Debayer-Code. Achtung: OpenCVs Bayer-Benennung ist
 # ggü. der üblichen FITS-Konvention um eine Zeile/Spalte verschoben (bekannte Falle).
@@ -60,7 +59,7 @@ def detect_bayer(d):
 
 
 def _read_float(path, debayer=True):
-    """Bild als float32 [0..1] (BGR) lesen — TIFF/PNG/JPG/FITS; RAW via rawpy."""
+    """Bild als float32 (BGR) lesen; lineare Float-FITS behalten ihre Messwerte."""
     ext = os.path.splitext(path)[1].lower()
     if ext in (".fit", ".fits", ".fts"):
         fits = require_astropy("FITS-Dateien lesen")
@@ -68,31 +67,34 @@ def _read_float(path, debayer=True):
             hdu = hdul[0]
             if hdu.data is None:
                 raise ValueError(f"FITS enthält kein Bild im primären HDU: {path}")
-            d = np.asarray(hdu.data).astype(np.float32)
+            source = np.asarray(hdu.data)
+            # Float FITS are physical pixel values, not an undocumented ADU range.
+            # Do not infer scaling from the brightest pixel or clip signed residuals.
+            d = (source.astype(np.float32) / float(np.iinfo(source.dtype).max)
+                 if np.issubdtype(source.dtype, np.integer)
+                 else source.astype(np.float32))
             bayer = str(hdu.header.get("BAYERPAT", "")).strip().upper()
-        if not debayer and (d.size == 0 or not np.isfinite(d).all()):
+            header = hdu.header.copy()
+        if d.size == 0 or not np.isfinite(d).all():
             raise ValueError(f"Ungültige FITS-Sensordaten (leer, NaN oder Inf): {path}")
-        if d.ndim == 3 and d.shape[0] in (3, 4):     # (C,H,W) -> (H,W,C)
-            d = np.moveaxis(d[:3], 0, -1)
+        if d.ndim == 3 and d.shape[0] == 3:     # (C,H,W) -> (H,W,C)
+            d = np.moveaxis(d, 0, -1)
+        elif d.ndim != 2:
+            raise ValueError(f"FITS benötigt ein 2D-Bild oder einen RGB-Würfel (3,H,W): {path}")
         # OSC-Kameras (z. B. Seestar/ASI) liefern Bayer-Rohdaten als 2D-FITS -> debayern = Farbe.
-        # BAYERPAT aus dem Header, sonst SELBST erkennen (gegen Dateien ohne Header-Eintrag).
+        # Nur ein explizites BAYERPAT rechtfertigt eine CFA-Interpolation.
         if d.ndim == 2:
             if not debayer:
-                return np.nan_to_num(fits_scale01(d))
+                return d
             if bayer in _BAYER2CV:
-                # FESTE Skala statt frame-eigenem Maximum: ein Hotpixel/Satellit würde sonst
-                # die Helligkeit des ganzen Subs verschieben (inkonsistent zwischen Frames).
-                raw16 = np.clip(np.nan_to_num(fits_scale01(d)) * 65535.0, 0, 65535).astype(np.uint16)
-                bgr = cv2.cvtColor(raw16, _BAYER2CV[bayer])      # -> BGR (Farbe!)
-                return bgr.astype(np.float32) / 65535.0
-        # ADU -> 0..1 über die FESTE Konvention (wie photometric/siril-Brücken), NICHT d/max:
-        # das frame-eigene Maximum (Hotpixel/Satellit) darf die Skala des Subs nicht verschieben.
-        f = np.clip(fits_scale01(d), 0, 1)
+                return debayer_float(d, bayer, header.get("XBAYROFF", 0),
+                                     header.get("YBAYROFF", 0))
+        f = d
         if f.ndim == 2:
             f = cv2.cvtColor(f, cv2.COLOR_GRAY2BGR)
         elif f.shape[2] == 3:
             f = cv2.cvtColor(f, cv2.COLOR_RGB2BGR)    # FITS = RGB -> BGR
-        return np.nan_to_num(f)
+        return f
     if ext in RAW_EXTS:
         import rawpy
         with rawpy.imread(path) as raw:
@@ -109,6 +111,34 @@ def _read_float(path, debayer=True):
     if f.ndim == 2:
         f = cv2.cvtColor(f, cv2.COLOR_GRAY2BGR)
     return f
+
+
+def debayer_float(raw, pattern, x_offset=0, y_offset=0):
+    """Bilineare CFA-Interpolation ohne Quantisierung oder Clipping, Ausgabe BGR.
+
+    Bekannte Sensorwerte bleiben erhalten. Am Rand werden nur vorhandene
+    Nachbarn verwendet. Das ist keine detailadaptive oder CFA-Drizzle-Methode.
+    """
+    raw = np.asarray(raw, np.float32)
+    if raw.ndim != 2 or min(raw.shape) < 2 or not np.isfinite(raw).all():
+        raise ForgePixFehler("Debayer benötigt ein gültiges 2D-Sensorbild ab 2 × 2 Pixeln.")
+    if pattern not in _BAYER2CV:
+        raise ForgePixFehler("Unbekanntes Bayer-Muster: %s" % pattern)
+    tile = np.array(list(pattern)).reshape(2, 2)
+    tile = np.roll(tile, (-int(y_offset) % 2, -int(x_offset) % 2), axis=(0, 1))
+    h, w = raw.shape
+    output = np.empty((h, w, 3), np.float32)
+    rb_kernel = np.array([[1, 2, 1], [2, 4, 2], [1, 2, 1]], np.float32)
+    g_kernel = np.array([[0, 1, 0], [1, 4, 1], [0, 1, 0]], np.float32)
+    for c, name in enumerate("BGR"):
+        mask = np.zeros((h, w), np.float32)
+        for y, x in np.argwhere(tile == name):
+            mask[y::2, x::2] = 1
+        kernel = g_kernel if name == "G" else rb_kernel
+        weight = cv2.filter2D(mask, -1, kernel, borderType=cv2.BORDER_CONSTANT)
+        values = cv2.filter2D(raw * mask, -1, kernel, borderType=cv2.BORDER_CONSTANT)
+        output[..., c] = values / weight
+    return output
 
 
 def _master(paths, raw=False):
@@ -130,13 +160,8 @@ def read_calibrated(path, dark=None, flat=None):
             header = fits.getheader(path)
             pattern = str(header.get("BAYERPAT", "")).strip().upper()
             if pattern in _BAYER2CV:
-                # Offsets ändern die Phase des 2x2-Sensorrasters.
-                tile = np.array(list(pattern)).reshape(2, 2)
-                tile = np.roll(tile, (-int(header.get("YBAYROFF", 0)) % 2,
-                                      -int(header.get("XBAYROFF", 0)) % 2), axis=(0, 1))
-                pattern = "".join(tile.ravel())
-                u16 = np.clip(calibrated * 65535, 0, 65535).astype(np.uint16)
-                return cv2.cvtColor(u16, _BAYER2CV[pattern]).astype(np.float32) / 65535
+                return debayer_float(calibrated, pattern, header.get("XBAYROFF", 0),
+                                     header.get("YBAYROFF", 0))
             # Ohne explizites CFA-Muster ist ein FITS monochrom; keine erfundene Farbe.
             return cv2.cvtColor(calibrated.astype(np.float32), cv2.COLOR_GRAY2BGR)
     return calibrate(_read_float(path), dark, flat)

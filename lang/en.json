@@ -706,5 +706,20 @@
   "Streckung": "Stretch",
   "Eigene Sternentfernung: kleine Sterne; große Halos bleiben teilweise erhalten.": "Native star removal: small stars; large halos remain partially visible.",
   "Stern- und Nebelebene als 32-Bit-TIFF gespeichert. Stärke links einstellen.": "Star and nebula layers saved as 32-bit TIFF. Adjust their strengths on the left.",
-  "Die Bildverarbeitung läuft noch. Bitte den Abschluss abwarten.": "Image processing is still running. Please wait for it to finish."
+  "Die Bildverarbeitung läuft noch. Bitte den Abschluss abwarten.": "Image processing is still running. Please wait for it to finish.",
+  "Kanäle trennen und kombinieren": "Split and combine channels",
+  "Lineare Kanäle gespeichert: {path}": "Linear channels saved: {path}",
+  "RGB in einzelne Kanäle trennen": "Split RGB into individual channels",
+  "Dualband: aufgenommene Linien abschätzen": "Dual band: estimate recorded emission lines",
+  "{name} aus vorhandenen Kanälen kombinieren": "Combine {name} from existing channels",
+  "Verarbeitung": "Processing",
+  "Farbbild": "Color image",
+  "Lineares FITS oder TIFF wählen": "Select a linear FITS or TIFF image",
+  "Kanalstärke; 1 erhält die linearen Werte.": "Channel strength; 1 preserves linear values.",
+  "Sterne automatisch ausrichten": "Align stars automatically",
+  "Nur ausschalten, wenn die Kanäle bereits exakt aufeinander ausgerichtet sind.": "Disable only when the channels are already precisely aligned.",
+  "FITS, Float32-TIFF und Verarbeitungsbericht werden in einem neuen Unterordner neben der ersten Aufnahme gespeichert.": "FITS, float32 TIFF and a processing report are saved in a new subfolder beside the first image.",
+  "{filter}: Rot schätzt {line}, Grün und Blau schätzen OIII. Die Sensorantworten überlappen; dies ist keine vollständige spektrale Trennung. Fehlende Linien werden nicht erzeugt.": "{filter}: red estimates {line}; green and blue estimate OIII. Sensor responses overlap; this is not a complete spectral separation. Missing emission lines are not generated.",
+  "Rot, Grün und Blau werden ohne Streckung oder Normalisierung als einzelne lineare Bilder gespeichert.": "Red, green and blue are saved as individual linear images without stretching or normalization.",
+  "Rot = {r} · Grün = {g} · Blau = {b}. Wähle einkanalige Aufnahmen desselben Sternfelds in gleicher Größe. Die Vorschau wird gestreckt, die gespeicherten Bilddaten bleiben linear.": "Red = {r} · Green = {g} · Blue = {b}. Select single-channel images of the same star field with matching dimensions. The preview is stretched; saved image data remains linear."
 }

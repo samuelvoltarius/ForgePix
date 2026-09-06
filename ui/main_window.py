@@ -1298,6 +1298,9 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         pixelmath_action = QAction(tr("PixelMath: Bildformeln"), self)
         pixelmath_action.triggered.connect(self.open_pixelmath)
         menu.addAction(pixelmath_action)
+        channels_action = QAction(tr("Kanäle trennen und kombinieren"), self)
+        channels_action.triggered.connect(self.open_channels)
+        menu.addAction(channels_action)
         self.tools_btn.setMenu(menu)
 
         for index, b in enumerate((self.cmp_btn, self.adjust_btn, self.enhance_btn,
@@ -2548,6 +2551,29 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
                 self.astro_filter.setCurrentIndex(index)
                 self._save_settings()
 
+    def open_channels(self):
+        import channels
+        from ui.channels_dialog import ChannelsDialog
+        source = self._best_export_file(bits=32)
+        if source and os.path.splitext(source)[1].lower() not in (".fit", ".fits", ".fts", ".tif", ".tiff"):
+            source = None
+        dialog = ChannelsDialog(self, source=source, filter_key=self.astro_filter.currentData())
+        if dialog.exec() != QDialog.Accepted:
+            return
+        request = dialog.request()
+        splitting = "path" in request
+        runner = channels.split_file if splitting else channels.combine_files
+
+        def ok(out):
+            if splitting:
+                self._append(tr("Lineare Kanäle gespeichert: {path}").format(path=out) + "\n")
+                reveal_in_files(out)
+            else:
+                self._adopt_result(out, next(iter(request["paths"].values())))
+
+        self._run_tool_async(tr("Kanäle trennen und kombinieren"),
+                             lambda log: runner(**request, log=log), ok)
+
     def open_pixelmath(self):
         """Evaluate native image expressions on explicitly selected linear files."""
         dialog = QDialog(self)
@@ -2609,7 +2635,8 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
             QMessageBox.information(self, tr("Veredeln"), tr("Erst ein Astro-Ergebnis erzeugen."))
             return
         self._append(tr("Eigene Bildverarbeitung: Hintergrund ausgleichen und Rauschen reduzieren.") + "\n")
-        self._run_tool_async(tr("Veredeln"), lambda log: own_astro.run(f, log=log),
+        filter_key = self.astro_filter.currentData()
+        self._run_tool_async(tr("Veredeln"), lambda log: own_astro.run(f, log=log, filter_key=filter_key),
                              lambda out: self._adopt_result(out, f))
 
     def _run_starless_workflow(self, linear=None):
