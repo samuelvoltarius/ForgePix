@@ -16,13 +16,22 @@ from astropy.io import fits
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "core"))
 import astro
 from constants import ForgePixFehler
-from drizzle import DrizzleAccumulator
+from drizzle import DrizzleAccumulator, _intersection_area
 
 
 IDENTITY = np.array([[1., 0., 0.], [0., 1., 0.]])
 
 
 class DropGeometry(unittest.TestCase):
+    def test_boundary_only_contact_has_zero_coverage_and_corner_triangle_has_exact_area(self):
+        # The first diamond touches (1, 1) only despite overlapping both axis
+        # bounds. The third cuts a right triangle with legs 1/4 from the unit box.
+        touching = np.array([[.75, 1.25], [1.25, .75], [1.75, 1.25], [1.25, 1.75]])
+        triangle = np.array([[.75, 1.], [1., .75], [1.25, 1.], [1., 1.25]])
+        polygons = np.stack([touching, touching + .01, triangle])
+        for oriented in (polygons, polygons[:, ::-1]):
+            np.testing.assert_array_equal(_intersection_area(oriented), [0., 0., 1 / 32])
+
     def test_identity_upsampling_preserves_signed_hdr_and_aperture_flux(self):
         image = np.array([[-300., 1e6, .02], [400., -1e-5, 3.]], np.float32)
         original = image.copy()

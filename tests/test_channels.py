@@ -167,7 +167,21 @@ class ChannelWorkflow(unittest.TestCase):
             self.assertLess(coverage.mean(), .96)
             result = tifffile.imread(out / "combined_32bit.tif")
             np.testing.assert_array_equal(result[~coverage], 0)
-            np.testing.assert_allclose(result[coverage, 0], result[coverage, 1], atol=1e-6)
+            # Export is RGB: Ha stays on R; the shifted OIII fixture is
+            # resampled with the reported matrix onto both G and B. An
+            # estimated subpixel affine need not reproduce Ha bit-for-bit.
+            expected_oxygen = cv2.warpAffine(moving, matrix, (190, 160), flags=cv2.INTER_LINEAR,
+                                             borderMode=cv2.BORDER_CONSTANT)
+            np.testing.assert_array_equal(result[coverage, 0], ref[coverage])
+            np.testing.assert_allclose(result[coverage, 1], expected_oxygen[coverage], atol=1e-6)
+            np.testing.assert_array_equal(result[..., 1], result[..., 2])
+            # Independent photometric check: all injected stars lie inside
+            # this fully covered region. Compare their sky-subtracted flux to
+            # the original fixture, without repeating the production warp.
+            self.assertTrue(coverage[12:-12, 12:-12].all())
+            reference_flux = float(np.sum(ref[12:-12, 12:-12] - .002, dtype=np.float64))
+            oxygen_flux = float(np.sum(result[12:-12, 12:-12, 1] - .002, dtype=np.float64))
+            self.assertAlmostEqual(oxygen_flux, reference_flux, delta=reference_flux * .001)
 
     def test_native_development_preserves_narrowband_green_and_versions(self):
         import own_astro

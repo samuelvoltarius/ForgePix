@@ -407,8 +407,8 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, ProjectM
         self.astro_bg = QCheckBox(tr("Hintergrund/Gradient entfernen"))
         self.astro_fits = QCheckBox(tr("Auch als FITS speichern")); self.astro_fits.setChecked(True)
         self.astro_align = QComboBox()
-        self.astro_align.addItem(tr("Translation (Nachführung)"), "shift")
-        self.astro_align.addItem(tr("Translation + Feldrotation (Alt-Az)"), "rotate")
+        self.astro_align.addItem(tr("Nur Verschiebung (ohne Drehung)"), "shift")
+        self.astro_align.addItem(tr("Verschiebung + Drehung (empfohlen)"), "rotate")
         self.astro_align.setCurrentIndex(1)   # Standard: rotate — korrigiert auch Feldrotation
         # Der Kometen-Schalter bleibt SICHTBAR (nicht unter "Erweitert"): wer einen Kometen
         # aufnimmt, braucht genau ihn — und niemand findet ihn, wenn er versteckt ist.
@@ -592,9 +592,10 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, ProjectM
                               "auf den Kern ausgerichtet: der Komet wird scharf, die Sterne "
                               "werden zu Strichen. Der Kern wird selbst gefunden, es muss nichts "
                               "angeklickt werden. Findet sich keiner, wird normal gestapelt."), 12, 3)
-        ar.addWidget(help_btn("Translation = nur Verschiebung (nachgeführte Montierung, schnell). "
-                              "Translation + Feldrotation = richtet auch gedrehte Felder aus "
-                              "(Alt-Az-Montierung ohne Rotator, lange Sessions) — per Stern-Merkmalen."), 11, 3)
+        ar.addWidget(help_btn("Verschiebung + Drehung richtet die Sterne auch nach einem "
+                              "Meridianumschlag oder bei Feldrotation aus. Das ist die empfohlene "
+                              "Einstellung. Nur Verschiebung eignet sich für Serien ohne Drehung; "
+                              "eine nachgeführte Montierung kann beim Meridianumschlag das Bild drehen."), 11, 3)
         ar.addWidget(QLabel(tr("Filter")), 17, 0); ar.addWidget(self.astro_filter, 17, 1, 1, 2)
         ar.addWidget(help_btn("Der Aufnahmefilter bestimmt, welche Emissionslinien überhaupt "
                               "ankommen. Hα/OIII und SII/OIII sind verschiedene Varianten. "

@@ -73,6 +73,27 @@ def _verified_ai_files(source, *, selected_only=False):
 class ExportMixin:
     """Ein-Klick-Export-Chips und ausführlicher Export-Dialog (Ziele/Schärfung/Ebenen/16-bit)."""
 
+    def _verify_project_ai_export(self, source, provenance):
+        """A saved AI group must still match its independent project proofs."""
+        project = getattr(self, "_project", None)
+        selected = project.data.get("selected_step") if project else None
+        if not selected:
+            return
+        from project_store import resolve, verify
+        step = project.step(selected)
+        saved = resolve(step["result"]["path"], project.path.parent)
+        if os.path.normcase(str(source)) != os.path.normcase(str(saved)):
+            return  # A newly generated, unarchived result uses its own report.
+        changed = tr("Ergebnisdateien wurden verändert. Bitte das bearbeitete Bild als neues Ergebnis "
+                     "einlesen; die bisherigen Begleitdateien können nicht gemeinsam exportiert werden.")
+        for record in (step["result"], *step["artifacts"]):
+            if verify(record, project.path.parent)["status"] != "ok":
+                raise ValueError(changed)
+            path = resolve(record["path"], project.path.parent)
+            if (provenance is not None and path == source.parent / "ai_report.json"
+                    and hashlib.sha256(provenance).hexdigest() != record["sha256"]):
+                raise ValueError(changed)
+
     def _write_ai_export(self, parent, linear=True, png=False, jpeg=False, preview_limit=None):
         """Copy scientific files byte-for-byte; encode only explicit display exports."""
         source = Path(self.result_path).resolve()
@@ -82,6 +103,7 @@ class ExportMixin:
         if not any((linear, png, jpeg)):
             raise ValueError(tr("Bitte ein Exportformat wählen."))
         scientific, provenance = _verified_ai_files(source) if linear else ({}, None)
+        self._verify_project_ai_export(source, provenance)
         output = Path(tempfile.mkdtemp(prefix="export-ai-", dir=parent))
         written = []
         if linear:

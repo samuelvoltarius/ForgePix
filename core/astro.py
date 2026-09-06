@@ -387,38 +387,73 @@ def fix_banding(f, strength=1.0, vertical=False, protect_sigma=3.0):
     return out
 
 def _star_centroids(g, max_stars=200):
-    """Sternzentren (sub-pixel) als Punktwolke: Hintergrund abziehen, **rauschadaptive Schwelle
-    (Median + 5·MAD)**, kleine helle Blobs als Sterne, nach Fläche sortiert.
+    """Rauschadaptive Float-Sternsuche mit gewichteten Subpixelzentren.
 
-    Wichtig: Otsu lieferte auf dünnen Astro-Frames nur eine Handvoll Sterne (zu strenge Schwelle),
-    wodurch das Ausrichten zu wenig Stützpunkte hatte und Sterne im Stack verschmierten. Die
-    MAD-Schwelle findet zuverlässig 100–200 Sterne — genug für robustes Offset-Voting + RANSAC."""
-    a = (np.clip(g, 0, 1) * 255).astype(np.uint8)
-    bg = cv2.medianBlur(a, 31)
-    # VORZEICHENBEHAFTET rechnen. `cv2.subtract` schneidet negative Werte auf 0 ab — damit ist
-    # die halbe Rauschverteilung platt, Median und MAD fallen auf 0, und die Schwelle rutscht auf
-    # ihren Notwert von 3/255. Auf LINEAREN Subs faellt das nicht auf (das Rauschen liegt ohnehin
-    # darunter, gemessen 0,10 % Maske so wie so), auf GESTRECKTEN Bildern ist es verheerend:
-    # an einem echten Sub lag die MAD bei 0,000 statt 10,378, die Schwelle bei 3,0 statt 51,9,
-    # und 39,9 % der Pixel galten als Sternkandidat statt 4,0 %.
-    sub = a.astype(np.float32) - bg.astype(np.float32)
+    Nur der Registrierungsproxy wird median-gefiltert: isolierte Sensorpunkte
+    sollen nicht die schwachen, über mehrere Pixel verteilten Sterne überstimmen.
+    Keine 8-Bit-Quantisierung, feste ADU-Schwelle oder Begrenzung auf [0, 1].
+    """
+    g = np.asarray(g)
+    if g.ndim != 2 or not g.size or np.iscomplexobj(g) or not np.isfinite(g).all():
+        return np.empty((0, 2), np.float32)
+    a = cv2.medianBlur(g.astype(np.float32), 3)
+    bg = cv2.GaussianBlur(a, (0, 0), 8.0)
+    sub = a - bg
     med = float(np.median(sub))
-    mad = float(np.median(np.abs(sub - med))) * 1.4826 + 1e-6
-    th = (sub > max(med + 5.0 * mad, 3.0)).astype(np.uint8) * 255
-    n, _lbl, stats, cent = cv2.connectedComponentsWithStats(th, connectivity=8)
-    stars = [(cent[i][0], cent[i][1], int(stats[i, cv2.CC_STAT_AREA]))
-             for i in range(1, n) if 2 <= stats[i, cv2.CC_STAT_AREA] <= 600]
-    stars.sort(key=lambda s: -s[2])
-    return np.array([[s[0], s[1]] for s in stars[:max_stars]], np.float32)
+    mad = float(np.median(np.abs(sub - med))) * 1.4826
+    floor = np.finfo(np.float32).eps * max(float(np.max(np.abs(a))), np.finfo(np.float32).tiny) * 8
+    th = (sub > med + max(5.0 * mad, floor)).astype(np.uint8)
+    n, labels, stats, _ = cv2.connectedComponentsWithStats(th, connectivity=8)
+    candidates = [i for i in range(1, n) if 3 <= stats[i, cv2.CC_STAT_AREA] <= 600
+                  and min(stats[i, cv2.CC_STAT_WIDTH], stats[i, cv2.CC_STAT_HEIGHT]) >= 2
+                  and max(stats[i, cv2.CC_STAT_WIDTH], stats[i, cv2.CC_STAT_HEIGHT])
+                  <= 4 * min(stats[i, cv2.CC_STAT_WIDTH], stats[i, cv2.CC_STAT_HEIGHT])]
+    candidates.sort(key=lambda i: -stats[i, cv2.CC_STAT_AREA])
+    centers = []
+    for i in candidates:
+        if len(centers) >= max_stars:
+            break
+        x, y, w, h, _ = stats[i]
+        belongs = labels[y:y + h, x:x + w] == i
+        values = np.where(belongs, sub[y:y + h, x:x + w] - med, 0)
+        # Bilinear debayering spreads one R/B defect across a small cross. Its
+        # unfiltered peak is twice the median-filtered peak. Narrow but real
+        # stellar PSFs can be equally sharp, so their measured outer wings are
+        # additional evidence; do not mistake sharpness alone for a defect.
+        original_peak = float(np.max(np.where(belongs, g[y:y + h, x:x + w] - bg[y:y + h, x:x + w] - med, 0)))
+        if original_peak > 1.8 * float(values.max()):
+            peak = np.where(belongs, g[y:y + h, x:x + w] - bg[y:y + h, x:x + w], -np.inf)
+            py, px = np.unravel_index(peak.argmax(), peak.shape)
+            py, px = y + py, x + px
+            if py < 6 or px < 6 or py + 6 >= g.shape[0] or px + 6 >= g.shape[1]:
+                continue
+            patch = g[py - 6:py + 7, px - 6:px + 7] - bg[py - 6:py + 7, px - 6:px + 7]
+            dy, dx = np.mgrid[-6:7, -6:7]
+            radius = np.maximum(np.abs(dx), np.abs(dy))
+            sky = patch[radius >= 4]
+            local_bg = float(np.median(sky))
+            local_noise = float(np.median(np.abs(sky - local_bg))) * 1.4826
+            detected = patch - local_bg > max(5 * local_noise, floor)
+            # An isolated Bayer impulse has no signal beyond +/-1 pixel.
+            # Require significant wings on all four sides, not a single nearby
+            # noise peak or an adjacent defective sensor pixel.
+            wing = (radius >= 2) & (radius <= 3) & detected
+            if not all(np.any(wing & side) for side in (dx <= -2, dx >= 2, dy <= -2, dy >= 2)):
+                continue
+        mass = float(values.sum(dtype=np.float64))
+        if mass > 0:
+            yy, xx = np.indices(values.shape)
+            centers.append((x + np.sum(values * xx) / mass, y + np.sum(values * yy) / mass))
+    return np.asarray(centers, np.float32).reshape(-1, 2)
 
 
 def _coarse_offset_vote(ref_pts, img_pts, nbright=80, tol=2.5, min_votes=8):
     """Dominanten Versatz (ref − img) aus den hellsten Sternpaaren per Voting bestimmen.
 
-    Robust gegen feste Hotpixel/Amp-Glow (die würden für Versatz (0,0) stimmen) und gegen
-    fehlende/zusätzliche Sterne: der echte Sternversatz bekommt die meisten übereinstimmenden
-    Stimmen. Ersetzt die Phasenkorrelation, die bei Astro-Frames auf dem festen Fixed-Pattern
-    statt auf den (gewanderten) Sternen einrastet. Gibt (ox, oy) oder None."""
+    Fehlende/zusätzliche Sterne werden durch den gemeinsamen Versatz überstimmt.
+    Setzt bereinigte Sternkandidaten voraus: feste Sensorpunkte würden ebenfalls
+    einen konsistenten, aber astronomisch falschen Versatz (0,0) liefern.
+    Gibt (ox, oy) oder None."""
     if len(ref_pts) < min_votes or len(img_pts) < min_votes:
         return None
     R, I = ref_pts[:nbright], img_pts[:nbright]
@@ -658,6 +693,18 @@ def _estimate_rotation(refg, img_g, detector="ORB", min_inliers=25):
     dst = np.float32([ka[x.queryIdx].pt for x in m]).reshape(-1, 1, 2)
     M, inl = cv2.estimateAffinePartial2D(src, dst, method=cv2.RANSAC, ransacReprojThreshold=3)
     if M is None or inl is None or int(inl.sum()) < min_inliers:
+        return None
+    # A feature matcher can reproduce the same fixed-sensor identity that the
+    # star path just rejected. Confirm its matrix with distinct resolved stars,
+    # not another vote over the same ORB/AKAZE/SIFT feature points.
+    ref_pts, img_pts = _star_centroids(refg), _star_centroids(img_g)
+    if len(ref_pts) < 8 or len(img_pts) < 8 or not np.isfinite(M).all():
+        return None
+    mapped = img_pts @ M[:, :2].T + M[:, 2]
+    distances = np.linalg.norm(mapped[:, None, :] - ref_pts[None, :, :], axis=2)
+    nearest = distances.argmin(axis=1)
+    matched = distances[np.arange(len(mapped)), nearest] < 3.0
+    if len(np.unique(nearest[matched])) < 8:
         return None
     return M
 

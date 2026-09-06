@@ -29,7 +29,7 @@ Eine feste Mindestanzahl von Aufnahmen garantiert daher keine vollständige Abde
 CLI-Beispiel, aus dem Projektverzeichnis mit eingerichtetem Python ausgeführt:
 
 ```powershell
-python focus_stack_gui.py --cli --astro --input "F:\Astro\Lights" --work "F:\Astro\Drizzle-01" --astro-drizzle 1 --astro-drizzle-true --astro-pixfrac 0.7 --astro-align shift --fits-out
+python focus_stack_gui.py --cli --astro --input "F:\Astro\Lights" --work "F:\Astro\Drizzle-01" --astro-drizzle 1 --astro-drizzle-true --astro-pixfrac 0.7 --astro-align rotate --fits-out
 ```
 
 `--astro-drizzle-true` aktiviert die Rekonstruktion auch bei 1×. Ohne diesen Schalter
@@ -126,7 +126,7 @@ Abdeckung bedeutet im Bericht `coverage_complete_not_quality_validated`.
 
 ## Bisherige Nachweise und ihre Grenzen
 
-- **21 gezielte Tests** in [test_drizzle.py](../tests/test_drizzle.py): Fluss und
+- **22 gezielte Tests** in [test_drizzle.py](../tests/test_drizzle.py): Fluss und
   Fläche, signierte/HDR-Werte, Teilüberlappung, Rotation/affine Abbildung, Masken,
   CFA-Phasen und Kalibrierung, Float-Export, ungültige Eingaben und Abbruch.
 - **80 unabhängige affine Zufallsfälle** gegen einen separat konstruierten
@@ -149,6 +149,21 @@ Abdeckung bedeutet im Bericht `coverage_complete_not_quality_validated`.
 - Der ältere 3-Aufnahmen-Diagnoselauf bei 2× und ausgeschalteter Qualitätsauswahl
   hatte **0 % gemeinsame RGB-Abdeckung**. Sein Rechenabschluss bestätigt weder
   brauchbare Farbrekonstruktion noch zuverlässige astronomische Registrierung.
+- **Korrektur nach unabhängiger Sternprüfung:** Auch die 31-Aufnahmen-Läufe oben
+  und auf `d61eff4` sind kein Nachweis korrekter Ausrichtung. Ab Aufnahme 21 enthält
+  M27 einen Meridianumschlag von ungefähr 179,85°. Der ausdrücklich gewählte
+  Shift-Modus wurde durch feste Sensorpunkte zu falschen Identitätsmatrizen
+  verleitet. Die Daten-/Exportprüfungen bleiben gültig; die damaligen Bilder sind
+  keine qualifizierten Integrationen. Die Float-Sternsuche und der Rotationspfad
+  werden deshalb separat korrigiert und erneut mit Sternrestfehlern geprüft.
+  Der Prüflauf unterstützt nun `--align rotate|shift` und verwendet standardmäßig
+  den Rotationsmodus wie die Oberfläche.
+- Der affine Kern verwendet jetzt ein analytisches Green-Randintegral mit
+  exakter Ausschluss-/Enthaltungsprüfung. Im synthetischen 512×768-CFA-Vergleich
+  (drei gepaarte Läufe) ist er bei 1× **10,22-mal**, bei 2× **13,44-mal** schneller;
+  Float32-Bilder und Abdeckung bleiben identisch. 30.000 zusätzliche Polygonfälle
+  stimmen mit dem früheren Clipper bis auf `4,45e-16` absolute Fläche überein.
+  Das ist keine gemessene Beschleunigung einer vollständigen realen Serie.
 
 Der reproduzierbare FITS-Prüflauf liegt in
 [validate_drizzle_real.py](../tests/validate_drizzle_real.py); er benötigt Original-FITS

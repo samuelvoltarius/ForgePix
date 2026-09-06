@@ -468,3 +468,68 @@ Exact-commit final suite/build/package and repeat full-FITS evidence follow in
 the verification entry. Version remains 1.27.1-beta. Native astrometry, actual
 catalog/SPCC fitting, editable process masks/history, calibrated real-camera AI
 validation and broader comparative image-quality work remain open.
+
+## Independent acceptance caught a meridian-flip alignment defect
+
+The d61eff4 full-FITS repeat finished in 117.5 s and preserved original files,
+coverage companions and exact FITS/TIFF values. Independent stellar positions
+subsequently disproved its shift-only alignment: M27 frames 21 onward contain an
+approximately 179.85-degree meridian flip. The old 8-bit star detector allowed
+fixed sensor defects to vote for identity transforms. Consequently the earlier
+31-frame counts and 99.9759% coverage are export/geometry observations only, not
+proof of correct integration. Do not use these stacks as astronomical truth.
+Evidence: Codex outputs/ForgePix-Drizzle-M27-Independent-Alignment.json.
+
+The cross-platform path-alias fixture correction 5677d8b passed all tests
+(34042258869) and Windows/macOS/Linux packaged builds (34042270900), but it
+predates this scientific defect correction and is not the new candidate.
+The revised detector preserves float data and suppresses isolated sensor events;
+shift-only must reject the flipped field while rotation fits the real stars.
+GUI wording explicitly covers meridian flips and the CLI now shares its rotation
+default. Subsequent exact-runtime acceptance must check stellar residuals as
+well as output integrity.
+
+The combined real project/ONNX/UI audit also found and corrected a narrower
+integrity gap: AI export must verify the selected project archive's independent
+hashes, including its report, before creating an output directory. A same-size,
+same-mtime report change cannot be exported as the saved result. Normal/quick
+exports and unchanged archived/external AI groups have regressions; the real
+two-model project roundtrip works through reopening and source relocation.
+
+Next AI research should cover all four tasks: first background controls for
+faint emission and channel-ratio preservation; then empirical varying-PSF deblur
+with aperture flux/centroid/ringing/tile-phase measurements; then starless tests
+with inserted empirical stars and untouched nebula controls. Denoise v4 motivates
+one direct pixel-MAE loss addition with architecture/replay/gates unchanged.
+The weight must be fixed from training data, never the held-out final seed.
+Object/session/camera splits precede patch extraction. Seed 9671507 remains unused.
+No additional GPU training or downloads were started for this planning review.
+
+The affine Drizzle kernel now integrates the original drop edges analytically
+with Green's theorem, plus exact bounding-box exclusion and containment. No
+angles are rounded and no extra dependency is needed. Three paired synthetic
+512x768 CFA runs at angle .0026 rad / pixfrac .7 measured medians of 6.2503 ->
+0.61169 s (10.22x) at scale 1 and 14.3799 -> 1.07020 s (13.44x) at scale 2.
+Float32 images were bit-identical, coverage unchanged, maximum relative weight
+difference 5.56e-16. Another 30,000 polygon cases matched the former clipper to
+4.45e-16 absolute area with no lost/spurious coverage. The separate 80-case
+independent construction also passed; these are geometry/performance checks,
+not proof of astronomical resolution recovery. Evidence:
+outputs/ForgePix-Drizzle-CPU-Optimization.json and its standalone comparison.
+
+Before the final source freeze, the actual beginner GUI completed M27 with the
+revised rotation detector and an explicitly supplied matching-header 300 s dark:
+31/34 FITS, 224.609 s, finite full-size scientific exports, originals unchanged,
+no GUI errors. work/forgepix-m27-flip-corrected-01/gui-report.json records the
+worktree. The selected SV220 profile tests its GUI route; the historical FITS
+capture filter remains unknown and the 2022 dark's long-term suitability and
+missing flats remain unqualified. Final exact-commit evidence follows separately.
+
+The full suite caught a useful regression in the first detector fix: real
+undersampled sigma=.8 stars were too sharply peaked for the defect filter.
+Significant PSF wings outside the 3x3 core now distinguish them from isolated
+Bayer impulses. The original narrow-star channel fixture was retained; its
+known-shift tolerance is unchanged and an independent common-field flux check
+measures 0.00654% error against a 0.1% bound. Export checks account for the
+reported subpixel resampling instead of assuming exact integer pixel identity.
+All 120 affected tests pass, including the sensor-defect and meridian cases.

@@ -6,6 +6,13 @@ older parity checkmarks in COMPARISON, DEEP_GAPS and PIXINSIGHT documents are
 historical inventories, not proof of equivalent behavior or image quality.
 Rows include the 2026-09-06 native CFA Drizzle, stellar white balance, project history and own-AI refinements. Exact runtime/build evidence is recorded in RELEASE_WORKLOG.md.
 
+Correction from independent M27 alignment review: the 31-frame shift-only
+Drizzle runs at/before d61eff4 crossed a meridian flip and incorrectly matched
+fixed sensor points after frame 20. Their coverage/export checks do not validate
+stellar alignment or image quality. The corrected float detector and rotation
+path require their own final evidence; older successful-registration counts
+alone must not be used as accuracy evidence.
+
 The product goal remains broad native coverage of Siril, PixInsight, GraXpert and
 RC Astro workflows with simpler operation. A tested Deep-Sky RC is an intermediate
 milestone, not completion of that goal. No percentage of parity is established.

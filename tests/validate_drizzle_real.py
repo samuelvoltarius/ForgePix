@@ -25,6 +25,8 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--count", type=int, default=3)
     parser.add_argument("--scale", type=int, choices=(1, 2), default=2)
+    parser.add_argument("--align", choices=("shift", "rotate"), default="rotate",
+                        help="Match the GUI rotation default, including meridian flips; shift is an explicit diagnostic")
     parser.add_argument("--no-quality-selection", action="store_true",
                         help="Explicit diagnostic only: skip the app's normal frame quality selection")
     options = parser.parse_args()
@@ -51,14 +53,14 @@ def main():
         records.append(record)
     command = [sys.executable, str(repo / "focus_stack_gui.py"), "--cli", "--astro", "--input", str(staging),
                "--work", str(destination / "processing"), "--astro-drizzle", str(options.scale), "--astro-drizzle-true",
-               "--astro-pixfrac", ".7", "--astro-align", "shift", "--no-auto-calib",
+               "--astro-pixfrac", ".7", "--astro-align", options.align, "--no-auto-calib",
                "--fits-out", "--astro-color", "0"]
     if options.no_quality_selection:
         command.append("--no-astro-qc")
     report = {"sources": records, "command": command, "python": sys.version,
               "commit": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=repo, text=True).strip(),
               "worktree": subprocess.check_output(["git", "status", "--porcelain"], cwd=repo, text=True).splitlines(),
-              "passed": False, "scale": options.scale,
+              "passed": False, "scale": options.scale, "align": options.align,
               "limitations": "The selected originals test execution and measured coverage, not scientific image quality or recovered resolution; no calibration frames."}
     start = time.monotonic()
     peak_working_set = 0

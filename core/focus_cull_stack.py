@@ -1215,9 +1215,9 @@ def main():
     ap.add_argument("--astro-ghs-sp", type=float, default=0.18,
                     help="GHS-Symmetriepunkt SP 0..1 (Pivot-Helligkeit; nur bei ghs)")
     ap.add_argument("--no-register", action="store_true", help="Astro: keine Stern-Ausrichtung")
-    ap.add_argument("--astro-align", choices=["shift", "rotate"], default="shift",
-                    help="Astro-Ausrichtung: shift=Translation (Nachführung), "
-                         "rotate=Translation+Feldrotation (Alt-Az-Montierung)")
+    ap.add_argument("--astro-align", choices=["shift", "rotate"], default="rotate",
+                    help="Astro-Ausrichtung: rotate=Verschiebung+Drehung, auch Meridianumschlag (Standard); "
+                         "shift=nur Verschiebung für Serien ohne Drehung")
     ap.add_argument("--filter", dest="aufnahmefilter", default="auto", metavar="FILTER",
                     help="Aufnahmefilter (bestimmt, welche Emissionslinien ueberhaupt ankommen "
                          "und wie stark entmischt wird). 'auto' liest das FITS-Feld FILTER aus. "
@@ -1833,7 +1833,7 @@ def run_astro(input_dir, work_dir, args):
     reg_dir = os.path.join(work_dir, "registered")
     if os.path.isdir(reg_dir):
         shutil.rmtree(reg_dir)
-    align_mode = getattr(args, "astro_align", "shift")
+    align_mode = getattr(args, "astro_align", "rotate")
     drizzle = getattr(args, "astro_drizzle", 1)
     cosmetic = getattr(args, "astro_cosmetic", False)
     extras = [f"Ausrichtung={align_mode}"]

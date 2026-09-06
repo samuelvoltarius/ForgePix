@@ -53,37 +53,38 @@ def _overlap_axis(size, output_size, slope, offset, pixfrac):
 
 
 def _intersection_area(vertices):
-    """Vectorised convex-polygon clipping to [0,1]²; at most eight vertices."""
-    n = len(vertices)
-    # Boundary-coincident vertices may appear twice while clipping. Keep spare
-    # slots for those duplicates; the area formula handles them exactly.
-    polygon = np.zeros((n, 16, 2), np.float64)
-    polygon[:, :4] = vertices
-    counts = np.full(n, 4, np.int64)
-    columns = np.arange(16)[None, :]
-    rows = np.arange(n)[:, None]
-    for axis, bound, sign in ((0, 0., 1.), (0, 1., -1.), (1, 0., 1.), (1, 1., -1.)):
-        active = columns < counts[:, None]
-        previous = polygon[rows, (columns - 1) % np.maximum(counts[:, None], 1)]
-        inside = (sign * (polygon[..., axis] - bound) >= 0) & active
-        was_inside = sign * (previous[..., axis] - bound) >= 0
-        crossing = (inside != was_inside) & active
-        positions = np.cumsum(crossing.astype(np.int64) + inside, axis=1)
-        new = np.zeros_like(polygon)
-        r, c = np.nonzero(crossing)
-        if len(r):
-            start, end = previous[r, c], polygon[r, c]
-            ratio = (bound - start[:, axis]) / (end[:, axis] - start[:, axis])
-            point = start + ratio[:, None] * (end - start)
-            new[r, positions[r, c] - inside[r, c] - 1] = point
-        r, c = np.nonzero(inside)
-        new[r, positions[r, c] - 1] = polygon[r, c]
-        polygon, counts = new, positions[:, -1]
-    active = columns < counts[:, None]
-    local = polygon - polygon[:, :1]
-    following = local[rows, (columns + 1) % np.maximum(counts[:, None], 1)]
-    cross = local[..., 0] * following[..., 1] - local[..., 1] * following[..., 0]
-    return np.abs(np.sum(np.where(active, cross, 0), axis=1)) / 2
+    """Exact convex-polygon area in [0,1]² from its four original edges.
+
+    Green's theorem gives the signed area as -integral(clamp(y, 0, 1) dx),
+    restricted to edge segments with 0 <= x <= 1. Integrating a clamped linear
+    function is piecewise quadratic. No intermediate clipped polygons, pixel
+    sampling or angle approximation is needed; vertical edges contribute zero.
+    """
+    following = np.roll(vertices, -1, axis=1)
+    x, y = vertices[..., 0], vertices[..., 1]
+    dx, dy = following[..., 0] - x, following[..., 1] - y
+    with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
+        t0 = np.divide(-x, dx, out=np.zeros_like(dx), where=dx != 0)
+        t1 = np.divide(1 - x, dx, out=np.zeros_like(dx), where=dx != 0)
+    first = np.clip(np.minimum(t0, t1), 0, 1)
+    last = np.clip(np.maximum(t0, t1), 0, 1)
+    a, b = y + first * dy, y + last * dy
+    low, high = np.minimum(a, b), np.maximum(a, b)
+    interval = high - low
+    average = np.clip((low + high) * .5, 0, 1)
+    bottom = (low < 0) & (high > 0) & (high <= 1)
+    average[bottom] = high[bottom] ** 2 / (2 * interval[bottom])
+    top = (low >= 0) & (low < 1) & (high > 1)
+    average[top] = 1 - (1 - low[top]) ** 2 / (2 * interval[top])
+    both = (low < 0) & (high > 1)
+    average[both] = (high[both] - .5) / interval[both]
+    edge_dx = dx * (last - first)
+    # The closed path's restricted dx integral is zero, so a common baseline
+    # does not change its area. Choosing an active edge's average also makes
+    # disjoint convex polygons exactly zero instead of roundoff-sized coverage.
+    reference = np.min(np.where(edge_dx != 0, average, np.inf), axis=1)
+    reference = np.where(np.isfinite(reference), reference, 0)[:, None]
+    return np.abs(np.sum(edge_dx * (average - reference), axis=1))
 
 
 class DrizzleAccumulator:
@@ -204,6 +205,7 @@ class DrizzleAccumulator:
         corners = np.array([[-half, -half], [half, -half], [half, half], [-half, half]]) @ matrix[:, :2].T
         area = jacobian * (self.scale * self.pixfrac) ** 2
         span = np.ceil(np.ptp(corners, axis=0)).astype(int) + 1
+        corner_min, corner_max = corners.min(axis=0), corners.max(axis=0)
         flat = np.flatnonzero(weight.ravel() > 0)
         oh, ow = self.output_shape
         flux, weights = self.flux.reshape(-1, self.channels), self.weights.reshape(-1, self.channels)
@@ -213,21 +215,28 @@ class DrizzleAccumulator:
             index = flat[start:start + 4096]
             x, y = index % self.shape[1], index // self.shape[1]
             centres = np.column_stack((x, y)) @ matrix[:, :2].T + matrix[:, 2]
-            vertices = centres[:, None, :] + corners
-            origin = np.floor(vertices.min(axis=1) + .5).astype(np.int64)
+            origin = np.floor(centres + corner_min + .5).astype(np.int64)
             values = data.reshape(-1, data.shape[-1])[index] if data.ndim == 3 else data.ravel()[index, None]
             iw = weight.ravel()[index]
             colours = channel_map.ravel()[index] if channel_map is not None else None
             for dy in range(span[1]):
                 for dx in range(span[0]):
                     target = origin + (dx, dy)
+                    relative = centres - target + .5
+                    lower, upper = relative + corner_min, relative + corner_max
                     keep = ((target[:, 0] >= 0) & (target[:, 0] < ow)
-                            & (target[:, 1] >= 0) & (target[:, 1] < oh))
+                            & (target[:, 1] >= 0) & (target[:, 1] < oh)
+                            & np.all(upper > 0, axis=1) & np.all(lower < 1, axis=1))
                     if not keep.any():
                         continue
                     subset = np.flatnonzero(keep)
-                    local = (centres[keep] - target[keep] + .5)[:, None, :] + corners
-                    fraction = _intersection_area(local) / area
+                    contained = np.all(lower[keep] >= 0, axis=1) & np.all(upper[keep] <= 1, axis=1)
+                    fraction = np.ones(len(subset), np.float64)
+                    # Full containment is a geometrical proof of unit fractional
+                    # overlap, and avoids subtracting tiny coordinate differences.
+                    if not contained.all():
+                        local = relative[subset[~contained], None, :] + corners
+                        fraction[~contained] = _intersection_area(local) / area
                     positive = fraction > 0
                     subset, fraction = subset[positive], fraction[positive]
                     added = added or bool(len(subset))

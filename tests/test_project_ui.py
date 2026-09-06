@@ -16,8 +16,8 @@ import numpy as np
 import tifffile
 from astropy.io import fits
 from PySide6.QtCore import QTimer
-from PySide6.QtWidgets import QApplication
-from project_store import Project, ProjectError, resolve
+from PySide6.QtWidgets import QApplication, QPushButton
+from project_store import Project, ProjectError, fingerprint, resolve
 from ui.main_window import MainWindow
 from ui.project_dialog import ProjectHistoryDialog
 from ui.project_workflow import _standalone_preview
@@ -31,7 +31,7 @@ class ProjectUI(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.root = Path(self.temp.name)
+        self.root = Path(self.temp.name).resolve()
         for target in ("ui.main_window.MainWindow._restore_settings", "ui.main_window.MainWindow._save_settings",
                        "ui.main_window._UpdateChecker.start"):
             context = patch(target)
@@ -107,6 +107,64 @@ class ProjectUI(unittest.TestCase):
                 self.window._quick_export("print")
                 self.window._quick_export("instagram")
             self.assertEqual(scientific_export.call_count, 3)
+
+    def _saved_ai_fixture(self):
+        output = self.root / "ai-output"
+        output.mkdir()
+        result = output / "result_32bit.tif"
+        pixels = fits.getdata(self.source) * np.float32(.98)
+        tifffile.imwrite(result, pixels, description=json.dumps({"FPCOV": "coverage.tif"}))
+        fits.writeto(result.with_suffix(".fits"), pixels, fits.Header({"FPCOV": "coverage.tif"}))
+        tifffile.imwrite(output / "coverage.tif", np.ones(pixels.shape, np.uint8))
+        files = [result, result.with_suffix(".fits"), output / "coverage.tif"]
+        report = {"schema_version": 1, "task": "denoise", "model_id": "project-export-fixture", "strength": .5,
+                  "source": {"path": str(self.source), "sha256": fingerprint(self.source)["sha256"]},
+                  "outputs": [path.name for path in files],
+                  "output_integrity": [{"name": path.name, **fingerprint(path)} for path in files]}
+        (output / "ai_report.json").write_text(json.dumps(report), encoding="utf-8")
+        identifier = self.window._project.add_result(result, self.source)
+        self.window._open_project_step(identifier)
+        self.assertTrue(self.window._is_ai_result_current())
+        self.assertIsNotNone(self.window._ai_display_for_current())
+        return result, Path(self.window.result_path)
+
+    def test_changed_archived_ai_report_blocks_regular_and_quick_export_before_target_creation(self):
+        _, archived = self._saved_ai_fixture()
+        report = archived.parent / "ai_report.json"
+        original_stat = report.stat()
+        report.write_bytes(report.read_bytes().replace(b'"strength": 0.5', b'"strength": 0.6'))
+        os.utime(report, ns=(original_stat.st_atime_ns, original_stat.st_mtime_ns))
+        self.assertEqual(report.stat().st_size, original_stat.st_size)
+        with patch("ui.export.tempfile.mkdtemp") as target:
+            with patch("ui.export.QFileDialog.getExistingDirectory", return_value=str(self.root)):
+                with patch("ui.export.QMessageBox.warning") as warning:
+                    self.window.export_result()
+                    dialog = self.window._export_dlg
+                    try:
+                        next(button for button in dialog.findChildren(QPushButton)
+                             if button.text() == "Speicherort wählen und exportieren").click()
+                        warning.assert_called_once()
+                        self.assertIn("Ergebnisdateien wurden verändert", warning.call_args.args[2])
+                    finally:
+                        dialog.reject()
+            with patch("ui.export.QMessageBox.warning") as warning:
+                self.window._quick_export("instagram")
+                warning.assert_called_once()
+                self.assertIn("Ergebnisdateien wurden verändert", warning.call_args.args[2])
+            target.assert_not_called()
+        self.assertFalse(list(self.root.rglob("export-ai-*")))
+
+    def test_unchanged_archived_ai_group_and_external_current_result_remain_exportable(self):
+        external, archived = self._saved_ai_fixture()
+        for current, project in ((archived, self.window._project), (external, self.window._project), (external, None)):
+            with self.subTest(current=str(current), project=project is not None):
+                self.window._project = project
+                self.assertTrue(self.window._restore_ai_result_context(current))
+                self.window.result_path = str(current)
+                exported = Path(self.window._write_ai_export(str(self.root), linear=True, png=True))
+                for name in ("result_32bit.tif", "result_32bit.fits", "coverage.tif", "ai_report.json"):
+                    self.assertEqual((exported / name).read_bytes(), (current.parent / name).read_bytes())
+                self.assertTrue((exported / "display_stretched.png").is_file())
 
     def test_drizzle_sidecars_and_invalid_channel_pixels_survive_project_roundtrip(self):
         pixels = np.broadcast_to(np.linspace(.01, .25, 48, dtype=np.float32)[None, :, None], (40, 48, 3)).copy()
