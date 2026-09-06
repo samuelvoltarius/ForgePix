@@ -16,6 +16,34 @@ from constants import imwrite
 
 
 class AstroRelease(unittest.TestCase):
+    def test_sii_oiii_preview_keeps_green_signal(self):
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as folder:
+            image = np.zeros((16, 16, 3), np.float32)
+            image[..., 0] = .2
+            image[..., 1] = .4
+            image[..., 2] = .1
+            args = SimpleNamespace(prefix="", fits_out=True, astro_stretch=False,
+                                   aufnahmefilter="sv220_sii_oiii_7")
+            with patch.object(astro, "color_balance", side_effect=AssertionError("white balance")), \
+                 patch.object(astro, "remove_green_cast", side_effect=AssertionError("SCNR")):
+                result = pipeline._astro_write(image, folder, ["Light.fit"], args, astro)
+            with fits.open(Path(result) / "Light_astro_linear.fits") as hdus:
+                np.testing.assert_array_equal(hdus[0].data, np.moveaxis(image[..., ::-1], -1, 0))
+            self.assertEqual(fits.getheader(Path(result) / "Light_astro_linear.fits")["IMAGETYP"],
+                             "MASTER LIGHT")
+
+    def test_repeated_export_folders_are_not_reimported_as_lights(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            generated = root / "stack-abcd"
+            generated.mkdir()
+            fits.writeto(generated / "Light_astro_linear.fits", np.ones((8, 8), np.float32))
+            fits.writeto(root / "output.fits", np.ones((8, 8), np.float32),
+                         fits.Header({"IMAGETYP": "MASTER LIGHT"}))
+            fits.writeto(root / "Light.fit", np.ones((8, 8), np.float32))
+            self.assertEqual(astro_input.series_folders(folder), [(folder, 1)])
+
     def test_export_failure_preserves_existing_results_and_propagates(self):
         from unittest.mock import patch
         with tempfile.TemporaryDirectory() as folder:

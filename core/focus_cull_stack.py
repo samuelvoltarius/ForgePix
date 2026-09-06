@@ -1686,24 +1686,37 @@ def _load_astro_calibration(input_dir, args, paths):
         for attr, value in zip(("dark", "flat", "bias"), _autodetect_calibration(input_dir)):
             if value and not getattr(args, attr, None):
                 setattr(args, attr, value)
-    def load_master(spec, name):
+    def master_paths(spec):
         if not spec:
-            return None
+            return []
         if os.path.isdir(spec):
             ims = list_images(spec)
             fits_ims = [p for p in ims if os.path.splitext(p)[1].lower() in FITS_EXTS]
             if fits_ims:
                 ims = fits_ims
             if not ims:
-                raise ValueError(f"Keine Kalibrierbilder im {name}-Ordner: {spec}")
-            print(f"  Master-{name} aus {len(ims)} Frames")
-            return astro._master(ims, raw=True)
-        print(f"  Master-{name}: {os.path.basename(spec)}")
-        return astro._master(spec, raw=True)
+                raise ValueError(f"Keine Kalibrierbilder im Ordner: {spec}")
+            return ims
+        return [spec]
 
-    dark = load_master(getattr(args, "dark", None), "Dark")
-    flat = load_master(getattr(args, "flat", None), "Flat")
-    bias = load_master(getattr(args, "bias", None), "Bias")
+    groups = {kind: master_paths(getattr(args, kind, None)) for kind in ("dark", "flat", "bias")}
+    import calibration_metadata
+    args.calibration_report = calibration_metadata.validate(
+        paths, groups, scale_dark=bool(getattr(args, "dark_skalieren", False)))
+    missing = args.calibration_report["missing_metadata"]
+    if missing:
+        print("  Nicht aus FITS prüfbar (Kopfdaten fehlen): " + ", ".join(missing))
+
+    def load_master(kind, name):
+        frames = groups[kind]
+        if not frames:
+            return None
+        print(f"  Master-{name} aus {len(frames)} Datei(en)")
+        return astro._master(frames, raw=True)
+
+    dark = load_master("dark", "Dark")
+    flat = load_master("flat", "Flat")
+    bias = load_master("bias", "Bias")
     if bias is not None:
         # Bias verrechnen (astro.calibrate kennt nur Dark/Flat, wurde bisher still ignoriert):
         # - Flat VOR der Normierung bias-korrigieren, sonst verfälscht der Offset die
@@ -1920,6 +1933,7 @@ def run_astro(input_dir, work_dir, args):
               "integration_seconds": sum(_belichtung(p) or 0 for p in used_paths),
               "method": args.astro_method,
               "calibration": {k: bool(getattr(args, k, None)) for k in ("dark", "flat", "bias")},
+              "calibration_validation": getattr(args, "calibration_report", {}),
               "warnings": (["No dark/flat/bias calibration frames supplied"]
                            if dark is None and flat is None and bias is None else [])}
     with open(os.path.join(out, "processing_report.json"), "w", encoding="utf-8") as f:
@@ -2147,6 +2161,8 @@ def _astro_write(result, work_dir, paths, args, astro):
             outf = os.path.join(stack_dir, f"{args.prefix}{base}_astro_linear.fits")
             hdu = fits.PrimaryHDU(data.astype(np.float32))
             hdu.header["BSCALE"] = 1.0
+            hdu.header["IMAGETYP"] = "MASTER LIGHT"
+            hdu.header["CREATOR"] = "ForgePix"
             hdu.writeto(outf, overwrite=True)
             print(f"  FITS (32-bit linear): {outf}")
         except Exception as e:
@@ -2155,8 +2171,9 @@ def _astro_write(result, work_dir, paths, args, astro):
     # Drei Regler: Farbkalibrierung · Aufhellung · Sättigung. Reihenfolge: manuell (CLI/GUI) hat
     # Vorrang, sonst schlägt die KI vor (wenn Server da), sonst Standardwerte.
     dualband = _use_ha_oiii_preview(args, paths, _filt)
+    narrowband_data = _filt is not None and _filt.art in ("dualband", "multiband", "schmalband")
     if _filt is not None and "SII" in _filt.linien and "Ha" not in _filt.linien:
-        print("  SII/OIII: RGB-Vorschau der aufgenommenen Kanäle; keine Hα/OIII- "
+        print("  SII/OIII: RGB-Vorschau der aufgenommenen Kanäle; keine Ha/OIII- "
               "oder SHO-Rekonstruktion. Lineare Exporte bleiben erhalten.")
     man_color = float(getattr(args, "astro_color", -1.0))
     man_bright = float(getattr(args, "astro_bright", -1.0))
@@ -2167,6 +2184,10 @@ def _astro_write(result, work_dir, paths, args, astro):
     protect = True
 
     def _broadband(res):
+        if narrowband_data:
+            # OIII is measured in green/blue. Broadband white balance and SCNR
+            # would remove actual narrowband signal, especially with SII/OIII.
+            return res.copy()
         # Breitband-Farbe: optional echtes PCC (Siril-SPCC/Gaia/Lite-Fallback) statt einfachem
         # Farbabgleich, + SCNR. PCC arbeitet auf den LINEAREN Daten (richtig vor dem Strecken).
         if getattr(args, "astro_pcc", False):
@@ -2262,7 +2283,7 @@ def _astro_write(result, work_dir, paths, args, astro):
             view = astro.stretch_starless(base_view, _strecken, star_strength=float(_ss))
         else:
             view = _strecken(base_view)
-        if not dualband:
+        if not dualband and not narrowband_data:
             # Farbkorrektur NACH dem Stretch wiederholen: der Stretch bläst jede winzige Rest-
             # Kanalabweichung im schwachen Signal auf (Blau-/Grünstich in Rauschen, grüne Sterne).
             # Erst hier ist der Stich sichtbar/messbar und sauber zu entfernen (SCNR + Neutralisierung).
@@ -2882,6 +2903,26 @@ def photometrie_lauf(args, input_dir, work_dir):
     return work_dir
 
 
+def _live_context_id(args, input_dir, dark, flat):
+    """Bind a checkpoint to the input directory, numerical options and master pixels."""
+    import hashlib
+    digest = hashlib.sha256()
+    config = {"input": os.path.normcase(os.path.realpath(input_dir)),
+              "kappa": float(getattr(args, "astro_kappa", 2.5)),
+              "register": not bool(getattr(args, "no_register", False)),
+              "filter": str(getattr(args, "aufnahmefilter", "auto"))}
+    digest.update(json.dumps(config, sort_keys=True).encode("utf-8"))
+    for name, master in (("dark", dark), ("flat", flat)):
+        digest.update(name.encode("ascii"))
+        if master is None:
+            digest.update(b"none")
+        else:
+            array = np.ascontiguousarray(master, dtype="<f4")
+            digest.update(str(array.shape).encode("ascii"))
+            digest.update(memoryview(array).cast("B"))
+    return digest.hexdigest()
+
+
 def live_loop(args, input_dir, work_dir):
     """Inkrementeller Beobachtungsmodus: jeder neue Sub wird EINMAL verrechnet.
 
@@ -2906,13 +2947,20 @@ def live_loop(args, input_dir, work_dir):
         os.makedirs(work_dir, exist_ok=True)
         zustand = os.path.join(work_dir, "_live_zustand.npz")
         vorschau = os.path.join(work_dir, "_live_preview.jpg")
+        from astro_input import light_paths
+        dark, flat, _ = _load_astro_calibration(input_dir, args, light_paths(input_dir, list_images))
+        context_id = _live_context_id(args, input_dir, dark, flat)
         ls = livestack.LiveStack.laden(zustand) if os.path.exists(zustand) else None
         if ls is None:
             ls = livestack.LiveStack(kappa=getattr(args, "astro_kappa", 2.5),
                                      registrieren=not getattr(args, "no_register", False))
         else:
+            if getattr(ls, "context_id", "") != context_id:
+                raise ForgePixFehler("Der gespeicherte Live-Stapel gehört zu anderen "
+                                    "Aufnahmen, Kalibrierbildern oder Einstellungen. "
+                                    "Bitte einen neuen Arbeitsordner wählen; der alte Zustand bleibt erhalten.")
             print(f"  fortgesetzt: {ls.n} Frames aus einem frueheren Lauf")
-        dark, flat, _ = _load_astro_calibration(input_dir, args, list_images(input_dir))
+        ls.context_id = context_id
         ls.reader = lambda path: astro.read_calibrated(path, dark, flat)
         bekannt = set(ls.pfade)
         beobachtet = {}
@@ -2939,9 +2987,8 @@ def live_loop(args, input_dir, work_dir):
         print("  " + ls.bericht())
         erg = ls.ergebnis()
         if erg is not None:
-            _astro_write(erg, work_dir, ls.pfade or [input_dir], args, astro)
-        if erg is not None:
-            done(os.path.join(work_dir, "stack"))
+            exported = _astro_write(erg, work_dir, ls.pfade or [input_dir], args, astro)
+            done(exported)
         print("Live-Modus beendet.")
 
     finally:

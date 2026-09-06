@@ -1,5 +1,13 @@
 # ForgePix vs. Pro Tools — Honest Scorecard (v1.23.0)
 
+> **Superseded capability claims (2026-09-06):** This is a historical feature
+> inventory. Its parity checkmarks and “complete” statements are not validated
+> product status. In particular, external Siril/SPCC and StarNet integrations are
+> not native equivalents; classical algorithms are not demonstrated ML parity.
+> Use [CAPABILITY_STATUS.md](CAPABILITY_STATUS.md) for the evidence-based current
+> matrix and [RC_ACCEPTANCE.md](RC_ACCEPTANCE.md) for release gates. PixelMath now
+> has a native subset; important precision, coverage and scientific gaps remain.
+
 > **v1.23 update:** the items previously listed as remaining are now built — astro **deconvolution**,
 > long-exposure **auto sky-mask**, **paint-from-frame** retouch (aligned fallback), the **lucky-imaging
 > fix** (wavelet-sharpen inside MAP → now beats the single frame on realistic noise), a RAW **local-contrast

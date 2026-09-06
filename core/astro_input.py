@@ -20,7 +20,7 @@ def fits_lights(folder):
         try:
             header = fits.getheader(p)
             kind = str(header.get("IMAGETYP", header.get("FRAME", ""))).lower()
-            if any(k in kind for k in _CALIBRATION):
+            if any(k in kind for k in _CALIBRATION) or kind.startswith("master"):
                 continue
         except (OSError, ValueError):
             # Keep unreadable candidate visible: processing explains/retries the failure.
@@ -34,7 +34,7 @@ def series_folders(root):
     result = []
     for folder, dirs, files in os.walk(root):
         dirs[:] = sorted(d for d in dirs if d.lower() not in _SKIP_DIRS
-                         and not d.lower().startswith(_CALIBRATION))
+                         and not d.lower().startswith(_CALIBRATION + ("stack-",)))
         if any(os.path.splitext(n)[1].lower() in FITS_EXTS for n in files):
             lights = fits_lights(folder)
             if lights:

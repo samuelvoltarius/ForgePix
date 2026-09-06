@@ -696,5 +696,12 @@
   "Brennweite": "Focal length",
   "Reducer / Barlow": "Reducer / Barlow",
   "Aufnahme-Binning": "Capture binning",
-  "Effektive Brennweite: {focal:.1f} mm · f/{ratio:.2f}\nBildmaßstab: {scale:.3f} Bogensekunden pro Pixel": "Effective focal length: {focal:.1f} mm · f/{ratio:.2f}\nImage scale: {scale:.3f} arcseconds per pixel"
+  "Effektive Brennweite: {focal:.1f} mm · f/{ratio:.2f}\nBildmaßstab: {scale:.3f} Bogensekunden pro Pixel": "Effective focal length: {focal:.1f} mm · f/{ratio:.2f}\nImage scale: {scale:.3f} arcseconds per pixel",
+  "Sternbasierter Farbabgleich": "Star-based white balance",
+  "Automatische Auswahl (kann externe Programme verwenden)": "Automatic selection (may use external applications)",
+  "Gaia-Sternpositionen: Weißabgleich (lokaler Katalog)": "Gaia star positions: white balance (local catalogue)",
+  "Gaia-Sternpositionen: Weißabgleich (Online-Katalog)": "Gaia star positions: white balance (online catalogue)",
+  "Weitere Verarbeitungseinstellungen": "More processing settings",
+  "Der Aufnahmefilter bestimmt, welche Emissionslinien überhaupt ankommen. Hα/OIII und SII/OIII sind verschiedene Varianten. Für echtes SHO werden getrennte Messungen von SII, Hα und OIII benötigt; ein einzelner Dual-Band-Filter reicht dafür nicht.": "The capture filter determines which emission lines are recorded. Ha/OIII and SII/OIII are different variants. True SHO requires separate SII, Ha and OIII measurements; a single dual-band filter is insufficient.",
+  "Streckung": "Stretch"
 }

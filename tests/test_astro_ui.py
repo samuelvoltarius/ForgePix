@@ -33,6 +33,11 @@ class AstroUI(unittest.TestCase):
                 self.assertIn("--astro-cosmetic", args)
                 self.assertNotIn("--astro-komet", args)
                 self.assertIn("--fits-out", args)
+                window.astro_filter.setCurrentIndex(window.astro_filter.findData("sv220_sii_oiii_7"))
+                for auto in (True, False):
+                    built = window._build_args(auto)
+                    self.assertEqual(built.count("--filter"), 1)
+                    self.assertEqual(built[built.index("--filter") + 1], "sv220_sii_oiii_7")
             finally:
                 window.deleteLater()
                 cls = type(self)

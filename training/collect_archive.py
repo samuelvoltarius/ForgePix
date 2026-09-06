@@ -1,4 +1,5 @@
 """Bounded, sequential public optical HST acquisition across independent fields."""
+import argparse
 import hashlib
 import json
 import os
@@ -25,7 +26,9 @@ FIELDS = [
 GIB = 1024 ** 3
 
 
-def query_field(ra, dec):
+def query_field(ra, dec, *, attempts=3):
+    if not 1 <= attempts <= 3:
+        raise ValueError("Query attempts must be between one and three")
     rows = []
     for page in (1, 2):
         query = dict(service="Mast.Caom.Filtered.Position", format="json", pagesize=500, page=page,
@@ -33,12 +36,25 @@ def query_field(ra, dec):
                 dict(paramName="obs_collection", values=["HST"]),
                 dict(paramName="dataproduct_type", values=["image"]),
                 dict(paramName="dataRights", values=["PUBLIC"])]))
-        response = requests.post("https://mast.stsci.edu/api/v0/invoke",
-                                 data={"request": json.dumps(query)}, timeout=120)
-        response.raise_for_status()
-        payload = response.json()
-        if payload.get("status") != "COMPLETE":
-            raise RuntimeError(payload.get("msg", "Archive query failed"))
+        # Cone searches can time out transiently. Retry this page only, with a
+        # finite budget; previously one timeout permanently omitted the holdout.
+        for attempt in range(attempts):
+            try:
+                response = requests.post("https://mast.stsci.edu/api/v0/invoke",
+                                         data={"request": json.dumps(query)}, timeout=(15, 60))
+                response.raise_for_status()
+                payload = response.json()
+                if payload.get("status") != "COMPLETE":
+                    raise RuntimeError(payload.get("msg", "Archive query failed"))
+                break
+            except (requests.RequestException, RuntimeError) as exc:
+                if (isinstance(exc, requests.HTTPError) and exc.response is not None
+                        and exc.response.status_code not in {408, 429, 500, 502, 503, 504}):
+                    raise
+                if attempt + 1 == attempts:
+                    raise
+                print("QUERY RETRY", page, attempt + 1, str(exc), flush=True)
+                time.sleep(2 ** (attempt + 1))
         rows.extend(payload["data"])
         if page >= payload.get("paging", {}).get("pagesFiltered", 1):
             break
@@ -62,7 +78,10 @@ def query_field(ra, dec):
     return selected
 
 
-def main():
+def main(field_names=None):
+    selected_fields = FIELDS if field_names is None else [f for f in FIELDS if f[0] in field_names]
+    if field_names is not None and set(field_names) - {field[0] for field in FIELDS}:
+        raise ValueError("Unknown field selection")
     root = Path.home() / "forgepix-training/datasets/hst-diverse-001"
     root.mkdir(parents=True, exist_ok=True)
     lock = root / "download.lock"
@@ -71,7 +90,7 @@ def main():
     os.close(fd)
     used = sum(p.stat().st_size for p in root.rglob("*.fits"))
     try:
-        for group, ra, dec, split in FIELDS:
+        for group, ra, dec, split in selected_fields:
             folder = root / group
             folder.mkdir(exist_ok=True)
             try:
@@ -101,7 +120,8 @@ def main():
                         with partial.open("wb") as output:
                             for block in response.iter_content(1024 * 1024):
                                 size += len(block)
-                                if size > GIB or used + size > 25 * GIB or shutil.disk_usage(root).free < 80 * GIB:
+                                if (size > GIB or used + size > 25 * GIB
+                                        or shutil.disk_usage(root).free - len(block) < 80 * GIB):
                                     raise RuntimeError("Download resource limit exceeded")
                                 digest.update(block)
                                 output.write(block)
@@ -133,4 +153,7 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--field", action="append", choices=[field[0] for field in FIELDS],
+                        help="Acquire only this field; repeat to select several. Existing splits stay fixed.")
+    main(parser.parse_args().field)

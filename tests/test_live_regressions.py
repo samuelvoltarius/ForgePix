@@ -15,6 +15,31 @@ import focus_cull_stack as pipeline
 
 
 class LiveRegressions(unittest.TestCase):
+    def test_resume_context_tracks_calibration_pixels_and_options(self):
+        args = SimpleNamespace(astro_kappa=2.5, no_register=False, aufnahmefilter="dual7")
+        dark = np.full((8, 8), .02, np.float32)
+        fingerprint = pipeline._live_context_id(args, ".", dark, None)
+        self.assertEqual(fingerprint, pipeline._live_context_id(args, ".", dark.copy(), None))
+        changed = dark.copy()
+        changed[0, 0] += .001
+        self.assertNotEqual(fingerprint, pipeline._live_context_id(args, ".", changed, None))
+        args.aufnahmefilter = "sv220_sii_oiii_7"
+        self.assertNotEqual(fingerprint, pipeline._live_context_id(args, ".", dark, None))
+
+    def test_incompatible_resume_preserves_checkpoint(self):
+        from constants import ForgePixFehler
+        with tempfile.TemporaryDirectory() as folder:
+            state = livestack.LiveStack(registrieren=False)
+            state.hinzufuegen(np.full((8, 8, 3), .2, np.float32))
+            state.context_id = "different-settings"
+            checkpoint = Path(folder) / "_live_zustand.npz"
+            state.speichern(checkpoint)
+            original = checkpoint.read_bytes()
+            with patch("livestack.LiveStack.laden", return_value=state):
+                with self.assertRaisesRegex(ForgePixFehler, "neuen Arbeitsordner"):
+                    pipeline.live_loop(SimpleNamespace(no_auto_calib=True), folder, folder)
+            self.assertEqual(checkpoint.read_bytes(), original)
+
     def test_channel_rejection_preserves_neutral_pixel(self):
         base = np.full((20, 20, 3), .2, np.float32)
         s = livestack.LiveStack(registrieren=False, gewichten=False)

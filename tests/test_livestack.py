@@ -24,6 +24,7 @@ import sys
 import shutil
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import numpy as np
 import cv2
@@ -41,6 +42,97 @@ def _stille(*a, **k):
 
 
 class TestLiveStack(unittest.TestCase):
+    def test_registered_border_keeps_original_sky_and_weight(self):
+        # The missing left eight columns must keep the reference alone. A
+        # gradient also catches level normalization over different sky regions.
+        x = np.arange(32, dtype=np.float32)[None, :, None] * .01
+        reference = np.broadcast_to(x + np.array([.1, .2, .3], np.float32), (32, 32, 3)).copy()
+        frame = np.full_like(reference, .9)
+        frame[:, :24] = reference[:, 8:]
+        s = livestack.LiveStack(gewichten=False, log=_stille)
+        self.assertTrue(s.hinzufuegen(reference))
+        shift = np.array([[1., 0., 8.], [0., 1., 0.]])
+        with patch("livestack.astro._estimate_star_shift", return_value=shift):
+            self.assertTrue(s.hinzufuegen(frame))
+        np.testing.assert_allclose(s.ergebnis(), reference, atol=1e-7)
+        np.testing.assert_array_equal(s.gewicht[:, :8], 1)
+        np.testing.assert_array_equal(s.gewicht[:, 8:], 2)
+        np.testing.assert_array_equal(s.anzahl, s.gewicht)
+
+    def test_lanczos_footprint_excludes_edges_from_signal_and_noise(self):
+        reference = np.full((40, 40, 3), [.1, .2, .3], np.float32)
+        frame = reference + .1
+        frame[:2] = .95
+        frame[-2:] = .95
+        frame[:, :2] = .95
+        frame[:, -2:] = .95
+        s = livestack.LiveStack(log=_stille)
+        self.assertTrue(s.hinzufuegen(reference))
+        before_weight = s.gewicht.copy()
+        shift = np.array([[1., 0., .5], [0., 1., .5]])
+        with patch("livestack.astro._estimate_star_shift", return_value=shift):
+            self.assertTrue(s.hinzufuegen(frame))
+        # The central sky has identical noise and a removable +0.1 pedestal;
+        # bright edges and zero padding must affect neither its level nor weight.
+        np.testing.assert_allclose(s.ergebnis()[10:30, 10:30], reference[10:30, 10:30], atol=1e-6)
+        np.testing.assert_allclose(s.gewicht[15, 15], 2 * before_weight[15, 15], rtol=1e-6)
+        np.testing.assert_array_equal(s.gewicht[0], before_weight[0])
+        np.testing.assert_allclose(s.ergebnis()[0], reference[0], atol=1e-7)
+        np.testing.assert_array_equal(s.anzahl[0], 1)
+
+    def test_newly_covered_pixels_are_not_rejected_and_resume_keeps_counts(self):
+        reference = np.full((32, 32, 3), .2, np.float32)
+        s = livestack.LiveStack(gewichten=False, log=_stille, context_id="calibration-and-options-hash")
+        s.hinzufuegen(reference)
+        shift = np.array([[1., 0., 12.], [0., 1., 0.]])
+        with patch("livestack.astro._estimate_star_shift", return_value=shift):
+            for _ in range(5):
+                self.assertTrue(s.hinzufuegen(reference))
+        path = os.path.join(self.d, "coverage.npz")
+        s.speichern(path)
+        resumed = livestack.LiveStack.laden(path, log=_stille)
+        self.assertIsNotNone(resumed)
+        self.assertEqual(resumed.context_id, "calibration-and-options-hash")
+        np.testing.assert_array_equal(resumed.anzahl, s.anzahl)
+        next_frame = reference.copy()
+        next_frame[16, 2, 0] = .4  # only its second actual sample: not enough to reject
+        next_frame[16, 20, 0] = .9  # seventh sample: reject this one channel
+        identity = np.array([[1., 0., 0.], [0., 1., 0.]])
+        with patch("livestack.astro._estimate_star_shift", return_value=identity):
+            for state in (s, resumed):
+                self.assertTrue(state.hinzufuegen(next_frame))
+        np.testing.assert_allclose(s.ergebnis()[16, 2], [.3, .2, .2], atol=1e-6)
+        np.testing.assert_allclose(s.ergebnis()[16, 20], [.2, .2, .2], atol=1e-6)
+        np.testing.assert_array_equal(s.anzahl[16, 2], [2, 2, 2])
+        np.testing.assert_array_equal(s.anzahl[16, 20], [6, 7, 7])
+        for attribute in ("summe", "quadr", "gewicht", "anzahl"):
+            np.testing.assert_array_equal(getattr(s, attribute), getattr(resumed, attribute))
+
+    def test_registration_without_overlap_does_not_change_stack(self):
+        s = livestack.LiveStack(gewichten=False, log=_stille)
+        reference = np.full((32, 32, 3), .2, np.float32)
+        s.hinzufuegen(reference)
+        shift = np.array([[1., 0., 100.], [0., 1., 0.]])
+        with patch("livestack.astro._estimate_star_shift", return_value=shift):
+            self.assertFalse(s.hinzufuegen(reference))
+        self.assertEqual((s.n, s.verworfen), (1, 1))
+        np.testing.assert_array_equal(s.anzahl, 1)
+        np.testing.assert_array_equal(s.ergebnis(), reference)
+
+    def test_checkpoint_without_coverage_counts_requires_rebuild(self):
+        s = livestack.LiveStack(registrieren=False, gewichten=False, log=_stille)
+        s.hinzufuegen(np.full((12, 12, 3), .2, np.float32))
+        path = os.path.join(self.d, "old-coverage.npz")
+        s.speichern(path)
+        with np.load(path, allow_pickle=False) as archive:
+            original = {key: archive[key].copy() for key in archive.files}
+        for value in (-np.ones_like(s.anzahl, dtype=np.int32), s.anzahl + 1,
+                      np.zeros_like(s.anzahl)):
+            np.savez(path, **dict(original, anzahl=value))
+            self.assertIsNone(livestack.LiveStack.laden(path, log=_stille))
+        np.savez(path, **dict(original, version=np.int64(2)))
+        self.assertIsNone(livestack.LiveStack.laden(path, log=_stille))
+
     def test_invalid_pixels_do_not_poison_running_stack(self):
         s = livestack.LiveStack(registrieren=False, gewichten=False, log=_stille)
         good = np.full((12, 12, 3), .2, np.float32)

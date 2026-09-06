@@ -1,5 +1,12 @@
 # ForgePix — Deep Algorithmic Gap Analysis vs Pro Tools (v1.23)
 
+> **Superseded completion claim (2026-09-06):** The historical statement below
+> that every gap is built does not establish a complete native implementation,
+> usable GUI workflow or equivalent scientific/image quality. Some capabilities
+> rely on external applications and some are limited approximations. Consult
+> [CAPABILITY_STATUS.md](CAPABILITY_STATUS.md) for verified implementation limits
+> and priorities, and [RC_ACCEPTANCE.md](RC_ACCEPTANCE.md) for release gates.
+
 > **v1.25 status: every gap below is now BUILT** (engine algorithms, OpenCV/NumPy/scipy, +55 tests).
 > Focus F1–F5 · Astro A1–A6 · Lucky L1–L4 · HDR/Long H1–H5 · Panorama P1–P5 · RAW R1–R6 (minus the
 > GPL/ML-only items: AMaZE/RCD demosaic, BlurX/NoiseX/StarXTerminator, Jupiter derotation). Each module

@@ -4,6 +4,15 @@ from PySide6.QtCore import QSettings
 import os
 
 
+# Old releases persisted an index. Keep that historical order independent of
+# future catalogue additions, sorting, or translated labels.
+_LEGACY_ASTRO_FILTER_KEYS = (
+    "keiner", "uvir", "lp", "sv260", "lpro", "zwo_duo", "lenhance", "dual12",
+    "dual7", "dual5", "dual3", "dual_sii_oiii", "quad", "ha", "oiii", "sii",
+    "l", "r", "g", "b", "sv220_sii_oiii_7",
+)
+
+
 def app_settings():
     """Zentrale QSettings-Factory — EINE Stelle für Org-/App-Namen statt elf
     verstreuter `QSettings("ServeOne", "ForgePix")`-Kopien (Tippfehler-Schutz)."""
@@ -41,7 +50,6 @@ class SettingsMixin:
             "astro_bin": (lambda v: self.astro_bin.setCurrentIndex(int(v)), self.astro_bin.currentIndex),
             "astro_autocalib": (self.astro_autocalib.setChecked, self.astro_autocalib.isChecked),
             "astro_auto": (self.astro_auto.setChecked, self.astro_auto.isChecked),
-            "astro_filter": (lambda v: self.astro_filter.setCurrentIndex(int(v)), self.astro_filter.currentIndex),
             "astro_palette": (lambda v: self.astro_palette.setCurrentIndex(int(v)), self.astro_palette.currentIndex),
             # Bildstil und die Feinwerte darunter — ohne das waere die Wahl nach jedem
             # Neustart weg, und der Nutzer muesste sie jedes Mal neu treffen.
@@ -92,15 +100,43 @@ class SettingsMixin:
         st = app_settings()
         for k, (_set, get) in self._settings_map().items():
             st.setValue(k, get())
+        filter_key = self.astro_filter.currentData()
+        if filter_key:
+            st.setValue("astro_filter_key", filter_key)
+            st.setValue("equipment/filter", filter_key)
+            st.remove("astro_filter")
+        st.sync()
+
+    def _restore_filter_settings(self, settings):
+        key = settings.value("astro_filter_key")
+        if key is None:
+            legacy = settings.value("astro_filter")
+            if legacy is not None:
+                try:
+                    index = int(legacy)
+                    if 0 <= index < len(_LEGACY_ASTRO_FILTER_KEYS):
+                        key = _LEGACY_ASTRO_FILTER_KEYS[index]
+                except (TypeError, ValueError):
+                    pass
+            if key is None:
+                key = settings.value("equipment/filter")
+        index = self.astro_filter.findData(key)
+        if index >= 0:
+            self.astro_filter.setCurrentIndex(index)
+            settings.setValue("astro_filter_key", key)
+            settings.setValue("equipment/filter", key)
+            settings.remove("astro_filter")
+            settings.sync()
 
     def _restore_settings(self):
         st = app_settings()
         # Einmalige Migration: Einstellungen vom alten Namen „StackForge" übernehmen
-        if not st.allKeys():
+        if not st.allKeys() and not os.environ.get("FORGEPIX_SETTINGS_FILE"):
             old = QSettings("ServeOne", "StackForge")
             if old.allKeys():
                 for k in old.allKeys():
                     st.setValue(k, old.value(k))
+        self._restore_filter_settings(st)
         bool_keys = {"raw_dev", "raw_half", "vlm_on", "astro_fits", "astro_cosmetic", "astro_qc",
                      "astro_auto", "astro_autocalib",
                      "reject_blurry"}

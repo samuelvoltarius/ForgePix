@@ -218,7 +218,7 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
 
         # ---- linke Spalte: Schritt-für-Schritt-Wizard ----
         left = QWidget()
-        left.setMinimumWidth(450)
+        left.setMinimumWidth(390)
         left.setMaximumWidth(560)
         lv = QVBoxLayout(left)
 
@@ -487,13 +487,13 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         # Neue Pro-Optionen (v1.21): echtes Drizzle, TPS-Feinregistrierung, PCC, GHS-Regler
         self.astro_drizzle_true = QCheckBox(tr("Echtes Drizzle (pixfrac-Drop statt nur Hochskalieren)"))
         self.astro_tps = QCheckBox(tr("TPS-Feinregistrierung (lokale Restverzeichnung korrigieren)"))
-        self.astro_pcc = QCheckBox(tr("Photometrischer Farbabgleich (PCC)"))
+        self.astro_pcc = QCheckBox(tr("Sternbasierter Farbabgleich"))
         self.astro_pcc_backend = QComboBox()
-        self.astro_pcc_backend.addItem(tr("Auto (eigener Katalog → Siril → Gaia → Lite)"),
+        self.astro_pcc_backend.addItem(tr("Automatische Auswahl (kann externe Programme verwenden)"),
                                        "auto")
-        self.astro_pcc_backend.addItem(tr("Eigener Gaia-Auszug (ohne Netz)"), "lokal")
+        self.astro_pcc_backend.addItem(tr("Gaia-Sternpositionen: Weißabgleich (lokaler Katalog)"), "lokal")
         self.astro_pcc_backend.addItem(tr("Siril-SPCC (Gaia DR3)"), "siril")
-        self.astro_pcc_backend.addItem(tr("Eigener Gaia-Pfad (astroquery)"), "gaia")
+        self.astro_pcc_backend.addItem(tr("Gaia-Sternpositionen: Weißabgleich (Online-Katalog)"), "gaia")
         self.astro_pcc_backend.addItem(tr("Lite (stern-basiert, offline)"), "lite")
         self.astro_oscsensor = QLineEdit()
         self.astro_oscsensor.setPlaceholderText(tr("optional: OSC-Sensorname wie in Siril (z. B. Sony IMX294)"))
@@ -560,8 +560,9 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         ar.addWidget(help_btn("Bewertet jede Aufnahme (Sternzahl/FWHM/Elongation/Wolken/Spuren) "
                               "und lässt schlechte Subs weg — mit Begründung im Log. Aus = alle "
                               "Aufnahmen verwenden."), 3, 3)
-        ar.addWidget(self.astro_stretch, 4, 0, 1, 2)
-        ar.addWidget(self.astro_stretch_mode, 4, 2)
+        ar.addWidget(self.astro_stretch, 4, 0, 1, 3)
+        ar.addWidget(QLabel(tr("Streckung")), 39, 0)
+        ar.addWidget(self.astro_stretch_mode, 39, 1, 1, 2)
         ar.addWidget(self.astro_local_norm, 9, 0, 1, 3)
         ar.addWidget(help_btn("Gleicht den Hintergrund jedes Frames ÖRTLICH an (statt nur global) vor "
                               "der Ausreißer-Verwerfung — macht das Stacken bei Gradienten und beim "
@@ -589,16 +590,16 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
                               "(Alt-Az-Montierung ohne Rotator, lange Sessions) — per Stern-Merkmalen."), 11, 3)
         ar.addWidget(QLabel(tr("Filter")), 17, 0); ar.addWidget(self.astro_filter, 17, 1, 1, 2)
         ar.addWidget(help_btn("Der Aufnahmefilter bestimmt, welche Emissionslinien überhaupt "
-                              "ankommen. Danach richtet sich die Ha/OIII-Entmischung — und ob "
-                              "eine Palette echt ist: ein Dual-Band-Filter lässt kein SII durch, "
-                              "eine SHO-Darstellung daraus ist synthetisch."), 17, 3)
+                              "ankommen. Hα/OIII und SII/OIII sind verschiedene Varianten. "
+                              "Für echtes SHO werden getrennte Messungen von SII, Hα und OIII "
+                              "benötigt; ein einzelner Dual-Band-Filter reicht dafür nicht."), 17, 3)
         ar.addWidget(QLabel(tr("Bildstil")), 22, 0); ar.addWidget(self.astro_stil, 22, 1)
         ar.addWidget(help_btn("Setzt alle Feinwerte darunter auf eine erprobte Kombination. "
                               "„Nebel betonen“ holt Farbe und dezentere Sterne (die häufigste "
                               "Beschwerde: Sterne zu hell, Nebel zu schwach — beides hat "
                               "dieselbe Ursache). Wer eigene Werte will, klappt „Erweitert“ auf."),
                      22, 3)
-        ar.addWidget(self.astro_erweitert, 22, 2)
+        ar.addWidget(self.astro_erweitert, 36, 0, 1, 3)
         _lbl_unmix = QLabel(tr("Entmischung Ha/OIII"))
         _lbl_band = QLabel(tr("Zeilen-Banding entfernen"))
         _lbl_red = QLabel(tr("Sterne verkleinern"))
@@ -686,9 +687,9 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
                               "Aussehen, nicht wissenschaftlich."), 18, 3)
         ar.addWidget(self.astro_sessions_btn, 19, 0, 1, 2); ar.addWidget(self.astro_sessions_lbl, 19, 2, 1, 2)
         ar.addWidget(QLabel(tr("Starless: Nebel")), 20, 0); ar.addWidget(self.starless_neb, 20, 1)
-        ar.addWidget(QLabel(tr("Sterne")), 20, 2); ar.addWidget(self.starless_stars, 20, 3)
+        ar.addWidget(QLabel(tr("Sterne")), 37, 0); ar.addWidget(self.starless_stars, 37, 1, 1, 2)
         # --- Erweitert (ausklappbar): selten gebrauchte Optionen, hält das Panel aufgeräumt ---
-        adv = CollapsibleSection(tr("Erweitert (Engine, Vorverarbeitung, Drizzle/TPS, GHS, PCC …)"))
+        adv = CollapsibleSection(tr("Weitere Verarbeitungseinstellungen"))
         ag = adv.grid
         def _subhead(text, r):
             lab = QLabel(text)
@@ -769,7 +770,7 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
                               "sinnvolle Standardwerte bestimmen Aufhellung/Sättigung/Farbe. "
                               "Zum Selbst-Einstellen den Haken entfernen."), 14, 3)
         ar.addWidget(QLabel(tr("Aufhellung")), 15, 0); ar.addWidget(self.astro_bright, 15, 1)
-        ar.addWidget(QLabel(tr("Sättigung")), 15, 2); ar.addWidget(self.astro_sat, 15, 3)
+        ar.addWidget(QLabel(tr("Sättigung")), 38, 0); ar.addWidget(self.astro_sat, 38, 1, 1, 2)
         ar.addWidget(QLabel(tr("Farbkalibrierung")), 16, 0); ar.addWidget(self.astro_color, 16, 1)
         ar.addWidget(help_btn("Aufhellung 5–30 (höher = schwaches Signal stärker anheben, Kern "
                               "bleibt geschützt). Sättigung 1.0–1.6. Farbkalibrierung 0–1 "
@@ -791,6 +792,13 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
             combo.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
         for label in g_astro.findChildren(QLabel):
             label.setWordWrap(True)
+        import textwrap
+        for check in g_astro.findChildren(QCheckBox):
+            if len(check.text()) > 42:
+                if not check.toolTip():
+                    check.setToolTip(check.text())
+                check.setText("\n".join(textwrap.wrap(check.text(), width=42,
+                                                    break_long_words=False, break_on_hyphens=False)))
         p1.addWidget(g_astro)
 
         # Hybrid — Mosaik (Mond/Sonne) ODER Fokus+Astro
@@ -1191,6 +1199,12 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         self._settings_lay.addWidget(_ok)
 
         for pl in self._wiz_lay:
+            for check in pl.parentWidget().findChildren(QCheckBox):
+                if len(check.text()) > 42:
+                    if not check.toolTip():
+                        check.setToolTip(check.text())
+                    check.setText("\n".join(textwrap.wrap(check.text(), width=42,
+                                                        break_long_words=False, break_on_hyphens=False)))
             pl.addStretch(1)
 
         # Navigation zwischen den Schritten
@@ -1237,7 +1251,7 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         rv.addWidget(self.preview, 6)
         self.progress = QProgressBar(); self.progress.setRange(0, 0); self.progress.hide()
         rv.addWidget(self.progress)
-        res_btns = QHBoxLayout(); res_btns.setSpacing(8)
+        res_btns = QGridLayout(); res_btns.setSpacing(8)
         # Primäre Aktionen als Buttons, alles Weitere im „Werkzeuge"-Menü (entrümpelt)
         self.cmp_btn = QPushButton(tr("🔍  Vorher/Nachher"))
         self.cmp_btn.setToolTip(tr("Schieberegler: schärfstes Einzelfoto gegen das fertige Bild vergleichen."))
@@ -1286,9 +1300,9 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         menu.addAction(pixelmath_action)
         self.tools_btn.setMenu(menu)
 
-        for b in (self.cmp_btn, self.adjust_btn, self.enhance_btn, self.export_btn, self.tools_btn):
-            res_btns.addWidget(b)
-        res_btns.addStretch(1)
+        for index, b in enumerate((self.cmp_btn, self.adjust_btn, self.enhance_btn,
+                                   self.export_btn, self.tools_btn)):
+            res_btns.addWidget(b, index // 3, index % 3)
         rv.addLayout(res_btns)
 
         # Filmstreifen: alle Fotos mit Schärfe-Wert, behalten/verworfen (unter dem Bild)
@@ -1839,6 +1853,8 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
             if self.astro_bias.text().strip():
                 args += ["--bias", self.astro_bias.text().strip()]
             args += ["--astro-engine", self.astro_engine.currentData() or "own"]
+            if self.astro_filter.currentData():
+                args += ["--filter", str(self.astro_filter.currentData())]
             if self.siril_path.text().strip():
                 args += ["--siril-path", self.siril_path.text().strip()]
         if getattr(self, "is_hybrid", False):
@@ -1922,10 +1938,6 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         if self.slabs.value() >= 2:
             args += ["--slabs", str(self.slabs.value())]
         # Astro-Feinwerte (vom Bildstil gesetzt oder von Hand unter „Erweitert")
-        if getattr(self, "astro_filter", None) is not None:
-            _fk = self.astro_filter.currentData()
-            if _fk:
-                args += ["--filter", str(_fk)]
         if getattr(self, "astro_unmix", None) is not None and self.astro_unmix.value() >= 0:
             args += ["--unmix", str(self.astro_unmix.value())]
         if getattr(self, "astro_banding", None) is not None and self.astro_banding.value() > 0:

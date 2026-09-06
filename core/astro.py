@@ -605,21 +605,24 @@ def _compose_affine(A, B):
     return (A3 @ B3)[:2].astype(np.float32)
 
 
-def _tps_refine(fw, refg_out, max_ctrl=150, min_resid=0.5, log=log_print):
+def _tps_refine(fw, refg_out, max_ctrl=150, min_resid=0.5, log=log_print, coverage=None):
     """Lokale (nicht-rigide) Feinregistrierung per Thin-Plate-Spline gegen RESTVERZEICHNUNG —
     Feldkrümmung bei Weitwinkel/Refraktor, atmosphärische Refraktion, leichtes Tilt. Nach der
     globalen Affin-Ausrichtung bleibende Restversätze der Sterne werden als glattes Warp-Feld
     herausgerechnet (Sterne werden über das ganze Feld rund). Nur aktiv, wenn genug Sternpaare
     mit echtem Restversatz da sind — sonst bleibt der Frame unverändert (kein Verschlimmbessern)."""
+    def unchanged():
+        return (fw, coverage) if coverage is not None else fw
+
     try:
         from scipy.interpolate import RBFInterpolator
     except Exception:
-        return fw
+        return unchanged()
     fg = _gray(fw)
     rp = _star_centroids(refg_out, max_stars=max_ctrl)
     ip = _star_centroids(fg, max_stars=max_ctrl * 3)
     if len(rp) < 12 or len(ip) < 12:
-        return fw
+        return unchanged()
     src, dst = [], []
     for r in rp:                                            # ref-Pos -> nächste Frame-Pos
         d = np.linalg.norm(ip - r, axis=1)
@@ -627,11 +630,11 @@ def _tps_refine(fw, refg_out, max_ctrl=150, min_resid=0.5, log=log_print):
         if d[j] < 6.0:
             dst.append(r); src.append(ip[j])
     if len(src) < 12:
-        return fw
+        return unchanged()
     src = np.array(src, np.float32); dst = np.array(dst, np.float32)
     resid = np.linalg.norm(src - dst, axis=1)
     if float(np.median(resid)) < min_resid:
-        return fw                                           # global schon sauber → nichts zu tun
+        return unchanged()                                  # global schon sauber → nichts zu tun
     h, w = fg.shape[:2]
     try:
         rbf = RBFInterpolator(dst, src, kernel="thin_plate_spline", smoothing=1.0)
@@ -641,27 +644,55 @@ def _tps_refine(fw, refg_out, max_ctrl=150, min_resid=0.5, log=log_print):
         mapped = rbf(q).reshape(gs, gs, 2).astype(np.float32)
         mapx = cv2.resize(mapped[..., 0], (w, h))
         mapy = cv2.resize(mapped[..., 1], (w, h))
-        out = cv2.remap(fw, mapx, mapy, interpolation=cv2.INTER_LANCZOS4, borderMode=cv2.BORDER_REFLECT)
+        out = cv2.remap(fw, mapx, mapy, interpolation=cv2.INTER_LANCZOS4,
+                        borderMode=cv2.BORDER_CONSTANT)
+        if coverage is not None:
+            support = cv2.erode(coverage.astype(np.uint8), np.ones((9, 9), np.uint8),
+                                borderType=cv2.BORDER_CONSTANT, borderValue=0)
+            valid = cv2.remap(support.astype(np.float32), mapx, mapy,
+                              interpolation=cv2.INTER_LINEAR,
+                              borderMode=cv2.BORDER_CONSTANT) >= 0.99999
+            out[~valid] = 0
         log(f"      TPS-Feinregistrierung: {len(src)} Sterne, Rest {float(np.median(resid)):.2f}px")
-        return out
+        return (out, valid) if coverage is not None else out
     except Exception:
-        return fw
+        return unchanged()
 
 
 def _warp_and_save(f, M, out_size, op, drizzle, tps_refg=None):
+    import tifffile
+    f = np.asarray(f, dtype=np.float32)
+    if f.size == 0 or not np.isfinite(f).all():
+        raise ForgePixFehler("Registrierung: Aufnahme enthaelt ungueltige Pixelwerte.")
+    coverage = np.ones(f.shape[:2], np.uint8)
     if M is not None:
         if drizzle > 1:
             # VOLLE 2x3-Matrix skalieren (wie in drizzle_stack) — nur die Translation zu skalieren
             # ließe den linearen Teil (Rotation/Skala) unskaliert im drizzle-fachen Canvas
             # (registrierte Frames wären geometrisch falsch).
             M = (drizzle * M).astype(np.float32)
-        f = cv2.warpAffine(f, M, out_size, flags=cv2.INTER_LANCZOS4, borderMode=cv2.BORDER_REFLECT)
+        # Integer translations need no interpolation support outside their pixel.
+        integer_shift = (np.allclose(M[:, :2], np.eye(2), atol=1e-7)
+                         and np.allclose(M[:, 2], np.rint(M[:, 2]), atol=1e-7))
+        support = coverage if integer_shift else cv2.erode(
+            coverage, np.ones((9, 9), np.uint8),
+            borderType=cv2.BORDER_CONSTANT, borderValue=0)
+        coverage = cv2.warpAffine(support.astype(np.float32), M, out_size,
+                                 flags=cv2.INTER_LINEAR,
+                                 borderMode=cv2.BORDER_CONSTANT) >= 0.99999
+        f = cv2.warpAffine(f, M, out_size, flags=cv2.INTER_LANCZOS4,
+                          borderMode=cv2.BORDER_CONSTANT)
     elif drizzle > 1:
         f = cv2.resize(f, out_size, interpolation=cv2.INTER_LANCZOS4)
+        coverage = np.ones(f.shape[:2], bool)
     if tps_refg is not None:
-        f = _tps_refine(f, tps_refg, log=lambda *a: None)
-    imwrite(op, np.clip(f * 65535, 0, 65535).astype(np.uint16),
-                [int(cv2.IMWRITE_TIFF_COMPRESSION), 1])
+        f, coverage = _tps_refine(f, tps_refg, log=lambda *a: None, coverage=coverage)
+    f[~coverage.astype(bool)] = 0
+    mask_path = str(op) + ".coverage.tif"
+    tifffile.imwrite(mask_path, coverage.astype(np.uint8), metadata=None)
+    rgb = f[..., ::-1] if f.ndim == 3 and f.shape[2] == 3 else f
+    tifffile.imwrite(op, rgb, photometric="rgb" if rgb.ndim == 3 else "minisblack",
+                     metadata=None, description="ForgePix registration; coverage=" + os.path.basename(mask_path))
     return op
 
 
@@ -680,7 +711,7 @@ def _ref_path(paths, ref_path=None):
 def register_and_cache(paths, out_dir, dark=None, flat=None, do_register=True,
                        align_mode="shift", cosmetic=False, drizzle=1, detector="ORB",
                        tps=False, ref_path=None, banding=0.0, log=log_print):
-    """Frames kalibrieren + ausrichten, als 16-bit-TIFF in out_dir ablegen.
+    """Frames kalibrieren + ausrichten, als float32-TIFF mit Abdeckungsmaske ablegen.
 
     align_mode: 'shift' = NUR Translation (Nachführung ohne Feldrotation, s. CLI --astro-align),
                 'rotate' = Translation + Feldrotation (Alt-Az). Stern-basiert; phaseCorrelate wird
@@ -712,7 +743,8 @@ def register_and_cache(paths, out_dir, dark=None, flat=None, do_register=True,
     def _prep(i):
         f = read_calibrated(paths[i], dark, flat)
         if f.shape[:2] != ref.shape[:2]:
-            f = cv2.resize(f, (ref.shape[1], ref.shape[0]))
+            raise ForgePixFehler("Aufnahme passt nicht zur Referenzgroesse: %s (%s statt %s)"
+                                 % (paths[i], f.shape[:2], ref.shape[:2]))
         if banding:
             f = fix_banding(f, strength=banding)
         if cosmetic:
@@ -857,13 +889,16 @@ def drizzle_stack(paths, scale=2, pixfrac=0.7, dark=None, flat=None, cosmetic=Fa
     return np.clip(out, 0, 1)
 
 
-def _bg_sigma(f):
+def _bg_sigma(f, coverage=None):
     """A4 — robuste Hintergrund-Streuung σ_bg eines Frames (für die SNR-Gewichtung).
 
     Schätzt das Rauschen NUR aus dem Himmelshintergrund (untere ~80 % der Helligkeit), damit helle
     Sterne/Nebel den Wert nicht aufblähen: σ = 1.4826·MAD der Pixel unterhalb des 80%-Quantils.
     Kleines σ ⇒ rauscharmer/transparenter Frame ⇒ höheres Gewicht."""
-    g = _gray(f).ravel()
+    g = _gray(f)
+    g = g[coverage] if coverage is not None else g.ravel()
+    if not g.size:
+        raise ForgePixFehler("Aufnahme hat keine gueltige Bildabdeckung.")
     thr = float(np.quantile(g, 0.80))
     bgvals = g[g <= thr]
     if bgvals.size < 16:
@@ -930,6 +965,34 @@ def stack(paths, method="sigma", kappa=2.5, normalize=True, local_norm=False,
                 "(Faktoren %.2f–%.2f)" % (t.min(), t.max(), t_ref, skal.min(), skal.max()))
     first = _read_float(paths[0])
     shape = first.shape
+    if first.size == 0 or not np.isfinite(first).all():
+        raise ForgePixFehler("Stacking: ungueltige Pixelwerte in der Aufnahme.")
+    masks = {}
+
+    def valid(p):
+        if p not in masks:
+            import tifffile
+            mask_path = str(p) + ".coverage.tif"
+            if os.path.isfile(mask_path):
+                m = tifffile.memmap(mask_path, mode="r")
+                if (m.shape != shape[:2] or not np.isfinite(m).all()
+                        or not np.isin(m, (0, 1)).all() or not np.any(m)):
+                    raise ForgePixFehler("Ungueltige Registrierungs-Abdeckung: %s" % mask_path)
+                masks[p] = m
+            else:
+                if os.path.splitext(p)[1].lower() in (".tif", ".tiff"):
+                    with tifffile.TiffFile(p) as tif:
+                        if (tif.pages[0].description or "").startswith("ForgePix registration;"):
+                            raise ForgePixFehler("Registrierungs-Abdeckung fehlt: %s" % mask_path)
+                masks[p] = None
+        m = masks[p]
+        return np.ones(shape[:2], bool) if m is None else np.asarray(m, dtype=bool)
+
+    def read_checked(p):
+        f = _read_float(p)
+        if f.shape != shape or not np.isfinite(f).all():
+            raise ForgePixFehler("Stacking: unpassende Bildgroesse oder ungueltige Pixelwerte: %s" % p)
+        return f
 
     # additive Normalisierung + SNR-Sigma in EINEM Vorab-Pass (vorher zwei getrennte
     # Volldurchläufe über alle Dateien). σ_bg ist gegen den späteren Skalar-Offset invariant
@@ -940,25 +1003,29 @@ def stack(paths, method="sigma", kappa=2.5, normalize=True, local_norm=False,
     if normalize or need_w:
         meds = np.zeros(n, np.float32)
         for i, p in enumerate(paths):
-            f = _read_float(p) * skal[i]
-            meds[i] = float(np.median(f))
+            f = read_checked(p) * skal[i]
+            coverage = valid(p)
+            overlap = coverage & valid(paths[0])
+            if not overlap.any():
+                raise ForgePixFehler("Normalisierung: keine gemeinsame Bildabdeckung mit der Referenz.")
+            meds[i] = float(np.median(f[overlap]) - np.median(first[overlap] * skal[0]))
             if need_w:
-                sig_raw[i] = _bg_sigma(f)
+                sig_raw[i] = _bg_sigma(f, coverage)
         if normalize:
             gm = float(np.median(meds))
             offs = gm - meds
     # lokale Normalisierung: örtliche Hintergrund-Fläche statt nur Skalar (gegen Gradienten)
-    ref_surf = _bg_surface(first) if (normalize and local_norm) else None
+    ref_surf = _bg_surface(first, coverage=valid(paths[0])) if (normalize and local_norm) else None
     if ref_surf is not None:
         log("    lokale Normalisierung aktiv (örtlicher Hintergrundabgleich)")
 
     def rd(i, p):
-        f = _read_float(p) * skal[i]
+        f = read_checked(p) * skal[i]
         if ref_surf is not None:
-            return local_normalize(f, ref_surf)
+            return local_normalize(f, ref_surf, coverage=valid(p))
         return f + offs[i]
 
-    # E1 — Banded-IO: registrierte unkomprimierte 16-bit-TIFFs per memmap NUR zeilenweise lesen,
+    # Banded-IO: unkomprimierte uint16/float32-TIFFs per memmap zeilenweise lesen,
     # statt pro Band jede Datei komplett zu dekodieren (100 Frames × 20 Bänder = 2000 Voll-Reads).
     # Achtung Kanalordnung: cv2 schreibt BGR-Arrays als RGB-TIFF → beim memmap-Lesen [..., ::-1].
     # Fallback (FITS/komprimiert/lokale Normalisierung): bisheriger Voll-Read über rd().
@@ -974,14 +1041,19 @@ def stack(paths, method="sigma", kappa=2.5, normalize=True, local_norm=False,
                 try:
                     import tifffile
                     m = tifffile.memmap(p, mode="r")
-                    if m.ndim == 3 and m.shape[2] == 3 and m.dtype == np.uint16:
+                    if (m.shape == shape and m.ndim == 3 and m.shape[2] == 3
+                            and (m.dtype == np.uint16 or m.dtype == np.float32)):
                         mm = m
                 except Exception:
                     mm = None
             _mm[p] = mm
         if mm is None:
             return rd(i, p)[y0:y1]
-        return mm[y0:y1, :, ::-1].astype(np.float32) / 65535.0 * skal[i] + offs[i]
+        band = mm[y0:y1, :, ::-1].astype(np.float32)
+        if not np.isfinite(band).all():
+            raise ForgePixFehler("Stacking: ungueltige Pixelwerte: %s" % p)
+        divisor = 65535.0 if mm.dtype == np.uint16 else 1.0
+        return band / divisor * skal[i] + offs[i]
 
     # A4 — Per-Frame-SNR-Gewichte (1/σ_bg²), robust normiert auf Mittel 1. Bei weight=False alle 1.
     w = np.ones(n, np.float32)
@@ -990,7 +1062,7 @@ def stack(paths, method="sigma", kappa=2.5, normalize=True, local_norm=False,
         # normalisierten Frames gemessen werden (Flächen-Abgleich ändert die Streuung) —
         # dieser (seltene) Pfad liest wie bisher ein zweites Mal.
         if ref_surf is not None:
-            sig = np.array([_bg_sigma(rd(i, p)) for i, p in enumerate(paths)], np.float32)
+            sig = np.array([_bg_sigma(rd(i, p), valid(p)) for i, p in enumerate(paths)], np.float32)
         else:
             sig = sig_raw
         w = 1.0 / (sig * sig)
@@ -1006,23 +1078,31 @@ def stack(paths, method="sigma", kappa=2.5, normalize=True, local_norm=False,
                 # rows_of(): memmap-Zeilenlesen (E1) inkl. Normalisierung — lokale
                 # Normalisierung läuft über den rd()-Fallback (braucht das Vollbild)
                 band = np.stack([rows_of(i, p, y, y + rows) for i, p in enumerate(paths)])
-                res[y:y + rows] = np.median(band, axis=0)
+                covered = np.stack([valid(p)[y:y + rows] for p in paths])[..., None]
+                import warnings
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", RuntimeWarning)
+                    res[y:y + rows] = np.nan_to_num(np.nanmedian(
+                        np.where(covered, band, np.nan), axis=0), nan=0.0)
                 log(f"    median Zeilen {y}/{shape[0]}")
-            return np.clip(res, 0, 1)
+            return res
         acc = np.zeros(shape, np.float32) if method == "average" else None
-        wacc = 0.0
-        mx = np.zeros(shape, np.float32) if method == "max" else None
+        wacc = np.zeros(shape[:2] + (1,), np.float32)
+        mx = np.full(shape, -np.inf, np.float32) if method == "max" else None
         for i, p in enumerate(paths):
             f = rd(i, p)
+            covered = valid(p)[..., None]
             if method == "average":
-                acc += f * w[i]; wacc += w[i]            # gewichtetes Mittel (w[i]=1 → altes Mittel)
+                acc += np.where(covered, f * w[i], 0); wacc += covered * w[i]
             else:
-                mx = np.maximum(mx, f)
+                mx = np.maximum(mx, np.where(covered, f, -np.inf))
             log(f"    {method} {i + 1}/{n}")
             if preview_cb and (i % _pv_every == 0 or i == n - 1):
-                preview_cb(np.clip((acc / max(wacc, 1e-6)) if method == "average" else mx, 0, 1),
+                preview_cb(np.clip((acc / np.maximum(wacc, 1e-6)) if method == "average"
+                                   else np.where(np.isfinite(mx), mx, 0), 0, 1),
                            i + 1, n)
-        return np.clip(acc / max(wacc, 1e-6) if method == "average" else mx, 0, 1)
+        return (acc / np.maximum(wacc, 1e-6) if method == "average"
+                else np.where(np.isfinite(mx), mx, 0)).astype(np.float32)
 
     if method == "linearfit":
         # Linear-Fit-Clipping (PixInsight-Stil): pro Pixel die sortierten Werte über die Frames
@@ -1035,30 +1115,40 @@ def stack(paths, method="sigma", kappa=2.5, normalize=True, local_norm=False,
         xm = x.mean(); xv = float(((x - xm) ** 2).sum()) + 1e-9
         for y in range(0, shape[0], rows):
             band = np.stack([rows_of(i, p, y, y + rows) for i, p in enumerate(paths)])  # (n,r,w,c)
-            v = np.sort(band, axis=0)
-            mask = np.ones_like(v, dtype=bool)
+            covered = np.stack([valid(p)[y:y + rows] for p in paths])[..., None]
+            v = np.sort(np.where(covered, band, np.inf), axis=0)
+            supported = np.isfinite(v)
+            v = np.where(supported, v, 0)
+            mask = supported.copy()
             for _ in range(2):                       # 2 Iterationen reichen praktisch
                 w_ = mask.astype(np.float32)
                 sw = np.clip(w_.sum(axis=0), 1.0, None)
+                xx = x[:, None, None, None]
+                xm = (xx * w_).sum(axis=0) / sw
+                xv = (((xx - xm) ** 2) * w_).sum(axis=0) + 1e-9
                 ym = (v * w_).sum(axis=0) / sw
-                slope = ((x[:, None, None, None] - xm) * (v - ym) * w_).sum(axis=0) / xv
-                fit = slope * (x[:, None, None, None] - xm) + ym
+                slope = ((xx - xm) * (v - ym) * w_).sum(axis=0) / xv
+                fit = slope * (xx - xm) + ym
                 resid = v - fit
                 sig = np.sqrt((resid * resid * w_).sum(axis=0) / sw) + 1e-9
-                mask = np.abs(resid) <= kappa * sig
+                mask = supported & (np.abs(resid) <= kappa * sig)
             w_ = mask.astype(np.float32)
             res[y:y + rows] = (v * w_).sum(axis=0) / np.clip(w_.sum(axis=0), 1.0, None)
             log(f"    linearfit-Rejection Zeilen {y}/{shape[0]}")
-        return np.clip(res, 0, 1)
+        return res
 
     # sigma / winsor: Pass 1 Mittel+Std, Pass 2 Rejection
     s = np.zeros(shape, np.float32); s2 = np.zeros(shape, np.float32)
+    sample_count = np.zeros(shape[:2] + (1,), np.float32)
     for i, p in enumerate(paths):
         f = rd(i, p)
-        s += f; s2 += f * f
+        covered = valid(p)[..., None]
+        s += np.where(covered, f, 0); s2 += np.where(covered, f * f, 0)
+        sample_count += covered
         log(f"    Statistik {i + 1}/{n}")
-    mean = s / n
-    std = np.sqrt(np.maximum(s2 / n - mean * mean, 0))
+    count = np.maximum(sample_count, 1)
+    mean = s / count
+    std = np.sqrt(np.maximum(s2 / count - mean * mean, 0))
     lo = mean - kappa * std; hi = mean + kappa * std
 
     if method in ("sigma", "winsor"):
@@ -1077,7 +1167,7 @@ def stack(paths, method="sigma", kappa=2.5, normalize=True, local_norm=False,
             cnt = np.zeros(shape, np.float32)
             for i, p in enumerate(paths):
                 f = rd(i, p)
-                m = ((f >= lo) & (f <= hi)).astype(np.float32)
+                m = ((f >= lo) & (f <= hi) & valid(p)[..., None]).astype(np.float32)
                 s += f * m; s2 += f * f * m; cnt += m
             cn = np.clip(cnt, 1.0, None)
             mean = s / cn
@@ -1087,16 +1177,17 @@ def stack(paths, method="sigma", kappa=2.5, normalize=True, local_norm=False,
     acc = np.zeros(shape, np.float32); cnt = np.zeros(shape, np.float32)
     for i, p in enumerate(paths):
         f = rd(i, p)
+        covered = valid(p)[..., None]
         if method == "winsor":
             f = np.clip(f, lo, hi)
-            acc += f * w[i]; cnt += w[i]                 # gewichtet (w[i]=1 → altes Verhalten)
+            acc += np.where(covered, f * w[i], 0); cnt += covered * w[i]
         else:  # sigma: Ausreißer verwerfen
-            m = (f >= lo) & (f <= hi)
+            m = (f >= lo) & (f <= hi) & covered
             acc += np.where(m, f * w[i], 0); cnt += m * w[i]
         log(f"    {method}-Rejection {i + 1}/{n}")
         if preview_cb and (i % _pv_every == 0 or i == n - 1):
             preview_cb(np.clip(acc / np.clip(cnt, 1e-6, None), 0, 1), i + 1, n)
-    return np.clip(acc / np.clip(cnt, 1e-6, None), 0, 1)
+    return acc / np.clip(cnt, 1e-6, None)
 
 
 def bin_image(f, factor=2):
@@ -2167,23 +2258,34 @@ def remove_green_cast(f, amount=1.0):
     return out
 
 
-def _bg_surface(f, ds=8):
+def _bg_surface(f, ds=8, coverage=None):
     """Glatte Hintergrund-/Gradienten-Fläche eines Frames (grob downsamplen + stark glätten →
     Sterne mitteln sich weg). Für die lokale Normalisierung."""
     g = f if f.ndim == 2 else f.mean(2)
     h, w = g.shape
     sw, sh = max(8, w // ds), max(8, h // ds)
-    small = cv2.resize(g.astype(np.float32), (sw, sh), interpolation=cv2.INTER_AREA)
+    g = g.astype(np.float32)
+    if coverage is not None:
+        mask = np.asarray(coverage, dtype=np.float32)
+        numerator = cv2.resize(g * mask, (sw, sh), interpolation=cv2.INTER_AREA)
+        denominator = cv2.resize(mask, (sw, sh), interpolation=cv2.INTER_AREA)
+        sigma = max(2.0, sw / 10.0)
+        numerator = cv2.GaussianBlur(numerator, (0, 0), sigma)
+        denominator = cv2.GaussianBlur(denominator, (0, 0), sigma)
+        small = np.divide(numerator, denominator, out=np.zeros_like(numerator),
+                          where=denominator > 1e-6)
+        return cv2.resize(small, (w, h), interpolation=cv2.INTER_LINEAR)
+    small = cv2.resize(g, (sw, sh), interpolation=cv2.INTER_AREA)
     small = cv2.GaussianBlur(small, (0, 0), max(2.0, sw / 10.0))
     return cv2.resize(small, (w, h), interpolation=cv2.INTER_LINEAR)
 
 
-def local_normalize(frame, ref_surface):
+def local_normalize(frame, ref_surface, coverage=None):
     """Frame **örtlich** an die Referenz-Hintergrundfläche angleichen (statt nur per Skalar-Offset).
     Da die Frames registriert sind, hebt sich der gemeinsame Nebel in (ref_surf − frame_surf) auf —
     übrig bleibt der **örtliche Hintergrund-/Gradienten-Unterschied**, der korrigiert wird. Das macht
     die Ausreißer-Rejection erst korrekt (gegen Gradienten & Mehrfach-Sessions)."""
-    corr = ref_surface - _bg_surface(frame)
+    corr = ref_surface - _bg_surface(frame, coverage=coverage)
     return frame + (corr[..., None] if frame.ndim == 3 else corr)
 
 
