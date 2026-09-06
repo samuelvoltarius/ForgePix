@@ -105,6 +105,11 @@ kalibriert und debayert werden; JPEG-Vorschauen werden nicht angenommen.
 Die mitgelieferten Modelle laufen lokal mit ONNX Runtime, ohne Server oder
 externes Astroprogramm.
 
+Windows-x64-Pakete verwenden automatisch eine geeignete Grafikkarte über
+DirectML. Im Dialog kannst du auch **Nur Prozessor** wählen. Backend und ein
+möglicher CPU-Rückfall werden angezeigt; weitere Plattformen und Voraussetzungen
+stehen unter [GPU-Beschleunigung](docs/GPU_ACCELERATION.md).
+
 Diese Modelle sind **experimentell**, verändern Pixelwerte und können schwache
 Strukturen, Helligkeiten oder Sternformen beeinflussen. Die Automatik aktiviert
 sie nie selbstständig. Ergebnisse werden separat als Float32-FITS und TIFF

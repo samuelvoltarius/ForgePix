@@ -86,6 +86,29 @@ does not demonstrate parity with GraXpert, BlurXTerminator or StarXTerminator,
 nor generalization across real camera families, filters and telescopes. Inspect
 per-model reports instead of assuming a larger/newer experiment is better.
 
+## Further grouped-noise refinement (6,000 steps)
+
+The later `refine_noise_groups` run completed on NVIDIA GB10 / CUDA 12.8 in
+439.6 seconds. It used independent correlated-noise amplitudes and Gaussian
+scales, eight noise classes, and 24 separate synthetic/M13/M16 development
+groups. Each group was gated against the unchanged mono v2 parent on pixel
+error, absolute image bias and local means. Device/library/source/checkpoint
+identity and the pre-reserved final seed are recorded in the v3 reports.
+
+The candidate is **rejected**. On the unchanged evaluator's 128 fresh scenes
+(seed 9518063), correlated-noise MSE improves 3.83% and low-noise MSE 42.27%,
+but read-dominated error worsens 18.91%, shot-dominated error 8.41%, faint-region
+MSE 24.96% and absolute image bias 20.42%. Aggregate MSE is 2.07% worse than
+the bundled mono parent. 44 development metrics and six final gates fail.
+The bundled models remain unchanged; the research ONNX export passed numerical
+equivalence but is kept outside application assets. Reports are in
+`training/reports/denoise-noise-groups-v3-001-*.json`.
+
+Next experiments should preserve bias and faint structure while retaining
+read/shot performance. Do not relax these gates or reuse the inspected seed as
+an untouched final test. Faster GPU inference is separate from model-quality
+improvement.
+
 ## Real-scene adaptation result (2026-09-06)
 
 `data-env/bin/python -m training.train_fits` was executed on the Spark.

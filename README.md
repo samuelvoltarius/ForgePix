@@ -102,6 +102,11 @@ then explicitly enable experimental processing. Raw Bayer frames must first be
 calibrated and debayered; JPEG previews are not accepted. The bundled models run
 locally with ONNX Runtime and need no server or external astronomy application.
 
+Windows x64 packages automatically prefer a compatible graphics processor via
+DirectML. The dialog also offers **Processor only**. The actual backend and any
+CPU fallback are shown; see [GPU acceleration](docs/GPU_ACCELERATION.md) for
+platform scope and requirements.
+
 These models are **experimental**, change pixel values and may alter faint
 structures, flux or star shapes. They are never enabled by automatic processing.
 Results are written separately as Float32 FITS and TIFF; before/after previews

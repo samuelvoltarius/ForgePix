@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "id": "forgepix-denoise-mono-v2",
+  "task": "denoise",
+  "model_file": "model.onnx",
+  "sha256": "b1850ca38ec97493ac6547925f7c6cd67a004ee0c652504906ec3920373ec404",
+  "channels": 1,
+  "tile_size": 256,
+  "halo": 32,
+  "normalization": "affine_percentile_v1",
+  "output": "complete_target",
+  "status": "experimental",
+  "release_approved": false,
+  "license": "MIT",
+  "weights_origin": "Trained by ForgePix; no third-party pretrained weights",
+  "architecture": "NAFNet mono width16; upstream licence retained",
+  "upstream": "https://github.com/megvii-research/NAFNet/tree/2b4af71ebe098a92a75910c233a3965a3e93ede4",
+  "checkpoint_sha256": "b2b661b49974401f7228a96b8ed9c5eb591aec40514cf3092848d26d2475c364",
+  "photometry_validated": false,
+  "onnx_opset": 17,
+  "export_max_abs_errors": [
+    2.034998033195734e-06,
+    1.4901161193847656e-07,
+    1.5497207641601562e-06
+  ],
+  "limitations": "Observed HST scene targets retain their noise; no independent clean/noisy exposures, real-camera qualification, full-image tiling qualification or automatic promotion."
+}

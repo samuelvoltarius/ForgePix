@@ -1,0 +1,15 @@
+{
+  "training_process_completed": true,
+  "training_lock_exists": false,
+  "files": {
+    "training/refine_noise_groups.py": "df582533953804c907044e433144db4c1ddf40726dbb5d8147bc0db4707ace66",
+    "training/evaluate_noise_refinement.py": "758140ddd11a5da949f3b7f6ba7876c6b8c9a7abbfead3b65c12046af9812849",
+    "training/evaluate_models.py": "2253078f5a0f5328eccdbf4a070e9941893c902a888264dc92289319557fa556",
+    "training/export_model.py": "83f55e8d61ad715ea2871a04da58662823aef21493b1b7de9bd9624919d8b6fe",
+    "runs/denoise-noise-groups-v3-001/candidate.pt": "b2b661b49974401f7228a96b8ed9c5eb591aec40514cf3092848d26d2475c364",
+    "runs/denoise-noise-groups-v3-001/checkpoint.pt": "e2c5b901b8761908edb9cd23d3d49ee4302b8b357a5dfad4a57eca446857e417",
+    "runs/denoise-noise-groups-v3-001/research-export/model.onnx": "b1850ca38ec97493ac6547925f7c6cd67a004ee0c652504906ec3920373ec404"
+  },
+  "export_graph_and_onnx_pytorch_equivalence_passed": true,
+  "bundled_models_changed": false
+}

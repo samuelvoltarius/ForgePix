@@ -343,3 +343,46 @@ Final evaluator seed 9518063 was reserved before optimization. Training code
 records the actual CUDA device and source/checkpoint hashes. Models in assets
 remain unchanged; evaluation may reject this candidate and cannot silently
 replace the current model. Reports follow after this finite run completes.
+
+## Verified GPU milestone 321259b and completed noise-group research
+
+Exact runtime 321259b7a1272b92e7f8e8a489f5fa9efdf0dbde passed 515 tests on
+Windows/macOS/Linux (34037462235) and all three packaged builds (34037505892).
+The final two regressions also prevent backend attempts after cancellation during
+native initialization. A dispatch that briefly resolved the old branch head was
+cancelled; only the verified 321259b build is used for the following artifact.
+
+Same-runtime full M27 FITS benchmark (ONNX 1.24.4, same models, 50% strength,
+sequential CPU and DirectML runs, source SHA256/mtime/size unchanged): denoise
+101.978 -> 6.331 s (16.1x), background 2.400 -> 2.347 s (effectively unchanged),
+deblur 105.482 -> 6.085 s (17.3x), starless 100.370 -> 7.292 s (13.8x).
+Times include source reading and scientific export, excluding GUI previews.
+Maximum CPU/GPU absolute pixel difference across the four full-size outputs is
+8.940697e-8; all predefined numerical comparisons passed. These are one-computer,
+one-image measurements, not general performance or model-quality guarantees.
+Evidence: Codex outputs/ForgePix-M27-CPU-GPU-321259b.json; active runtime source
+hash recorded. Pending worktree files during this run were training reports.
+
+Actual MainWindow menu/dialog/worker/comparison acceptance on the same full M27
+FITS passed all four tools using the real Auto widget, selecting DirectML every
+time without CPU fallback. Total 39.328 s, finite pixel-identical Float32 FITS
+and TIFF, source unchanged. Report: ForgePix-M27-GPU-GUI-321259b.json.
+Downloaded Windows archive: 190513709 bytes, SHA256
+d7c8ae89e2e6a39dad8ac674f4a40168a01f931fb9b4bc74d5c772b32e557b91.
+The archive, all bundled model hashes and locally extracted executable passed.
+Local packaged smoke explicitly required DmlExecutionProvider for every model;
+GUI startup, focus stacking and all four actual FITS AI exports succeeded.
+Artifact/evidence: Codex outputs/ForgePix-321259b-Windows.
+
+The separate 6,000-step denoiser experiment completed in 439.6 s on NVIDIA GB10,
+CUDA 12.8. No training process/lock remains. Fresh 128-scene evaluation improves
+correlated-noise MSE 3.83% and low-noise MSE 42.27%, but aggregate error worsens
+2.07%, read/shot performance regresses and faint-region MSE rises 24.96%.
+44 development metrics and six final gates fail: candidate rejected, bundled
+models unchanged. Actual source/checkpoint/device/seed/export evidence is in the
+six denoise-noise-groups-v3-001 JSON files. Research ONNX export passed equivalence
+and remains outside app assets. Next research must preserve bias/faint structures
+and read/shot performance; inspected seed 9518063 is no longer an untouched test.
+
+This evidence/documentation update does not change the tested runtime. Version
+remains 1.27.1-beta; GPU speed does not establish camera-general AI or RC parity.

@@ -5,6 +5,11 @@ No third-party pretrained weights, GraXpert/RC Astro services or external
 astronomy executables are required. They remain explicit research options and
 are not selected by automatic processing.
 
+When an AI tool is explicitly started, its default compute selection prefers an
+available GPU backend and can recover on CPU. This does not enable the AI tool in
+the ordinary automatic processing workflow. See
+[GPU acceleration](../../docs/GPU_ACCELERATION.md) for package/platform details.
+
 Each folder contains a hash-checked model/manifest, training report, independent
 synthetic evaluation and licence notices. Read the comparison against the earlier
 parent: newer weights are not automatically better. The model ID denotes its
