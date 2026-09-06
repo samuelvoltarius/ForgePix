@@ -139,15 +139,23 @@ def read_calibrated(path, dark=None, flat=None):
 
 
 def calibrate(f, dark=None, flat=None):
+    f = np.asarray(f, dtype=np.float32)
+    if f.size == 0 or not np.isfinite(f).all():
+        raise ForgePixFehler("Die Aufnahme enthaelt ungueltige Pixelwerte.")
     for name, master in (("Dark", dark), ("Flat", flat)):
         if master is not None and master.shape != f.shape:
             raise ForgePixFehler("%s-Master passt nicht zur Aufnahme: %s statt %s"
                                  % (name, master.shape, f.shape))
+        if master is not None and not np.isfinite(master).all():
+            raise ForgePixFehler("%s-Master enthaelt ungueltige Pixelwerte." % name)
     out = f
     if dark is not None:
         out = out - dark
     if flat is not None:
-        fn = flat / (float(flat.mean()) + 1e-6)
+        mean = float(np.mean(flat, dtype=np.float64))
+        if mean <= 0:
+            raise ForgePixFehler("Das Flat-Master ist leer oder zu dunkel. Bitte ein gueltiges Flat verwenden.")
+        fn = flat / mean
         out = out / np.clip(fn, 0.2, None)
     return np.clip(out, 0, None)
 

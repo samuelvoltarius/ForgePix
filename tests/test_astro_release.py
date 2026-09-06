@@ -79,3 +79,22 @@ class AstroRelease(unittest.TestCase):
         from constants import ForgePixFehler
         with self.assertRaisesRegex(ForgePixFehler, "Master passt nicht"):
             astro.calibrate(np.zeros((20,20)), np.zeros((10,10)))
+
+    def test_invalid_masters_fail_instead_of_poisoning_stack(self):
+        from constants import ForgePixFehler
+        light = np.full((8, 8), .2, np.float32)
+        for master in (np.full_like(light, np.nan), np.full_like(light, np.inf)):
+            with self.assertRaisesRegex(ForgePixFehler, "Dark-Master"):
+                astro.calibrate(light, dark=master)
+            with self.assertRaisesRegex(ForgePixFehler, "Flat-Master"):
+                astro.calibrate(light, flat=master)
+        with self.assertRaisesRegex(ForgePixFehler, "Flat-Master ist leer"):
+            astro.calibrate(light, flat=np.zeros_like(light))
+
+    def test_unsigned_calibration_does_not_wrap_and_preserves_sources(self):
+        light = np.full((8, 8), 10, np.uint16)
+        dark = np.full_like(light, 20)
+        result = astro.calibrate(light, dark=dark)
+        np.testing.assert_array_equal(result, 0)
+        np.testing.assert_array_equal(light, 10)
+        np.testing.assert_array_equal(dark, 20)

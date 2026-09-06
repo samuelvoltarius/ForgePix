@@ -87,3 +87,21 @@ class AstroUI(unittest.TestCase):
             finally:
                 window.deleteLater()
                 type(self).app.processEvents()
+
+    def test_equipment_geometry_and_saved_values(self):
+        from ui.equipment_dialog import EquipmentDialog
+        with tempfile.TemporaryDirectory() as folder, patch.dict(os.environ, {
+                "FORGEPIX_SETTINGS_FILE": str(Path(folder) / "settings.ini")}):
+            dialog = EquipmentDialog()
+            dialog.values["pitch"].setValue(4)
+            dialog.values["focal"].setValue(1000)
+            dialog.values["factor"].setValue(.5)
+            dialog.binning.setValue(2)
+            self.assertIn("3.300", dialog.summary.text())
+            dialog.save()
+            restored = EquipmentDialog()
+            self.assertEqual(restored.values["factor"].value(), .5)
+            self.assertEqual(restored.binning.value(), 2)
+            dialog.deleteLater()
+            restored.deleteLater()
+            type(self).app.processEvents()

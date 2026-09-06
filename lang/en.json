@@ -686,5 +686,15 @@
   "Berechnen und speichern": "Calculate and save",
   "Bitte eine neue Ausgabedatei wählen.": "Please choose a new output file.",
   "Automatisch verarbeiten": "Process automatically",
-  "Für weitere Einstellungen oben in den Profi-Modus wechseln.": "Switch to Pro mode above for more settings."
+  "Für weitere Einstellungen oben in den Profi-Modus wechseln.": "Switch to Pro mode above for more settings.",
+  "Ausrüstung": "Equipment",
+  "Wähle Vorgaben oder trage eigene Werte ein. Die Angaben beschreiben deine Optik; sie ersetzen keine Dark- oder Flat-Kalibrierung.": "Choose presets or enter custom values. These describe your optics; they do not replace dark or flat calibration.",
+  "Kamera / Sensor": "Camera / sensor",
+  "Teleskop": "Telescope",
+  "Pixelgröße": "Pixel size",
+  "Öffnung": "Aperture",
+  "Brennweite": "Focal length",
+  "Reducer / Barlow": "Reducer / Barlow",
+  "Aufnahme-Binning": "Capture binning",
+  "Effektive Brennweite: {focal:.1f} mm · f/{ratio:.2f}\nBildmaßstab: {scale:.3f} Bogensekunden pro Pixel": "Effective focal length: {focal:.1f} mm · f/{ratio:.2f}\nImage scale: {scale:.3f} arcseconds per pixel"
 }

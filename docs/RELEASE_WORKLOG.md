@@ -1,5 +1,16 @@
 # Active ForgePix release work
 
+Latest RC work: calibration now converts integer input to float before dark
+subtraction (avoids unsigned wraparound), rejects non-finite inputs/masters and
+empty/non-positive-mean flats. Added numerical regression tests.
+
+Equipment is now reachable from the main header. The dialog exposes existing
+camera/telescope presets, custom pixel pitch/aperture/focal length, reducer/Barlow
+factor and capture binning with persisted values and computed image scale.
+This is an optical setup calculator: it does not override FITS headers or provide
+sensor noise curves/calibration matching. These remain separate acceptance work.
+Visually checked the dialog and tested reducer/binning geometry and persistence.
+
 ## 2026-09-06 active RC fixes
 
 Actual M27 GUI run exposed a missing `_guess_from_folder` method in the FITS start

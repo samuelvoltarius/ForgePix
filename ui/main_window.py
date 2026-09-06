@@ -131,6 +131,9 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         setup_btn.setToolTip(tr("Sprache, KI-Server und weitere Einstellungen"))
         setup_btn.clicked.connect(self.settings_dialog.show)
         header.addWidget(setup_btn)
+        equipment_btn = QPushButton(tr("Ausrüstung"))
+        equipment_btn.clicked.connect(self.open_equipment)
+        header.addWidget(equipment_btn)
         outer.addLayout(header)
         # Statuszeile statt nur grünem Strich — zeigt echten Fortschritt
         self.status_bar = QFrame(); self.status_bar.setFixedHeight(26)
@@ -2519,6 +2522,10 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         self._tool_worker = wk                # Referenz halten (GC)
         wk.start()
         busy.exec()
+
+    def open_equipment(self):
+        from ui.equipment_dialog import EquipmentDialog
+        EquipmentDialog(self).exec()
 
     def open_pixelmath(self):
         """Evaluate native image expressions on explicitly selected linear files."""
