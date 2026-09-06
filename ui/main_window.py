@@ -2753,8 +2753,12 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, ProjectM
         dialog.setWindowTitle(tr("PixelMath: Bildformeln"))
         dialog.resize(640, 320)
         layout = QVBoxLayout(dialog)
-        description = QLabel(tr("Bilder als A, B oder C verwenden. Beispiel: 0.8*A + 0.2*B. "
-                                "Alle Bilder müssen gleich groß und bereits ausgerichtet sein."))
+        description = QLabel(tr(
+            "Bilder als A, B oder C verwenden. Beispiel: 0.8*A + 0.2*B. "
+            "Farbkanäle: blau(A), gruen(A), rot(A), zusammensetzen mit rgb(b, g, r), "
+            "Helligkeit mit grau(A). Beispiele: gruen(A)*0.9 dämpft einen Grünstich, "
+            "rgb(OIII, OIII, Ha) ist HOO von Hand. "
+            "Alle Bilder müssen gleich groß und bereits ausgerichtet sein."))
         description.setWordWrap(True)
         layout.addWidget(description)
         fields = {}

@@ -8,9 +8,47 @@ _BINARY = {ast.Add: operator.add, ast.Sub: operator.sub, ast.Mult: operator.mul,
            ast.Div: operator.truediv, ast.Pow: operator.pow}
 _COMPARE = {ast.Lt: operator.lt, ast.LtE: operator.le, ast.Gt: operator.gt,
             ast.GtE: operator.ge, ast.Eq: operator.eq, ast.NotEq: operator.ne}
+def _kanal(bild, index):
+    """Einen Farbkanal als eigenes Bild, in derselben Form wie die Eingabe.
+
+    Das Ergebnis behaelt drei Kanaele (alle gleich), damit sich Kanal- und Vollbildausdruecke
+    frei mischen lassen: `rot(A) - blau(A)` und `A * 2` haben dieselbe Form. Ein Graubild
+    kommt unveraendert zurueck.
+    """
+    a = np.asarray(bild)
+    if a.ndim != 3 or a.shape[2] != 3:
+        return a
+    ebene = a[..., index]
+    return np.repeat(ebene[..., None], 3, axis=2)
+
+
+def _mische(b, g, r):
+    """Drei Kanalbilder wieder zu einem Farbbild zusammensetzen (BGR-Reihenfolge)."""
+    def eben(x, i):
+        a = np.asarray(x)
+        return a[..., i] if a.ndim == 3 and a.shape[2] == 3 else a
+    return np.stack([eben(b, 0), eben(g, 1), eben(r, 2)], axis=-1)
+
+
+# Kanalzugriff ueber FUNKTIONEN statt ueber Indizes: `A[..., 0]` wuerde Indexierung im Ausdruck
+# erlauben, und die bleibt bewusst gesperrt (sie ist der uebliche Weg, aus so einem Rechner
+# auszubrechen). `blau(A)` leistet dasselbe und ist ausserdem lesbar.
+#
+# Warum es das ueberhaupt braucht: kanalweise Arbeit ist in der Astrofotografie der Normalfall
+# — Gruenstich daempfen, Ha nach Rot legen, OIII auf Blau und Gruen aufteilen. Ohne Kanalzugriff
+# konnte der Rechner nur ganze Bilder skalieren und war damit fuer den haeufigsten Zweck blind.
 _FUNCTIONS = {"abs": (np.abs, 1), "sqrt": (np.sqrt, 1), "log": (np.log, 1),
               "exp": (np.exp, 1), "min": (np.minimum, 2), "max": (np.maximum, 2),
-              "clip": (np.clip, 3), "where": (np.where, 3)}
+              "clip": (np.clip, 3), "where": (np.where, 3),
+              "blau": (lambda x: _kanal(x, 0), 1),
+              "gruen": (lambda x: _kanal(x, 1), 1),
+              "rot": (lambda x: _kanal(x, 2), 1),
+              "blue": (lambda x: _kanal(x, 0), 1),
+              "green": (lambda x: _kanal(x, 1), 1),
+              "red": (lambda x: _kanal(x, 2), 1),
+              "grau": (lambda x: np.repeat(np.asarray(x).mean(axis=2)[..., None], 3, axis=2)
+                       if np.asarray(x).ndim == 3 else np.asarray(x), 1),
+              "rgb": (lambda b, g, r: _mische(b, g, r), 3)}
 
 
 def evaluate(expression, images):
@@ -19,6 +57,12 @@ def evaluate(expression, images):
     Outputs preserve values outside [0,1]. Inputs are never mutated. Names must
     be identifiers, for example Ha, OIII and SII. Functions are element-wise.
     Attribute access, indexing, imports and arbitrary calls are unsupported.
+
+    Farbkanaele ueber `blau(A)`, `gruen(A)`, `rot(A)` (englisch ebenso), zusammensetzen mit
+    `rgb(b, g, r)`, Helligkeit mit `grau(A)`. Beispiele:
+        gruen(A) * 0.9                      Gruenstich daempfen
+        rgb(OIII, OIII, Ha)                 HOO von Hand
+        A - max(gruen(A) - max(rot(A), blau(A)), 0)   SCNR-artig
     """
     if not isinstance(expression, str) or len(expression) > 4096:
         raise ValueError("Die Bildformel fehlt oder ist zu lang.")

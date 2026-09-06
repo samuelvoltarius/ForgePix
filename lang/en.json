@@ -138,7 +138,7 @@
   "Bilder": "Images",
   "Bilder (grün = verwendet, rot = aussortiert):": "Images (green = used, red = discarded):",
   "Bilder ({k} verwendet, {r} aussortiert) — grün = verwendet, rot = raus, klicken zum Ansehen:": "Images ({k} used, {r} rejected) — green = used, red = out, click to view:",
-  "Bilder als A, B oder C verwenden. Beispiel: 0.8*A + 0.2*B. Alle Bilder müssen gleich groß und bereits ausgerichtet sein.": "Use images as A, B or C. Example: 0.8*A + 0.2*B. Images must have the same dimensions and already be aligned.",
+  "Bilder als A, B oder C verwenden. Beispiel: 0.8*A + 0.2*B. Farbkanäle: blau(A), gruen(A), rot(A), zusammensetzen mit rgb(b, g, r), Helligkeit mit grau(A). Beispiele: gruen(A)*0.9 dämpft einen Grünstich, rgb(OIII, OIII, Ha) ist HOO von Hand. Alle Bilder müssen gleich groß und bereits ausgerichtet sein.": "Use images as A, B or C. Example: 0.8*A + 0.2*B. Colour channels: blau(A), gruen(A), rot(A) (blue/green/red also work), recombine with rgb(b, g, r), luminance with grau(A). Examples: gruen(A)*0.9 damps a green cast, rgb(OIII, OIII, Ha) is HOO by hand. All images must be the same size and already registered.",
   "Bilder konnten nicht geladen werden.": "Images could not be loaded.",
   "Bilder pro Reihe": "Photos per bracket",
   "Bildmaßstab": "Pixel scale",
