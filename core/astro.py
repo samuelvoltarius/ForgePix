@@ -66,8 +66,12 @@ def _read_float(path, debayer=True):
         fits = require_astropy("FITS-Dateien lesen")
         with fits.open(path) as hdul:
             hdu = hdul[0]
+            if hdu.data is None:
+                raise ValueError(f"FITS enthält kein Bild im primären HDU: {path}")
             d = np.asarray(hdu.data).astype(np.float32)
             bayer = str(hdu.header.get("BAYERPAT", "")).strip().upper()
+        if not debayer and (d.size == 0 or not np.isfinite(d).all()):
+            raise ValueError(f"Ungültige FITS-Sensordaten (leer, NaN oder Inf): {path}")
         if d.ndim == 3 and d.shape[0] in (3, 4):     # (C,H,W) -> (H,W,C)
             d = np.moveaxis(d[:3], 0, -1)
         # OSC-Kameras (z. B. Seestar/ASI) liefern Bayer-Rohdaten als 2D-FITS -> debayern = Farbe.

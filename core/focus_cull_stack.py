@@ -1691,8 +1691,11 @@ def _load_astro_calibration(input_dir, args, paths):
             return None
         if os.path.isdir(spec):
             ims = list_images(spec)
+            fits_ims = [p for p in ims if os.path.splitext(p)[1].lower() in FITS_EXTS]
+            if fits_ims:
+                ims = fits_ims
             if not ims:
-                return None
+                raise ValueError(f"Keine Kalibrierbilder im {name}-Ordner: {spec}")
             print(f"  Master-{name} aus {len(ims)} Frames")
             return astro._master(ims, raw=True)
         print(f"  Master-{name}: {os.path.basename(spec)}")
@@ -1707,8 +1710,10 @@ def _load_astro_calibration(input_dir, args, paths):
         #   Vignettierungs-Korrektur (Flat-Signal = Flat − Bias).
         # - Ohne Dark den Bias direkt vom Licht abziehen (als „Dark“ durchreichen).
         #   MIT Dark enthält der Dark-Master den Bias bereits → nicht doppelt abziehen.
-        if flat is not None and flat.shape == bias.shape:
-            flat = np.clip(flat - bias, 1e-6, None)
+        if flat is not None:
+            if flat.shape != bias.shape:
+                raise ValueError("Flat und Bias haben unterschiedliche Bildgrößen.")
+            flat = flat - bias
         if dark is None:
             dark = bias
         else:

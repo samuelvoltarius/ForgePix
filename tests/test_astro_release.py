@@ -16,6 +16,42 @@ from constants import imwrite
 
 
 class AstroRelease(unittest.TestCase):
+    def test_bias_flat_mismatch_is_not_ignored(self):
+        with tempfile.TemporaryDirectory() as folder:
+            flat_path, bias_path = Path(folder) / "flat.fit", Path(folder) / "bias.fit"
+            fits.writeto(flat_path, np.ones((12, 12), np.float32))
+            fits.writeto(bias_path, np.ones((6, 6), np.float32))
+            args = SimpleNamespace(no_auto_calib=True, dark=None,
+                                   flat=str(flat_path), bias=str(bias_path))
+            with self.assertRaisesRegex(ValueError, "unterschiedliche Bildgrößen"):
+                pipeline._load_astro_calibration(folder, args, [])
+
+    def test_calibration_directory_prefers_fits_and_rejects_empty(self):
+        with tempfile.TemporaryDirectory() as folder:
+            args = SimpleNamespace(no_auto_calib=True, dark=folder, flat=None, bias=None)
+            with self.assertRaisesRegex(ValueError, "Keine Kalibrierbilder"):
+                pipeline._load_astro_calibration(folder, args, [])
+            fits.writeto(Path(folder) / "dark.fit", np.full((12, 12), .02, np.float32))
+            cv2.imwrite(str(Path(folder) / "dark.jpg"), np.full((6, 6, 3), 255, np.uint8))
+            dark, _, _ = pipeline._load_astro_calibration(folder, args, [])
+            self.assertEqual(dark.shape, (12, 12))
+            np.testing.assert_allclose(dark, .02)
+
+    def test_invalid_fits_calibration_pixels_are_not_silently_replaced(self):
+        with tempfile.TemporaryDirectory() as folder:
+            p = Path(folder) / "bad.fit"
+            for value in (np.nan, np.inf, -np.inf):
+                raw = np.ones((12, 12), np.float32)
+                raw[4, 4] = value
+                fits.writeto(p, raw, overwrite=True)
+                with self.assertRaisesRegex(ValueError, "FITS-Sensordaten"):
+                    astro._master(str(p), raw=True)
+                with self.assertRaisesRegex(ValueError, "FITS-Sensordaten"):
+                    astro.read_calibrated(str(p))
+            fits.PrimaryHDU().writeto(p, overwrite=True)
+            with self.assertRaisesRegex(ValueError, "primären HDU"):
+                astro.read_calibrated(str(p))
+
     def test_known_filter_overrides_dualband_filename_and_flag(self):
         import filters
         from unittest.mock import patch
