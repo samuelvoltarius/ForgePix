@@ -30,6 +30,8 @@ def main():
     parser.add_argument("--input", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--filter", default="sv220_sii_oiii_7")
+    for kind in ("dark", "flat", "bias"):
+        parser.add_argument("--" + kind, type=Path, help="Explicit calibration FITS master")
     parser.add_argument("--layout-only", action="store_true")
     parser.add_argument("--timeout", type=int, default=2400)
     options = parser.parse_args()
@@ -72,6 +74,17 @@ def main():
                                "header": {key: header.get(key) for key in
                                           ("INSTRUME", "FILTER", "EXPTIME", "BAYERPAT",
                                            "FOCALLEN", "XPIXSZ", "NAXIS1", "NAXIS2")}})
+    calibration_records = {}
+    for kind in ("dark", "flat", "bias"):
+        path = getattr(options, kind)
+        if path is None:
+            continue
+        path = path.resolve(strict=True)
+        if not path.is_file() or path.suffix.lower() not in {".fit", ".fits", ".fts"}:
+            raise SystemExit("Calibration acceptance requires a FITS master: " + str(path))
+        stat = path.stat()
+        calibration_records[kind] = {"path": str(path), "sha256": sha256(path),
+                                     "size": stat.st_size, "mtime_ns": stat.st_mtime_ns}
     report = {
         "source": str(source), "output": str(output), "layout_only": options.layout_only,
         "git_commit": subprocess.check_output(
@@ -79,6 +92,7 @@ def main():
         "git_worktree": subprocess.check_output(
             ["git", "status", "--porcelain"], cwd=root, text=True).splitlines(),
         "input_count": len(sources), "inputs": source_records,
+        "calibrations": calibration_records,
         "selected_filter": options.filter,
         "filter_source": "User-selected equipment profile; original FITS headers preserved.",
         "run_exit_code": None, "result_markers": [], "outputs": [], "errors": [],
@@ -109,6 +123,8 @@ def main():
     window.resize(1280, 800)
     window.in_edit.setText(str(source))
     window.work_edit.setText(str(output / "processing"))
+    for kind, record in calibration_records.items():
+        getattr(window, "astro_" + kind).setText(record["path"])
     window.show()
     app.processEvents()
 
@@ -191,7 +207,7 @@ def main():
                 Path(record["path"]).stat().st_size == record["size"] and
                 Path(record["path"]).stat().st_mtime_ns == record["mtime_ns"] and
                 sha256(Path(record["path"])) == record["sha256"]
-                for record in source_records)
+                for record in [*source_records, *calibration_records.values()])
             if not report["originals_unchanged"]:
                 report["errors"].append("An original FITS changed during the run.")
             capture("completed")
