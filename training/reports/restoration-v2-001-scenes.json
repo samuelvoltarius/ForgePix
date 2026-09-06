@@ -1,0 +1,4466 @@
+{
+  "schema_version": 1,
+  "size": 256,
+  "seed": 605193,
+  "counts": {
+    "train": 563,
+    "validation": 288,
+    "test": 0
+  },
+  "records": [
+    {
+      "source": "M101/hst_10918_01_acs_wfc_f555w_j9o401_drc.fits",
+      "uri": "mast:HST/product/hst_10918_01_acs_wfc_f555w_j9o401_drc.fits",
+      "sha256": "70ced98f0858ffb48e96506ef96d4d1327282d1f44aa5ea6bf8df181908a2422",
+      "split": "train",
+      "group": "M101",
+      "filter": "F555W",
+      "instrument": {
+        "TELESCOP": "HST",
+        "INSTRUME": "ACS",
+        "DETECTOR": "WFC",
+        "PROPOSID": 10918,
+        "TARGNAME": "M101-F1",
+        "EXPTIME": 1330.0
+      },
+      "patches_xy": [
+        [
+          1379,
+          2570
+        ],
+        [
+          4150,
+          2070
+        ],
+        [
+          3295,
+          2703
+        ],
+        [
+          1849,
+          2481
+        ],
+        [
+          4520,
+          2350
+        ],
+        [
+          1848,
+          753
+        ],
+        [
+          1276,
+          1763
+        ],
+        [
+          580,
+          3416
+        ],
+        [
+          3886,
+          1806
+        ],
+        [
+          4244,
+          3289
+        ],
+        [
+          1643,
+          1887
+        ],
+        [
+          1336,
+          3988
+        ],
+        [
+          1332,
+          1931
+        ],
+        [
+          1388,
+          2729
+        ],
+        [
+          2087,
+          2360
+        ],
+        [
+          3928,
+          3581
+        ],
+        [
+          2568,
+          3533
+        ],
+        [
+          2568,
+          1555
+        ],
+        [
+          2828,
+          3526
+        ],
+        [
+          4191,
+          3449
+        ],
+        [
+          522,
+          3633
+        ],
+        [
+          3879,
+          2362
+        ],
+        [
+          3322,
+          3960
+        ],
+        [
+          3524,
+          4033
+        ]
+      ],
+      "normalization": {
+        "offset": 0.042357876420021055,
+        "scale": 0.9174823869466973
+      },
+      "rights": "PUBLIC",
+      "policy": "https://archive.stsci.edu/publishing/data-use",
+      "ground_truth": false
+    },
+    {
+      "source": "M101/hst_10918_01_wfpc2_pc_f450w_u9o401_drz.fits",
+      "uri": "mast:HST/product/hst_10918_01_wfpc2_pc_f450w_u9o401_drz.fits",
+      "sha256": "fe59b56e0a54f8651ea42c608e62b7717082fd121468b7686e867707ecdf6340",
+      "split": "train",
+      "group": "M101",
+      "filter": "F450W",
+      "instrument": {
+        "TELESCOP": "HST",
+        "INSTRUME": "WFPC2",
+        "DETECTOR": "PC",
+        "PROPOSID": 10918,
+        "TARGNAME": "ANY",
+        "EXPTIME": 700.0
+      },
+      "patches_xy": [],
+      "normalization": {
+        "offset": -0.002352533558383584,
+        "scale": 0.006465065672993792
+      },
+      "rights": "PUBLIC",
+      "policy": "https://archive.stsci.edu/publishing/data-use",
+      "ground_truth": false
+    },
+    {
+      "source": "M101/hst_10918_01_wfpc2_pc_f814w_u9o401_drz.fits",
+      "uri": "mast:HST/product/hst_10918_01_wfpc2_pc_f814w_u9o401_drz.fits",
+      "sha256": "03dc4c1110d2b65f99bb7d0f430bbef4027c05156d0c921e9403358def95a0ac",
+      "split": "train",
+      "group": "M101",
+      "filter": "F814W",
+      "instrument": {
+        "TELESCOP": "HST",
+        "INSTRUME": "WFPC2",
+        "DETECTOR": "PC",
+        "PROPOSID": 10918,
+        "TARGNAME": "ANY",
+        "EXPTIME": 200.0
+      },
+      "patches_xy": [],
+      "normalization": {
+        "offset": -0.005909049493260682,
+        "scale": 0.01703538175206738
+      },
+      "rights": "PUBLIC",
+      "policy": "https://archive.stsci.edu/publishing/data-use",
+      "ground_truth": false
+    },
+    {
+      "source": "M101/hst_11635_03_wfc3_uvis_f469n_ib3p03_drc.fits",
+      "uri": "mast:HST/product/hst_11635_03_wfc3_uvis_f469n_ib3p03_drc.fits",
+      "sha256": "2afdf2fc1e086428ee841e1215d2a86aee237dac69df0aebd22f795716bf0e14",
+      "split": "train",
+      "group": "M101",
+      "filter": "F469N",
+      "instrument": {
+        "TELESCOP": "HST",
+        "INSTRUME": "WFC3",
+        "DETECTOR": "UVIS",
+        "PROPOSID": 11635,
+        "TARGNAME": "M101-C",
+        "EXPTIME": 6106.0
+      },
+      "patches_xy": [
+        [
+          2570,
+          3020
+        ],
+        [
+          1589,
+          4686
+        ],
+        [
+          554,
+          1326
+        ],
+        [
+          4015,
+          2954
+        ],
+        [
+          3218,
+          2166
+        ],
+        [
+          459,
+          1415
+        ],
+        [
+          840,
+          3117
+        ],
+        [
+          2913,
+          2504
+        ],
+        [
+          1003,
+          2288
+        ],
+        [
+          3255,
+          3696
+        ],
+        [
+          3639,
+          728
+        ],
+        [
+          562,
+          1817
+        ],
+        [
+          1076,
+          3442
+        ],
+        [
+          535,
+          1476
+        ],
+        [
+          772,
+          1409
+        ],
+        [
+          3640,
+          2438
+        ],
+        [
+          1222,
+          1601
+        ],
+        [
+          4213,
+          1614
+        ],
+        [
+          1184,
+          4405
+        ],
+        [
+          3544,
+          3863
+        ],
+        [
+          3248,
+          3690
+        ],
+        [
+          2017,
+          3765
+        ],
+        [
+          1307,
+          1663
+        ],
+        [
+          4032,
+          3556
+        ]
+      ],
+      "normalization": {
+        "offset": -0.0020503348426427694,
+        "scale": 0.008680709219771035
+      },
+      "rights": "PUBLIC",
+      "policy": "https://archive.stsci.edu/publishing/data-use",
+      "ground_truth": false
+    },
+    {
+      "source": "M101/hst_13361_01_wfc3_uvis_f547m_icae01_drc.fits",
+      "uri": "mast:HST/product/hst_13361_01_wfc3_uvis_f547m_icae01_drc.fits",
+      "sha256": "b3488f446ced0cdec47c3a4b16bcc078d0d8b0aaba7d6f770ce4d20360fe6546",
+      "split": "train",
+      "group": "M101",
+      "filter": "F547M",
+      "instrument": {
+        "TELESCOP": "HST",
+        "INSTRUME": "WFC3",
+        "DETECTOR": "UVIS",
+        "PROPOSID": 13361,
+        "TARGNAME": "M101-ACS5-NEW",
+        "EXPTIME": 710.0
+      },
+      "patches_xy": [
+        [
+          2181,
+          1634
+        ],
+        [
+          760,
+          2176
+        ],
+        [
+          1521,
+          4353
+        ],
+        [
+          3612,
+          3648
+        ],
+        [
+          3983,
+          3552
+        ],
+        [
+          3065,
+          1601
+        ],
+        [
+          2475,
+          4879
+        ],
+        [
+          1164,
+          1778
+        ],
+        [
+          1865,
+          2061
+        ],
+        [
+          4776,
+          3577
+        ],
+        [
+          4522,
+          3583
+        ],
+        [
+          3965,
+          4385
+        ],
+        [
+          1506,
+          2295
+        ],
+        [
+          2657,
+          4765
+        ],
+        [
+          3619,
+          1636
+        ],
+        [
+          3811,
+          2445
+        ],
+        [
+          3695,
+          916
+        ],
+        [
+          3658,
+          2202
+        ],
+        [
+          2319,
+          3537
+        ],
+        [
+          1040,
+          3204
+        ],
+        [
+          3500,
+          2432
+        ],
+        [
+          3854,
+          2361
+        ],
+        [
+          3305,
+          3213
+        ],
+        [
+          1485,
+          3394
+        ]
+      ],
+      "normalization": {
+        "offset": -0.009869375518523156,
+        "scale": 0.27050920789596866
+      },
+      "rights": "PUBLIC",
+      "policy": "https://archive.stsci.edu/publishing/data-use",
+      "ground_truth": false
+    },
+    {
+      "source": "M101/hst_13361_01_wfc3_uvis_f657n_icae01_drc.fits",
+      "uri": "mast:HST/product/hst_13361_01_wfc3_uvis_f657n_icae01_drc.fits",
+      "sha256": "c539b3ddf3998c2d13549ff80dd70f3f79e5ce173fda9bc3e8d1181e43151dcc",
+      "split": "train",
+      "group": "M101",
+      "filter": "F657N",
+      "instrument": {
+        "TELESCOP": "HST",
+        "INSTRUME": "WFC3",
+        "DETECTOR": "UVIS",
+        "PROPOSID": 13361,
+        "TARGNAME": "M101-ACS5-NEW",
+        "EXPTIME": 2150.0
+      },
+      "patches_xy": [
+        [
+          902,
+          2907
+        ],
+        [
+          2302,
+          5246
+        ],
+        [
+          3667,
+          3195
+        ],
+        [
+          1724,
+          2917
+        ],
+        [
+          403,
+          2489
+        ],
+        [
+          2850,
+          3508
+        ],
+        [
+          3829,
+          3569
+        ],
+        [
+          819,
+          2396
+        ],
+        [
+          3207,
+          2204
+        ],
+        [
+          3046,
+          3934
+        ],
+        [
+          3000,
+          1525
+        ],
+        [
+          3714,
+          3005
+        ],
+        [
+          4558,
+          3235
+        ],
+        [
+          4652,
+          3434
+        ],
+        [
+          2436,
+          3744
+        ],
+        [
+          4884,
+          3678
+        ],
+        [
+          3202,
+          2523
+        ],
+        [
+          2630,
+          2497
+        ],
+        [
+          854,
+          2983
+        ],
+        [
+          2784,
+          2276
+        ],
+        [
+          1487,
+          3800
+        ],
+        [
+          4338,
+          3926
+        ],
+        [
+          4119,
+          4256
+        ],
+        [
+          933,
+          2147
+        ]
+      ],
+      "normalization": {
+        "offset": -0.0051428251480683685,
+        "scale": 0.15873413567897207
+      },
+      "rights": "PUBLIC",
+      "policy": "https://archive.stsci.edu/publishing/data-use",
+      "ground_truth": false
+    },
+    {
+      "source": "M13/hst_10349_30_acs_wfc_f435w_j95430_drc.fits",
+      "uri": "mast:HST/product/hst_10349_30_acs_wfc_f435w_j95430_drc.fits",
+      "sha256": "7bd548be3e8fd69991b9584a74b71e1790e6f41bf8b9dad63eb318cb523f6a91",
+      "split": "validation",
+      "group": "M13",
+      "filter": "F435W",
+      "instrument": {
+        "TELESCOP": "HST",
+        "INSTRUME": "ACS",
+        "DETECTOR": "WFC",
+        "PROPOSID": 10349,
+        "TARGNAME": "NGC-6205",
+        "EXPTIME": 1480.0
+      },
+      "patches_xy": [
+        [
+          2178,
+          1185
+        ],
+        [
+          2144,
+          1772
+        ],
+        [
+          4170,
+          3457
+        ],
+        [
+          2205,
+          1638
+        ],
+        [
+          3429,
+          2233
+        ],
+        [
+          4996,
+          1696
+        ],
+        [
+          2432,
+          2829
+        ],
+        [
+          4485,
+          2123
+        ],
+        [
+          3707,
+          4702
+        ],
+        [
+          3586,
+          4877
+        ],
+        [
+          4036,
+          1499
+        ],
+        [
+          1525,
+          2194
+        ],
+        [
+          3654,
+          3794
+        ],
+        [
+          1705,
+          1827
+        ],
+        [
+          925,
+          3411
+        ],
+        [
+          2807,
+          2698
+        ],
+        [
+          2995,
+          1271
+        ],
+        [
+          4511,
+          2330
+        ],
+        [
+          3869,
+          3641
+        ],
+        [
+          2291,
+          1122
+        ],
+        [
+          1635,
+          380
+        ],
+        [
+          4921,
+          1540
+        ],
+        [
+          1361,
+          2345
+        ],
+        [
+          1070,
+          2740
+        ]
+      ],
+      "normalization": {
+        "offset": 0.01992557039856911,
+        "scale": 240.62051087675357
+      },
+      "rights": "PUBLIC",
+      "policy": "https://archive.stsci.edu/publishing/data-use",
+      "ground_truth": false
+    },
+    {
+      "source": "M13/hst_10349_30_acs_wfc_f625w_j95430_drc.fits",
+      "uri": "mast:HST/product/hst_10349_30_acs_wfc_f625w_j95430_drc.fits",
+      "sha256": "ad4fe5254d5cdd89a196d41dc696cf4e8fc9302aae4175fefab33084e3ce59d5",
+      "split": "validation",
+      "group": "M13",
+      "filter": "F625W",
+      "instrument": {
+        "TELESCOP": "HST",
+        "INSTRUME": "ACS",
+        "DETECTOR": "WFC",
+        "PROPOSID": 10349,
+        "TARGNAME": "NGC-6205",
+        "EXPTIME": 380.0
+      },
+      "patches_xy": [
+        [
+          807,
+          2519
+        ],
+        [
+          2801,
+          1044
+        ],
+        [
+          4226,
+          1209
+        ],
+        [
+          4503,
+          1429
+        ],
+        [
+          4298,
+          3348
+        ],
+        [
+          3744,
+          1468
+        ],
+        [
+          3628,
+          4481
+        ],
+        [
+          4093,
+          3906
+        ],
+        [
+          2757,
+          2690
+        ],
+        [
+          1026,
+          2847
+        ],
+        [
+          1448,
+          4175
+        ],
+        [
+          4362,
+          2131
+        ],
+        [
+          1500,
+          959
+        ],
+        [
+          3097,
+          2511
+        ],
+        [
+          3845,
+          4643
+        ],
+        [
+          1967,
+          2570
+        ],
+        [
+          2932,
+          1510
+        ],
+        [
+          3567,
+          4086
+        ],
+        [
+          1725,
+          2456
+        ],
+        [
+          3350,
+          2193
+        ],
+        [
+          3409,
+          2004
+        ],
+        [
+          1166,
+          2819
+        ],
+        [
+          1528,
+          2647
+        ],
+        [
+          3093,
+          2891
+        ]
+      ],
+      "normalization": {
+        "offset": 0.03776689627766609,
+        "scale": 838.5172604474963
+      },
+      "rights": "PUBLIC",
+      "policy": "https://archive.stsci.edu/publishing/data-use",
+      "ground_truth": false
+    },
+    {
+      "source": "M13/hst_10349_30_acs_wfc_f658n_j95430_drc.fits",
+      "uri": "mast:HST/product/hst_10349_30_acs_wfc_f658n_j95430_drc.fits",
+      "sha256": "d42ffddcdde8fb4b82f57809b538ddf4a1148bdf44bd21d8f766952cb307e271",
+      "split": "validation",
+      "group": "M13",
+      "filter": "F658N",
+      "instrument": {
+        "TELESCOP": "HST",
+        "INSTRUME": "ACS",
+        "DETECTOR": "WFC",
+        "PROPOSID": 10349,
+        "TARGNAME": "NGC-6205",
+        "EXPTIME": 1610.0
+      },
+      "patches_xy": [
+        [
+          3051,
+          2375
+        ],
+        [
+          1914,
+          1995
+        ],
+        [
+          3429,
+          1894
+        ],
+        [
+          3168,
+          3033
+        ],
+        [
+          724,
+          2476
+        ],
+        [
+          3740,
+          4530
+        ],
+        [
+          4374,
+          2565
+        ],
+        [
+          2802,
+          2552
+        ],
+        [
+          4629,
+          2056
+        ],
+        [
+          842,
+          3511
+        ],
+        [
+          3328,
+          2246
+        ],
+        [
+          3018,
+          3396
+        ],
+        [
+          1826,
+          3100
+        ],
+        [
+          3627,
+          1368
+        ],
+        [
+          2803,
+          1353
+        ],
+        [
+          3482,
+          1234
+        ],
+        [
+          2819,
+          1571
+        ],
+        [
+          2776,
+          4381
+        ],
+        [
+          2627,
+          3862
+        ],
+        [
+          3737,
+          4715
+        ],
+        [
+          2712,
+          892
+        ],
+        [
+          2545,
+          2501
+        ],
+        [
+          431,
+          3284
+        ],
+        [
+          4172,
+          2055
+        ]
+      ],
+      "normalization": {
+        "offset": -0.014282766915857791,
+        "scale": 28.009525457970774
+      },
+      "rights": "PUBLIC",
+      "policy": "https://archive.stsci.edu/publishing/data-use",
+      "ground_truth": false
+    },
+    {
+      "source": "M13/hst_10775_57_acs_wfc_f606w_j9l957_drc.fits",
+      "uri": "mast:HST/product/hst_10775_57_acs_wfc_f606w_j9l957_drc.fits",
+      "sha256": "2e4bb3d6ae10d41b8ae838410b58524c3e95e86131485be40d96a4dbbe1b4c02",
+      "split": "validation",
+      "group": "M13",
+      "filter": "F606W",
+      "instrument": {
+        "TELESCOP": "HST",
+        "INSTRUME": "ACS",
+        "DETECTOR": "WFC",
+        "PROPOSID": 10775,
+        "TARGNAME": "NGC6205",
+        "EXPTIME": 567.0
+      },
+      "patches_xy": [
+        [
+          3054,
+          4662
+        ],
+        [
+          3756,
+          2790
+        ],
+        [
+          3590,
+          1240
+        ],
+        [
+          3336,
+          519
+        ],
+        [
+          4198,
+          3536
+        ],
+        [
+          4133,
+          2344
+        ],
+        [
+          1829,
+          4800
+        ],
+        [
+          2008,
+          3583
+        ],
+        [
+          1349,
+          1497
+        ],
+        [
+          1815,
+          2447
+        ],
+        [
+          4102,
+          3297
+        ],
+        [
+          2760,
+          818
+        ],
+        [
+          2526,
+          3600
+        ],
+        [
+          2941,
+          4716
+        ],
+        [
+          3179,
+          1607
+        ],
+        [
+          1733,
+          4547
+        ],
+        [
+          720,
+          2044
+        ],
+        [
+          3149,
+          4462
+        ],
+        [
+          2058,
+          2409
+        ],
+        [
+          3548,
+          4385
+        ],
+        [
+          2293,
+          4172
+        ],
+        [
+          4284,
+          3337
+        ],
+        [
+          4612,
+          3493
+        ],
+        [
+          2936,
+          3451
+        ]
+      ],
+      "normalization": {
+        "offset": 0.051483649857342245,
+        "scale": 566.4427249683222
+      },
+      "rights": "PUBLIC",
+      "policy": "https://archive.stsci.edu/publishing/data-use",
+      "ground_truth": false
+    },
+    {
+      "source": "M13/hst_10775_57_acs_wfc_f814w_j9l957_drc.fits",
+      "uri": "mast:HST/product/hst_10775_57_acs_wfc_f814w_j9l957_drc.fits",
+      "sha256": "1e86aea387d81bdcb0065cefc0740aab027c68a6901647ae2791333840375ba0",
+      "split": "validation",
+      "group": "M13",
+      "filter": "F814W",
+      "instrument": {
+        "TELESCOP": "HST",
+        "INSTRUME": "ACS",
+        "DETECTOR": "WFC",
+        "PROPOSID": 10775,
+        "TARGNAME": "NGC6205",
+        "EXPTIME": 567.0
+      },
+      "patches_xy": [
+        [
+          3890,
+          1317
+        ],
+        [
+          961,
+          1706
+        ],
+        [
+          1635,
+          3251
+        ],
+        [
+          3128,
+          3631
+        ],
+        [
+          1649,
+          1269
+        ],
+        [
+          2899,
+          1572
+        ],
+        [
+          3557,
+          2211
+        ],
+        [
+          1288,
+          3396
+        ],
+        [
+          3959,
+          4067
+        ],
+        [
+          3840,
+          3968
+        ],
+        [
+          3716,
+          1225
+        ],
+        [
+          2147,
+          2384
+        ],
+        [
+          1572,
+          3713
+        ],
+        [
+          4275,
+          2651
+        ],
+        [
+          2454,
+          2515
+        ],
+        [
+          2095,
+          4039
+        ],
+        [
+          2001,
+          2848
+        ],
+        [
+          4364,
+          3072
+        ],
+        [
+          1915,
+          2394
+        ],
+        [
+          4795,
+          3129
+        ],
+        [
+          2521,
+          1536
+        ],
+        [
+          997,
+          1665
+        ],
+        [
+          4573,
+          3688
+        ],
+        [
+          4661,
+          2493
+        ]
+      ],
+      "normalization": {
+        "offset": 0.025175085030496126,
+        "scale": 562.0364423466131
+      },
+      "rights": "PUBLIC",
+      "policy": "https://archive.stsci.edu/publishing/data-use",
+      "ground_truth": false
+    },
+    {
+      "source": "M13/hst_11233_07_wfpc2_pc_f450w_ua2l07_drz.fits",
+      "uri": "mast:HST/product/hst_11233_07_wfpc2_pc_f450w_ua2l07_drz.fits",
+      "sha256": "3b00ae8d3c32d69018871434a736e0f98e1d1f86cb42bd0fec4b8fa62d4ce051",
+      "split": "validation",
+      "group": "M13",
+      "filter": "F450W",
+      "instrument": {
+        "TELESCOP": "HST",
+        "INSTRUME": "WFPC2",
+        "DETECTOR": "PC",
+        "PROPOSID": 11233,
+        "TARGNAME": "M13-WFPC2",
+        "EXPTIME": 3150.0
+      },
+      "patches_xy": [
+        [
+          1574,
+          3460
+        ],
+        [
+          2621,
+          2801
+        ],
+        [
+          1530,
+          3223
+        ],
+        [
+          2112,
+          2813
+        ],
+        [
+          1488,
+          3324
+        ],
+        [
+          1361,
+          2538
+        ],
+        [
+          2342,
+          2774
+        ],
+        [
+          2553,
+          1357
+        ],
+        [
+          1313,
+          2922
+        ],
+        [
+          2127,
+          1302
+        ],
+        [
+          2003,
+          2628
+        ],
+        [
+          2142,
+          565
+        ],
+        [
+          1673,
+          2537
+        ],
+        [
+          2123,
+          754
+        ],
+        [
+          2287,
+          3588
+        ],
+        [
+          1841,
+          3615
+        ],
+        [
+          1525,
+          838
+        ],
+        [
+          1673,
+          2184
+        ],
+        [
+          1899,
+          1897
+        ],
+        [
+          1825,
+          1058
+        ],
+        [
+          2286,
+          679
+        ],
+        [
+          2159,
+          1968
+        ],
+        [
+          2235,
+          1827
+        ],
+        [
+          909,
+          2536
+        ]
+      ],
+      "normalization": {
+        "offset": -0.000836545895319432,
+        "scale": 0.6131684030999874
+      },
+      "rights": "PUBLIC",
+      "policy": "https://archive.stsci.edu/publishing/data-use",
+      "ground_truth": false
+    },
+    {
+      "source": "M16/hst_10393_11_acs_wfc_f435w_j95d11_drc.fits",
+      "uri": "mast:HST/product/hst_10393_11_acs_wfc_f435w_j95d11_drc.fits",
+      "sha256": "ded42df72acb98a68377a01e5829d2b70afe76b15c73cc94581b405411a90a36",
+      "split": "validation",
+      "group": "M16",
+      "filter": "F435W",
+      "instrument": {
+        "TELESCOP": "HST",
+        "INSTRUME": "ACS",
+        "DETECTOR": "WFC",
+        "PROPOSID": 10393,
+        "TARGNAME": "M16-PT1",
+        "EXPTIME": 350.0
+      },
+      "patches_xy": [
+        [
+          2386,
+          2669
+        ],
+        [
+          4106,
+          2294
+        ],
+        [
+          3247,
+          3229
+        ],
+        [
+          2291,
+          907
+        ],
+        [
+          284,
+          943
+        ],
+        [
+          2364,
+          1659
+        ],
+        [
+          2664,
+          2670
+        ],
+        [
+          1404,
+          3503
+        ],
+        [
+          2440,
+          1787
+        ],
+        [
+          2124,
+          3833
+        ],
+        [
+          1263,
+          4024
+        ],
+        [
+          1441,
+          1676
+        ],
+        [
+          3065,
+          3845
+        ],
+        [
+          4045,
+          2091
+        ],
+        [
+          469,
+          2522
+        ],
+        [
+          4157,
+          2532
+        ],
+        [
+          3653,
+          1082
+        ],
+        [
+          3438,
+          2054
+        ],
+        [
+          872,
+          1480
+        ],
+        [
+          3957,
+          1205
+        ],
+        [
+          351,
+          2544
+        ],
+        [
+          2945,
+          1450
+        ],
+        [
+          1133,
+          2834
+        ],
+        [
+          1088,
+          2154
+        ]
+      ],
+      "normalization": {
+        "offset": 0.07246962890028953,
+        "scale": 4.417085321338573
+      },
+      "rights": "PUBLIC",
+      "policy": "https://archive.stsci.edu/publishing/data-use",
+      "ground_truth": false
+    },
+    {
+      "source": "M16/hst_10393_11_acs_wfc_f502n_j95d11_drc.fits",
+      "uri": "mast:HST/product/hst_10393_11_acs_wfc_f502n_j95d11_drc.fits",
+      "sha256": "5f143b11821539d8a4fa023e0bc42f71a131636f736f58983c9119c416333e50",
+      "split": "validation",
+      "group": "M16",
+      "filter": "F502N",
+      "instrument": {
+        "TELESCOP": "HST",
+        "INSTRUME": "ACS",
+        "DETECTOR": "WFC",
+        "PROPOSID": 10393,
+        "TARGNAME": "M16-PT1",
+        "EXPTIME": 650.0
+      },
+      "patches_xy": [
+        [
+          3023,
+          1602
+        ],
+        [
+          3195,
+          3024
+        ],
+        [
+          4059,
+          1776
+        ],
+        [
+          1109,
+          1994
+        ],
+        [
+          366,
+          895
+        ],
+        [
+          1279,
+          2570
+        ],
+        [
+          1395,
+          1568
+        ],
+        [
+          382,
+          3316
+        ],
+        [
+          1178,
+          2452
+        ],
+        [
+          800,
+          4248
+        ],
+        [
+          2896,
+          1635
+        ],
+        [
+          3745,
+          3263
+        ],
+        [
+          693,
+          2666
+        ],
+        [
+          3514,
+          2738
+        ],
+        [
+          897,
+          3482
+        ],
+        [
+          3573,
+          2252
+        ],
+        [
+          2649,
+          3997
+        ],
+        [
+          1026,
+          2668
+        ],
+        [
+          2816,
+          3718
+        ],
+        [
+          421,
+          3059
+        ],
+        [
+          2501,
+          3510
+        ],
+        [
+          3146,
+          1775
+        ],
+        [
+          437,
+          4070
+        ],
+        [
+          3626,
+          2169
+        ]
+      ],
+      "normalization": {
+        "offset": -0.0038964846190065144,
+        "scale": 1.965738140350304
+      },
+      "rights": "PUBLIC",
+      "policy": "https://archive.stsci.edu/publishing/data-use",
+      "ground_truth": false
+    },
+    {
+      "source": "M16/hst_10393_11_acs_wfc_f555w_j95d11_drc.fits",
+      "uri": "mast:HST/product/hst_10393_11_acs_wfc_f555w_j95d11_drc.fits",
+      "sha256": "59583083f78ffeeae08e2527820fa22c739d5a66c5f923ec64f47c7e5bd07380",
+      "split": "validation",
+      "group": "M16",
+      "filter": "F555W",
+      "instrument": {
+        "TELESCOP": "HST",
+        "INSTRUME": "ACS",
+        "DETECTOR": "WFC",
+        "PROPOSID": 10393,
+        "TARGNAME": "M16-PT1",
+        "EXPTIME": 350.0
+      },
+      "patches_xy": [
+        [
+          2530,
+          394
+        ],
+        [
+          2972,
+          1621
+        ],
+        [
+          2458,
+          2609
+        ],
+        [
+          4199,
+          3622
+        ],
+        [
+          2862,
+          2859
+        ],
+        [
+          3760,
+          1449
+        ],
+        [
+          2699,
+          3802
+        ],
+        [
+          404,
+          945
+        ],
+        [
+          2695,
+          3782
+        ],
+        [
+          1028,
+          3356
+        ],
+        [
+          1796,
+          2561
+        ],
+        [
+          1135,
+          4238
+        ],
+        [
+          3883,
+          2690
+        ],
+        [
+          371,
+          756
+        ],
+        [
+          659,
+          4184
+        ],
+        [
+          2695,
+          2787
+        ],
+        [
+          1583,
+          1891
+        ],
+        [
+          1853,
+          1981
+        ],
+        [
+          3021,
+          2984
+        ],
+        [
+          1026,
+          1817
+        ],
+        [
+          3430,
+          1507
+        ],
+        [
+          3262,
+          2496
+        ],
+        [
+          1254,
+          1209
+        ],
+        [
+          2483,
+          944
+        ]
+      ],
+      "normalization": {
+        "offset": 0.164100919008255,
+        "scale": 5.18993966174136
+      },
+      "rights": "PUBLIC",
+      "policy": "https://archive.stsci.edu/publishing/data-use",
+      "ground_truth": false
+    },
+    {
+      "source": "M16/hst_10393_11_acs_wfc_f658n_j95d11_drc.fits",
+      "uri": "mast:HST/product/hst_10393_11_acs_wfc_f658n_j95d11_drc.fits",
+      "sha256": "56aeffa21ba81a2c2c6e0bf216f5a14fe4bfe37fec4116336659dbdd7171abbc",
+      "split": "validation",
+      "group": "M16",
+      "filter": "F658N",
+      "instrument": {
+        "TELESCOP": "HST",
+        "INSTRUME": "ACS",
+        "DETECTOR": "WFC",
+        "PROPOSID": 10393,
+        "TARGNAME": "M16-PT1",
+        "EXPTIME": 450.0
+      },
+      "patches_xy": [
+        [
+          1776,
+          1194
+        ],
+        [
+          1273,
+          1551
+        ],
+        [
+          979,
+          622
+        ],
+        [
+          542,
+          3827
+        ],
+        [
+          3856,
+          2071
+        ],
+        [
+          2578,
+          3615
+        ],
+        [
+          3738,
+          2858
+        ],
+        [
+          3863,
+          628
+        ],
+        [
+          2617,
+          1841
+        ],
+        [
+          1219,
+          566
+        ],
+        [
+          3816,
+          2630
+        ],
+        [
+          604,
+          3750
+        ],
+        [
+          495,
+          926
+        ],
+        [
+          1387,
+          891
+        ],
+        [
+          1409,
+          3079
+        ],
+        [
+          2090,
+          3197
+        ],
+        [
+          537,
+          3511
+        ],
+        [
+          1558,
+          1311
+        ],
+        [
+          2703,
+          1143
+        ],
+        [
+          3299,
+          1179
+        ],
+        [
+          461,
+          3531
+        ],
+        [
+          2628,
+          2385
+        ],
+        [
+          1147,
+          2704
+        ],
+        [
+          2665,
+          1131
+        ]
+      ],
+      "normalization": {
+        "offset": 0.09489566075056792,
+        "scale": 2.46575723350833
+      },
+      "rights": "PUBLIC",
+      "policy": "https://archive.stsci.edu/publishing/data-use",
+      "ground_truth": false
+    },
+    {
+      "source": "M16/hst_10393_11_acs_wfc_f814w_j95d11_drc.fits",
+      "uri": "mast:HST/product/hst_10393_11_acs_wfc_f814w_j95d11_drc.fits",
+      "sha256": "f26056e3d30fe209f22208412316a92de76f6a0a2407fca811774fe816c560ac",
+      "split": "validation",
+      "group": "M16",
+      "filter": "F814W",
+      "instrument": {
+        "TELESCOP": "HST",
+        "INSTRUME": "ACS",
+        "DETECTOR": "WFC",
+        "PROPOSID": 10393,
+        "TARGNAME": "M16-PT1",
+        "EXPTIME": 200.0
+      },
+      "patches_xy": [
+        [
+          1616,
+          2963
+        ],
+        [
+          1158,
+          922
+        ],
+        [
+          3687,
+          306
+        ],
+        [
+          835,
+          1733
+        ],
+        [
+          1976,
+          3347
+        ],
+        [
+          2546,
+          1763
+        ],
+        [
+          3111,
+          825
+        ],
+        [
+          1772,
+          1700
+        ],
+        [
+          1000,
+          3059
+        ],
+        [
+          946,
+          2693
+        ],
+        [
+          339,
+          1239
+        ],
+        [
+          2023,
+          4092
+        ],
+        [
+          2545,
+          3833
+        ],
+        [
+          1735,
+          997
+        ],
+        [
+          1797,
+          1674
+        ],
+        [
+          2916,
+          3656
+        ],
+        [
+          938,
+          3819
+        ],
+        [
+          3116,
+          649
+        ],
+        [
+          2105,
+          3814
+        ],
+        [
+          2549,
+          770
+        ],
+        [
+          2638,
+          1013
+        ],
+        [
+          2874,
+          958
+        ],
+        [
+          1463,
+          2013
+        ],
+        [
+          1117,
+          838
+        ]
+      ],
+      "normalization": {
+        "offset": 0.38770180302858354,
+        "scale": 19.962956800647078
+      },
+      "rights": "PUBLIC",
+      "policy": "https://archive.stsci.edu/publishing/data-use",
+      "ground_truth": false
+    },
+    {
+      "source": "M16/hst_11981_02_wfpc2_pc_f439w_uba302_drz.fits",
+      "uri": "mast:HST/product/hst_11981_02_wfpc2_pc_f439w_uba302_drz.fits",
+      "sha256": "467d60ac1bdb8c0f706f01d6498c89f1dae5c6a7ec65477ae29f9999429da822",
+      "split": "validation",
+      "group": "M16",
+      "filter": "F439W",
+      "instrument": {
+        "TELESCOP": "HST",
+        "INSTRUME": "WFPC2",
+        "DETECTOR": "PC",
+        "PROPOSID": 11981,
+        "TARGNAME": "NGC6611-M16",
+        "EXPTIME": 401.11
+      },
+      "patches_xy": [
+        [
+          3038,
+          888
+        ],
+        [
+          2708,
+          746
+        ],
+        [
+          2304,
+          1189
+        ],
+        [
+          2834,
+          1081
+        ],
+        [
+          1969,
+          3070
+        ],
+        [
+          1853,
+          1385
+        ],
+        [
+          2086,
+          1112
+        ],
+        [
+          2628,
+          228
+        ],
+        [
+          2003,
+          1115
+        ],
+        [
+          986,
+          2205
+        ],
+        [
+          3187,
+          1112
+        ],
+        [
+          2872,
+          1003
+        ],
+        [
+          2488,
+          2522
+        ],
+        [
+          2688,
+          1783
+        ],
+        [
+          1037,
+          1898
+        ],
+        [
+          2655,
+          1861
+        ],
+        [
+          1659,
+          893
+        ],
+        [
+          687,
+          1664
+        ],
+        [
+          1728,
+          1083
+        ],
+        [
+          909,
+          1972
+        ],
+        [
+          2664,
+          637
+        ],
+        [
+          2614,
+          1903
+        ],
+        [
+          619,
+          1568
+        ],
+        [
+          1512,
+          1710
+        ]
+      ],
+      "normalization": {
+        "offset": -0.00360911659291014,
+        "scale": 1.7549982777029134
+      },
+      "rights": "PUBLIC",
+      "policy": "https://archive.stsci.edu/publishing/data-use",
+      "ground_truth": false
+    },
+    {
+      "source": "M42/hst_10246_06_wfpc2_pc_f439w_u93k06_drz.fits",
+      "uri": "mast:HST/product/hst_10246_06_wfpc2_pc_f439w_u93k06_drz.fits",
+      "sha256": "f03f29b23466aa15fb68d171cb5e1e89596cd2b2e7a0db255b65df170dfd32e7",
+      "split": "train",
+      "group": "M42",
+      "filter": "F439W",
+      "instrument": {
+        "TELESCOP": "HST",
+        "INSTRUME": "WFPC2",
+        "DETECTOR": "PC",
+        "PROPOSID": 10246,
+        "TARGNAME": "ANY",
+        "EXPTIME": 80.0
+      },
+      "patches_xy": [
+        [
+          1696,
+          1942
+        ],
+        [
+          1926,
+          2242
+        ],
+        [
+          1908,
+          2254
+        ],
+        [
+          1603,
+          2252
+        ],
+        [
+          1620,
+          1989
+        ],
+        [
+          1516,
+          2058
+        ],
+        [
+          1856,
+          2037
+        ],
+        [
+          1932,
+          2266
+        ],
+        [
+          1808,
+          2094
+        ],
+        [
+          1978,
+          2324
+        ],
+        [
+          1948,
+          2187
+        ],
+        [
+          1712,
+          2150
+        ],
+        [
+          1802,
+          2085
+        ],
+        [
+          1685,
+          2250
+        ],
+        [
+          1986,
+          2097
+        ],
+        [
+          1915,
+          2142
+        ],
+        [
+          1766,
+          2125
+        ],
+        [
+          1838,
+          2075
+        ],
+        [
+          1691,
+          2320
+        ]
+      ],
+      "normalization": {
+        "offset": -0.003896036304533481,
+        "scale": 0.1061212810203686
+      },
+      "rights": "PUBLIC",
+      "policy": "https://archive.stsci.edu/publishing/data-use",
+      "ground_truth": false
+    },
+    {
+      "source": "M42/hst_10246_06_wfpc2_pc_f814w_u93k06_drz.fits",
+      "uri": "mast:HST/product/hst_10246_06_wfpc2_pc_f814w_u93k06_drz.fits",
+      "sha256": "f8164708482cfe0cd780cfb47a6e85105e26e754e07b83490bbdfc4a16a8c6ae",
+      "split": "train",
+      "group": "M42",
+      "filter": "F814W",
+      "instrument": {
+        "TELESCOP": "HST",
+        "INSTRUME": "WFPC2",
+        "DETECTOR": "PC",
+        "PROPOSID": 10246,
+        "TARGNAME": "ANY",
+        "EXPTIME": 10.0
+      },
+      "patches_xy": [
+        [
+          1789,
+          2181
+        ],
+        [
+          1527,
+          1992
+        ],
+        [
+          1841,
+          2043
+        ],
+        [
+          1622,
+          2133
+        ],
+        [
+          1531,
+          2217
+        ],
+        [
+          1518,
+          2166
+        ],
+        [
+          1677,
+          2102
+        ],
+        [
+          1401,
+          2090
+        ],
+        [
+          1601,
+          2111
+        ],
+        [
+          1759,
+          2191
+        ],
+        [
+          1662,
+          2286
+        ],
+        [
+          1724,
+          1262
+        ],
+        [
+          1803,
+          1947
+        ],
+        [
+          1598,
+          2111
+        ],
+        [
+          1497,
+          2131
+        ],
+        [
+          1773,
+          2016
+        ],
+        [
+          1469,
+          2055
+        ],
+        [
+          1553,
+          2092
+        ],
+        [
+          1623,
+          2241
+        ],
+        [
+          1680,
+          1909
+        ],
+        [
+          1889,
+          2045
+        ],
+        [
+          1949,
+          2247
+        ],
+        [
+          1646,
+          1964
+        ]
+      ],
+      "normalization": {
+        "offset": -0.06830125481635332,
+        "scale": 0.4350006872490191
+      },
+      "rights": "PUBLIC",
+      "policy": "https://archive.stsci.edu/publishing/data-use",
+      "ground_truth": false
+    },
+    {
+      "source": "M42/hst_10246_07_wfpc2_pc_f656n_u93k07_drz.fits",
+      "uri": "mast:HST/product/hst_10246_07_wfpc2_pc_f656n_u93k07_drz.fits",
+      "sha256": "9d1415011e5aad10979ef6826d19a6ee86363a02d7f3f31348136d43e6a0a462",
+      "split": "train",
+      "group": "M42",
+      "filter": "F656N",
+      "instrument": {
+        "TELESCOP": "HST",
+        "INSTRUME": "WFPC2",
+        "DETECTOR": "PC",
+        "PROPOSID": 10246,
+        "TARGNAME": "ANY",
+        "EXPTIME": 400.0
+      },
+      "patches_xy": [
+        [
+          1825,
+          2103
+        ],
+        [
+          1841,
+          1927
+        ],
+        [
+          1725,
+          2138
+        ],
+        [
+          1795,
+          1898
+        ],
+        [
+          1812,
+          1912
+        ],
+        [
+          1852,
+          2031
+        ],
+        [
+          1867,
+          2015
+        ],
+        [
+          1870,
+          2228
+        ],
+        [
+          1827,
+          2210
+        ],
+        [
+          1854,
+          2247
+        ],
+        [
+          1732,
+          2218
+        ],
+        [
+          1770,
+          2170
+        ],
+        [
+          1622,
+          2251
+        ],
+        [
+          1768,
+          2209
+        ],
+        [
+          1712,
+          1986
+        ],
+        [
+          1577,
+          2314
+        ],
+        [
+          1677,
+          2176
+        ],
+        [
+          1686,
+          2072
+        ],
+        [
+          1623,
+          1983
+        ]
+      ],
+      "normalization": {
+        "offset": 0.009643273256719112,
+        "scale": 0.08289665947109735
+      },
+      "rights": "PUBLIC",
+      "policy": "https://archive.stsci.edu/publishing/data-use",
+      "ground_truth": false
+    },
+    {
+      "source": "M42/hst_10246_08_acs_wfc_f775w_j93k08_drc.fits",
+      "uri": "mast:HST/product/hst_10246_08_acs_wfc_f775w_j93k08_drc.fits",
+      "sha256": "56fc8ba47a799ea0315575fa224061abfc9e592098ff1a53f16397262d4a3699",
+      "split": "train",
+      "group": "M42",
+      "filter": "F775W",
+      "instrument": {
+        "TELESCOP": "HST",
+        "INSTRUME": "ACS",
+        "DETECTOR": "WFC",
+        "PROPOSID": 10246,
+        "TARGNAME": "ORIMOS-8",
+        "EXPTIME": 385.0
+      },
+      "patches_xy": [
+        [
+          1488,
+          1666
+        ],
+        [
+          2800,
+          3587
+        ],
+        [
+          3913,
+          2338
+        ],
+        [
+          662,
+          3368
+        ],
+        [
+          2817,
+          3178
+        ],
+        [
+          2453,
+          2756
+        ],
+        [
+          3235,
+          2874
+        ],
+        [
+          2915,
+          2286
+        ],
+        [
+          2671,
+          3503
+        ],
+        [
+          3633,
+          1294
+        ],
+        [
+          2264,
+          3709
+        ],
+        [
+          2833,
+          1592
+        ],
+        [
+          3782,
+          1433
+        ],
+        [
+          1804,
+          2234
+        ],
+        [
+          1292,
+          3976
+        ],
+        [
+          1905,
+          1511
+        ],
+        [
+          3094,
+          703
+        ],
+        [
+          2422,
+          3202
+        ],
+        [
+          2311,
+          3271
+        ],
+        [
+          854,
+          432
+        ],
+        [
+          2520,
+          3676
+        ],
+        [
+          2876,
+          888
+        ],
+        [
+          2892,
+          2018
+        ],
+        [
+          2531,
+          3619
+        ]
+      ],
+      "normalization": {
+        "offset": 0.7966024169921875,
+        "scale": 31.517582824708185
+      },
+      "rights": "PUBLIC",
+      "policy": "https://archive.stsci.edu/publishing/data-use",
+      "ground_truth": false
+    },
+    {
+      "source": "M42/hst_10246_0b_acs_wfc_f435w_j93k0b_drc.fits",
+      "uri": "mast:HST/product/hst_10246_0b_acs_wfc_f435w_j93k0b_drc.fits",
+      "sha256": "0fac119d8e09e1514408788b545bba6545bd3c1da7afc0df3c8b39054fc3f331",
+      "split": "train",
+      "group": "M42",
+      "filter": "F435W",
+      "instrument": {
+        "TELESCOP": "HST",
+        "INSTRUME": "ACS",
+        "DETECTOR": "WFC",
+        "PROPOSID": 10246,
+        "TARGNAME": "ORIMOS-11",
+        "EXPTIME": 420.0
+      },
+      "patches_xy": [
+        [
+          2081,
+          2163
+        ],
+        [
+          888,
+          2945
+        ],
+        [
+          3309,
+          4012
+        ],
+        [
+          2129,
+          4042
+        ],
+        [
+          2731,
+          1453
+        ],
+        [
+          2792,
+          1997
+        ],
+        [
+          2363,
+          1184
+        ],
+        [
+          3235,
+          684
+        ],
+        [
+          2731,
+          3013
+        ],
+        [
+          2916,
+          2382
+        ],
+        [
+          4076,
+          2247
+        ],
+        [
+          3577,
+          1082
+        ],
+        [
+          1801,
+          1755
+        ],
+        [
+          924,
+          3217
+        ],
+        [
+          1562,
+          2079
+        ],
+        [
+          2636,
+          2083
+        ],
+        [
+          3664,
+          2496
+        ],
+        [
+          1217,
+          3933
+        ],
+        [
+          3048,
+          1125
+        ],
+        [
+          467,
+          2803
+        ],
+        [
+          919,
+          3019
+        ],
+        [
+          3730,
+          3655
+        ],
+        [
+          2895,
+          3889
+        ],
+        [
+          1027,
+          3481
+        ]
+      ],
+      "normalization": {
+        "offset": 1.7160396503210067,
+        "scale": 247.32349411737962
+      },
+      "rights": "PUBLIC",
+      "policy": "https://archive.stsci.edu/publishing/data-use",
+      "ground_truth": false
+    },
+    {
+      "source": "M42/hst_10246_0c_acs_wfc_f555w_j93k0c_drc.fits",
+      "uri": "mast:HST/product/hst_10246_0c_acs_wfc_f555w_j93k0c_drc.fits",
+      "sha256": "cadb4441ac82dade68145636ff2ad9c7c2a5cb70746a2b336801ac4d0e62e3c1",
+      "split": "train",
+      "group": "M42",
+      "filter": "F555W",
+      "instrument": {
+        "TELESCOP": "HST",
+        "INSTRUME": "ACS",
+        "DETECTOR": "WFC",
+        "PROPOSID": 10246,
+        "TARGNAME": "ORIMOS-12",
+        "EXPTIME": 385.0
+      },
+      "patches_xy": [
+        [
+          3883,
+          4250
+        ],
+        [
+          1074,
+          2920
+        ],
+        [
+          3013,
+          3642
+        ],
+        [
+          1365,
+          888
+        ],
+        [
+          4070,
+          2302
+        ],
+        [
+          2941,
+          2548
+        ],
+        [
+          199,
+          3388
+        ],
+        [
+          585,
+          3509
+        ],
+        [
+          733,
+          1758
+        ],
+        [
+          3368,
+          2827
+        ],
+        [
+          1696,
+          2249
+        ],
+        [
+          2304,
+          467
+        ],
+        [
+          3248,
+          4316
+        ],
+        [
+          907,
+          2977
+        ],
+        [
+          3696,
+          3449
+        ],
+        [
+          4050,
+          3415
+        ],
+        [
+          706,
+          1189
+        ],
+        [
+          3196,
+          642
+        ],
+        [
+          3859,
+          3055
+        ],
+        [
+          4337,
+          1206
+        ],
+        [
+          811,
+          2291
+        ],
+        [
+          467,
+          2052
+        ],
+        [
+          1385,
+          1941
+        ],
+        [
+          1718,
+          840
+        ]
+      ],
+      "normalization": {
+        "offset": 1.7893844366073608,
+        "scale": 238.60707650089307
+      },
+      "rights": "PUBLIC",
+      "policy": "https://archive.stsci.edu/publishing/data-use",
+      "ground_truth": false
+    },
+    {
+      "source": "M8/hst_10547_08_acs_hrc_f606w_j9fh08_drz.fits",
+      "uri": "mast:HST/product/hst_10547_08_acs_hrc_f606w_j9fh08_drz.fits",
+      "sha256": "7b3a9d3d06c8afdb91f0bb7962a91b420cec8df1e75489d38e9a2af01cd2fb21",
+      "split": "train",
+      "group": "M8",
+      "filter": "F606W",
+      "instrument": {
+        "TELESCOP": "HST",
+        "INSTRUME": "ACS",
+        "DETECTOR": "HRC",
+        "PROPOSID": 10547,
+        "TARGNAME": "HERSCHEL-36",
+        "EXPTIME": 0.4
+      },
+      "patches_xy": [
+        [
+          436,
+          858
+        ],
+        [
+          795,
+          344
+        ],
+        [
+          223,
+          172
+        ],
+        [
+          137,
+          50
+        ],
+        [
+          832,
+          61
+        ],
+        [
+          287,
+          60
+        ],
+        [
+          259,
+          586
+        ],
+        [
+          785,
+          6
+        ],
+        [
+          763,
+          728
+        ],
+        [
+          621,
+          864
+        ],
+        [
+          309,
+          269
+        ],
+        [
+          622,
+          463
+        ],
+        [
+          210,
+          376
+        ],
+        [
+          693,
+          576
+        ],
+        [
+          221,
+          739
+        ],
+        [
+          521,
+          38
+        ],
+        [
+          452,
+          713
+        ],
+        [
+          706,
+          110
+        ],
+        [
+          231,
+          216
+        ],
+        [
+          217,
+          780
+        ],
+        [
+          591,
+          613
+        ],
+        [
+          801,
+          285
+        ],
+        [
+          259,
+          867
+        ],
+        [
+          576,
+          289
+        ]
+      ],
+      "normalization": {
+        "offset": -43.09775439453125,
+        "scale": 156.50929356385637
+      },
+      "rights": "PUBLIC",
+      "policy": "https://archive.stsci.edu/publishing/data-use",
+      "ground_truth": false
+    },
+    {
+      "source": "M8/hst_11981_01_wfpc2_pc_f439w_uba301_drz.fits",
+      "uri": "mast:HST/product/hst_11981_01_wfpc2_pc_f439w_uba301_drz.fits",
+      "sha256": "84f03d409480e2f4bfc5ad7f3bec27dff5a93694287b8214062b34b787fbd4e6",
+      "split": "train",
+      "group": "M8",
+      "filter": "F439W",
+      "instrument": {
+        "TELESCOP": "HST",
+        "INSTRUME": "WFPC2",
+        "DETECTOR": "PC",
+        "PROPOSID": 11981,
+        "TARGNAME": "NGC6530-M8",
+        "EXPTIME": 401.5
+      },
+      "patches_xy": [
+        [
+          1607,
+          1280
+        ],
+        [
+          2457,
+          3792
+        ],
+        [
+          2051,
+          2214
+        ],
+        [
+          1781,
+          3174
+        ],
+        [
+          1991,
+          2382
+        ],
+        [
+          2095,
+          3891
+        ],
+        [
+          1612,
+          2213
+        ],
+        [
+          2323,
+          3697
+        ],
+        [
+          2794,
+          3176
+        ],
+        [
+          549,
+          2029
+        ],
+        [
+          1715,
+          1108
+        ],
+        [
+          534,
+          2610
+        ],
+        [
+          1388,
+          1053
+        ],
+        [
+          1925,
+          452
+        ],
+        [
+          2715,
+          3035
+        ],
+        [
+          2235,
+          3592
+        ],
+        [
+          323,
+          2297
+        ],
+        [
+          1165,
+          1446
+        ],
+        [
+          2282,
+          1063
+        ],
+        [
+          2505,
+          2421
+        ],
+        [
+          2330,
+          1268
+        ],
+        [
+          1928,
+          3915
+        ],
+        [
+          2173,
+          1601
+        ],
+        [
+          1880,
+          2150
+        ]
+      ],
+      "normalization": {
+        "offset": -0.013960489168763144,
+        "scale": 0.3790144584328183
+      },
+      "rights": "PUBLIC",
+      "policy": "https://archive.stsci.edu/publishing/data-use",
+      "ground_truth": false
+    },
+    {
+      "source": "M8/hst_11981_01_wfpc2_pc_f487n_uba301_drz.fits",
+      "uri": "mast:HST/product/hst_11981_01_wfpc2_pc_f487n_uba301_drz.fits",
+      "sha256": "1b8c2162dac1ff0b3d242565bc21f23ff321d43b41e3f42adfb2667bbf6bcc98",
+      "split": "train",
+      "group": "M8",
+      "filter": "F487N",
+      "instrument": {
+        "TELESCOP": "HST",
+        "INSTRUME": "WFPC2",
+        "DETECTOR": "PC",
+        "PROPOSID": 11981,
+        "TARGNAME": "NGC6530-M8",
+        "EXPTIME": 1211.0
+      },
+      "patches_xy": [
+        [
+          588,
+          1917
+        ],
+        [
+          2900,
+          3125
+        ],
+        [
+          2487,
+          1496
+        ],
+        [
+          1143,
+          2781
+        ],
+        [
+          1313,
+          3110
+        ],
+        [
+          937,
+          2638
+        ],
+        [
+          1782,
+          1041
+        ],
+        [
+          717,
+          2437
+        ],
+        [
+          2448,
+          3535
+        ],
+        [
+          1143,
+          3025
+        ],
+        [
+          1234,
+          2637
+        ],
+        [
+          1979,
+          544
+        ],
+        [
+          2001,
+          1174
+        ],
+        [
+          1887,
+          740
+        ],
+        [
+          2686,
+          3067
+        ],
+        [
+          2177,
+          4073
+        ],
+        [
+          2401,
+          3036
+        ],
+        [
+          1807,
+          1641
+        ],
+        [
+          2141,
+          2662
+        ],
+        [
+          1732,
+          2118
+        ],
+        [
+          1611,
+          1414
+        ],
+        [
+          2822,
+          2171
+        ],
+        [
+          1578,
+          2659
+        ],
+        [
+          1838,
+          3406
+        ]
+      ],
+      "normalization": {
+        "offset": -0.0024418525430373837,
+        "scale": 0.07750150749413806
+      },
+      "rights": "PUBLIC",
+      "policy": "https://archive.stsci.edu/publishing/data-use",
+      "ground_truth": false
+    },
+    {
+      "source": "M8/hst_11981_01_wfpc2_pc_f547m_uba301_drz.fits",
+      "uri": "mast:HST/product/hst_11981_01_wfpc2_pc_f547m_uba301_drz.fits",
+      "sha256": "2d8eb5e0ccc4ee0b7417909624e4c7ab7224ea19a718e7e9629f2558691cb408",
+      "split": "train",
+      "group": "M8",
+      "filter": "F547M",
+      "instrument": {
+        "TELESCOP": "HST",
+        "INSTRUME": "WFPC2",
+        "DETECTOR": "PC",
+        "PROPOSID": 11981,
+        "TARGNAME": "NGC6530-M8",
+        "EXPTIME": 401.11
+      },
+      "patches_xy": [
+        [
+          2802,
+          3485
+        ],
+        [
+          2684,
+          3672
+        ],
+        [
+          1322,
+          3317
+        ],
+        [
+          2003,
+          709
+        ],
+        [
+          1264,
+          1257
+        ],
+        [
+          978,
+          2523
+        ],
+        [
+          939,
+          2999
+        ],
+        [
+          2572,
+          2411
+        ],
+        [
+          291,
+          2379
+        ],
+        [
+          1679,
+          1241
+        ],
+        [
+          945,
+          1751
+        ],
+        [
+          1485,
+          3533
+        ],
+        [
+          1472,
+          1118
+        ],
+        [
+          1498,
+          2885
+        ],
+        [
+          2488,
+          915
+        ],
+        [
+          3022,
+          3252
+        ],
+        [
+          2241,
+          528
+        ],
+        [
+          735,
+          2774
+        ],
+        [
+          2226,
+          237
+        ],
+        [
+          2014,
+          3019
+        ],
+        [
+          1467,
+          2707
+        ],
+        [
+          2063,
+          2857
+        ],
+        [
+          2838,
+          750
+        ],
+        [
+          2283,
+          4068
+        ]
+      ],
+      "normalization": {
+        "offset": -0.005119068279862403,
+        "scale": 1.723884790554844
+      },
+      "rights": "PUBLIC",
+      "policy": "https://archive.stsci.edu/publishing/data-use",
+      "ground_truth": false
+    },
+    {
+      "source": "M8/hst_11981_01_wfpc2_pc_f656n_uba301_drz.fits",
+      "uri": "mast:HST/product/hst_11981_01_wfpc2_pc_f656n_uba301_drz.fits",
+      "sha256": "298b95de92f4a4f747a73b091ec86af3e09b382aac7ec379af060aaae673ea2f",
+      "split": "train",
+      "group": "M8",
+      "filter": "F656N",
+      "instrument": {
+        "TELESCOP": "HST",
+        "INSTRUME": "WFPC2",
+        "DETECTOR": "PC",
+        "PROPOSID": 11981,
+        "TARGNAME": "NGC6530-M8",
+        "EXPTIME": 711.0
+      },
+      "patches_xy": [
+        [
+          1682,
+          3679
+        ],
+        [
+          2392,
+          3304
+        ],
+        [
+          712,
+          2181
+        ],
+        [
+          2392,
+          1020
+        ],
+        [
+          2282,
+          3492
+        ],
+        [
+          1955,
+          3065
+        ],
+        [
+          1484,
+          2975
+        ],
+        [
+          1621,
+          2410
+        ],
+        [
+          2154,
+          3265
+        ],
+        [
+          2217,
+          1927
+        ],
+        [
+          1968,
+          1793
+        ],
+        [
+          421,
+          2051
+        ],
+        [
+          1158,
+          1958
+        ],
+        [
+          1509,
+          2596
+        ],
+        [
+          1325,
+          1290
+        ],
+        [
+          2600,
+          1222
+        ],
+        [
+          797,
+          2543
+        ],
+        [
+          1683,
+          1974
+        ],
+        [
+          2701,
+          2155
+        ],
+        [
+          1978,
+          904
+        ],
+        [
+          2372,
+          2950
+        ],
+        [
+          2803,
+          1976
+        ],
+        [
+          1847,
+          968
+        ],
+        [
+          1296,
+          2915
+        ]
+      ],
+      "normalization": {
+        "offset": -0.02374773458018899,
+        "scale": 0.9204643240310287
+      },
+      "rights": "PUBLIC",
+      "policy": "https://archive.stsci.edu/publishing/data-use",
+      "ground_truth": false
+    },
+    {
+      "source": "M8/hst_11981_01_wfpc2_pc_f675w_uba301_drz.fits",
+      "uri": "mast:HST/product/hst_11981_01_wfpc2_pc_f675w_uba301_drz.fits",
+      "sha256": "e3698ff7965c2c1be2fcb236aaf88bc8f5114433cdf0c55dfabbefb628981765",
+      "split": "train",
+      "group": "M8",
+      "filter": "F675W",
+      "instrument": {
+        "TELESCOP": "HST",
+        "INSTRUME": "WFPC2",
+        "DETECTOR": "PC",
+        "PROPOSID": 11981,
+        "TARGNAME": "NGC6530-M8",
+        "EXPTIME": 401.11
+      },
+      "patches_xy": [
+        [
+          2765,
+          945
+        ],
+        [
+          967,
+          2230
+        ],
+        [
+          2484,
+          2868
+        ],
+        [
+          1683,
+          3756
+        ],
+        [
+          1883,
+          2733
+        ],
+        [
+          1726,
+          1080
+        ],
+        [
+          2614,
+          677
+        ],
+        [
+          2128,
+          3815
+        ],
+        [
+          1174,
+          2846
+        ],
+        [
+          1796,
+          3542
+        ],
+        [
+          910,
+          1832
+        ],
+        [
+          1876,
+          2316
+        ],
+        [
+          2150,
+          842
+        ],
+        [
+          1676,
+          1807
+        ],
+        [
+          1839,
+          3254
+        ],
+        [
+          2797,
+          1074
+        ],
+        [
+          2369,
+          1316
+        ],
+        [
+          2121,
+          790
+        ],
+        [
+          1735,
+          1963
+        ],
+        [
+          2123,
+          361
+        ],
+        [
+          1624,
+          1986
+        ],
+        [
+          1162,
+          1756
+        ],
+        [
+          2666,
+          665
+        ],
+        [
+          1262,
+          2564
+        ]
+      ],
+      "normalization": {
+        "offset": -0.023357879623770714,
+        "scale": 1.3662709796279804
+      },
+      "rights": "PUBLIC",
+      "policy": "https://archive.stsci.edu/publishing/data-use",
+      "ground_truth": false
+    },
+    {
+      "source": "M82/hst_10272_75_acs_hrc_f814w_j8z475_drz.fits",
+      "uri": "mast:HST/product/hst_10272_75_acs_hrc_f814w_j8z475_drz.fits",
+      "sha256": "4650c9529ab76955943ba191c9aaa38658794df1a4800e025aa4aba7b3680d3e",
+      "split": "train",
+      "group": "M82",
+      "filter": "F814W",
+      "instrument": {
+        "TELESCOP": "HST",
+        "INSTRUME": "ACS",
+        "DETECTOR": "HRC",
+        "PROPOSID": 10272,
+        "TARGNAME": "SN2004AM",
+        "EXPTIME": 720.0
+      },
+      "patches_xy": [
+        [
+          584,
+          816
+        ],
+        [
+          561,
+          566
+        ],
+        [
+          934,
+          769
+        ],
+        [
+          515,
+          773
+        ],
+        [
+          741,
+          336
+        ],
+        [
+          542,
+          848
+        ],
+        [
+          511,
+          898
+        ],
+        [
+          746,
+          642
+        ],
+        [
+          684,
+          608
+        ],
+        [
+          364,
+          472
+        ],
+        [
+          781,
+          344
+        ],
+        [
+          683,
+          428
+        ],
+        [
+          861,
+          937
+        ],
+        [
+          596,
+          891
+        ],
+        [
+          744,
+          557
+        ],
+        [
+          429,
+          760
+        ],
+        [
+          492,
+          929
+        ],
+        [
+          861,
+          984
+        ],
+        [
+          352,
+          473
+        ],
+        [
+          304,
+          502
+        ],
+        [
+          316,
+          664
+        ],
+        [
+          687,
+          282
+        ],
+        [
+          736,
+          206
+        ],
+        [
+          344,
+          504
+        ]
+      ],
+      "normalization": {
+        "offset": 0.2915705479681492,
+        "scale": 4.558266516774994
+      },
+      "rights": "PUBLIC",
+      "policy": "https://archive.stsci.edu/publishing/data-use",
+      "ground_truth": false
+    },
+    {
+      "source": "M82/hst_10609_06_acs_hrc_f550m_j9fb06_drz.fits",
+      "uri": "mast:HST/product/hst_10609_06_acs_hrc_f550m_j9fb06_drz.fits",
+      "sha256": "d167e883ed73be03304b8b0883632b654140f00d20d606bb3166a1606f01c015",
+      "split": "train",
+      "group": "M82",
+      "filter": "F550M",
+      "instrument": {
+        "TELESCOP": "HST",
+        "INSTRUME": "ACS",
+        "DETECTOR": "HRC",
+        "PROPOSID": 10609,
+        "TARGNAME": "MESSIER-082-A",
+        "EXPTIME": 840.0
+      },
+      "patches_xy": [
+        [
+          558,
+          649
+        ],
+        [
+          826,
+          252
+        ],
+        [
+          633,
+          230
+        ],
+        [
+          106,
+          596
+        ],
+        [
+          404,
+          551
+        ],
+        [
+          399,
+          352
+        ],
+        [
+          772,
+          575
+        ],
+        [
+          156,
+          894
+        ],
+        [
+          183,
+          867
+        ],
+        [
+          692,
+          638
+        ],
+        [
+          225,
+          552
+        ],
+        [
+          669,
+          78
+        ],
+        [
+          207,
+          640
+        ],
+        [
+          676,
+          124
+        ],
+        [
+          196,
+          742
+        ],
+        [
+          140,
+          809
+        ],
+        [
+          168,
+          694
+        ],
+        [
+          833,
+          56
+        ],
+        [
+          537,
+          608
+        ],
+        [
+          437,
+          243
+        ],
+        [
+          714,
+          750
+        ],
+        [
+          408,
+          274
+        ],
+        [
+          504,
+          253
+        ],
+        [
+          345,
+          289
+        ]
+      ],
+      "normalization": {
+        "offset": 0.0034828461706638337,
+        "scale": 1.4347941301763298
+      },
+      "rights": "PUBLIC",
+      "policy": "https://archive.stsci.edu/publishing/data-use",
+      "ground_truth": false
+    },
+    {
+      "source": "M82/hst_10609_09_acs_hrc_f658n_j9fb09_drz.fits",
+      "uri": "mast:HST/product/hst_10609_09_acs_hrc_f658n_j9fb09_drz.fits",
+      "sha256": "8bef7dbd40ea409a6db6ebe31b1ffa36463236f11fd05f29d5b32fe37c317741",
+      "split": "train",
+      "group": "M82",
+      "filter": "F658N",
+      "instrument": {
+        "TELESCOP": "HST",
+        "INSTRUME": "ACS",
+        "DETECTOR": "HRC",
+        "PROPOSID": 10609,
+        "TARGNAME": "MESSIER-082-C",
+        "EXPTIME": 400.0
+      },
+      "patches_xy": [
+        [
+          305,
+          133
+        ],
+        [
+          217,
+          658
+        ],
+        [
+          141,
+          52
+        ],
+        [
+          440,
+          611
+        ],
+        [
+          161,
+          612
+        ],
+        [
+          589,
+          552
+        ],
+        [
+          553,
+          152
+        ],
+        [
+          817,
+          310
+        ],
+        [
+          619,
+          645
+        ],
+        [
+          402,
+          792
+        ],
+        [
+          429,
+          169
+        ],
+        [
+          703,
+          603
+        ],
+        [
+          304,
+          567
+        ],
+        [
+          394,
+          30
+        ],
+        [
+          238,
+          722
+        ],
+        [
+          476,
+          731
+        ],
+        [
+          499,
+          155
+        ],
+        [
+          829,
+          255
+        ],
+        [
+          530,
+          233
+        ],
+        [
+          428,
+          577
+        ],
+        [
+          331,
+          355
+        ],
+        [
+          463,
+          206
+        ],
+        [
+          640,
+          349
+        ],
+        [
+          579,
+          16
+        ]
+      ],
+      "normalization": {
+        "offset": -0.048181175284087656,
+        "scale": 0.9934271563813479
+      },
+      "rights": "PUBLIC",
+      "policy": "https://archive.stsci.edu/publishing/data-use",
+      "ground_truth": false
+    },
+    {
+      "source": "M82/hst_10609_09_acs_wfc_f660n_j9fb09_drc.fits",
+      "uri": "mast:HST/product/hst_10609_09_acs_wfc_f660n_j9fb09_drc.fits",
+      "sha256": "523ddba92cc4dea4d5905b5bcbfb6f2c997a8ee38cad9a796f2f2891db0ed194",
+      "split": "train",
+      "group": "M82",
+      "filter": "F660N",
+      "instrument": {
+        "TELESCOP": "HST",
+        "INSTRUME": "ACS",
+        "DETECTOR": "WFC",
+        "PROPOSID": 10609,
+        "TARGNAME": "ANY",
+        "EXPTIME": 3324.0
+      },
+      "patches_xy": [
+        [
+          416,
+          718
+        ],
+        [
+          3786,
+          2437
+        ],
+        [
+          699,
+          3121
+        ],
+        [
+          2736,
+          2738
+        ],
+        [
+          2836,
+          3731
+        ],
+        [
+          3441,
+          413
+        ],
+        [
+          1546,
+          998
+        ],
+        [
+          3268,
+          2663
+        ],
+        [
+          316,
+          3236
+        ],
+        [
+          2730,
+          393
+        ],
+        [
+          3757,
+          2755
+        ],
+        [
+          1809,
+          2495
+        ],
+        [
+          1472,
+          1873
+        ],
+        [
+          2374,
+          2675
+        ],
+        [
+          3353,
+          1924
+        ],
+        [
+          1582,
+          1972
+        ],
+        [
+          3395,
+          649
+        ],
+        [
+          1253,
+          1015
+        ],
+        [
+          1655,
+          2563
+        ],
+        [
+          3263,
+          1924
+        ],
+        [
+          2341,
+          2883
+        ],
+        [
+          2489,
+          1147
+        ],
+        [
+          1107,
+          1309
+        ],
+        [
+          2756,
+          3137
+        ]
+      ],
+      "normalization": {
+        "offset": -0.007610840018838644,
+        "scale": 0.024757186409087046
+      },
+      "rights": "PUBLIC",
+      "policy": "https://archive.stsci.edu/publishing/data-use",
+      "ground_truth": false
+    },
+    {
+      "source": "M82/hst_10776_11_acs_wfc_f435w_j9l011_drc.fits",
+      "uri": "mast:HST/product/hst_10776_11_acs_wfc_f435w_j9l011_drc.fits",
+      "sha256": "e2d2753cb91e84ae404f72fd4bdb0fd7cd57d702c4fcd44d3fc18f97bb2d7439",
+      "split": "train",
+      "group": "M82",
+      "filter": "F435W",
+      "instrument": {
+        "TELESCOP": "HST",
+        "INSTRUME": "ACS",
+        "DETECTOR": "WFC",
+        "PROPOSID": 10776,
+        "TARGNAME": "M82-POS1",
+        "EXPTIME": 450.0
+      },
+      "patches_xy": [
+        [
+          1810,
+          3566
+        ],
+        [
+          1329,
+          3375
+        ],
+        [
+          2928,
+          3218
+        ],
+        [
+          3104,
+          4064
+        ],
+        [
+          4669,
+          2008
+        ],
+        [
+          1050,
+          3146
+        ],
+        [
+          4299,
+          2121
+        ],
+        [
+          557,
+          3280
+        ],
+        [
+          2219,
+          1802
+        ],
+        [
+          1364,
+          3569
+        ],
+        [
+          2855,
+          652
+        ],
+        [
+          4178,
+          4058
+        ],
+        [
+          3055,
+          4615
+        ],
+        [
+          1814,
+          2777
+        ],
+        [
+          2525,
+          3732
+        ],
+        [
+          3252,
+          4172
+        ],
+        [
+          3887,
+          4172
+        ],
+        [
+          2729,
+          3966
+        ],
+        [
+          891,
+          2473
+        ],
+        [
+          803,
+          2384
+        ],
+        [
+          3727,
+          3059
+        ],
+        [
+          3954,
+          2993
+        ],
+        [
+          1238,
+          3171
+        ],
+        [
+          4860,
+          2638
+        ]
+      ],
+      "normalization": {
+        "offset": -0.052929196599870915,
+        "scale": 2.123408574108113
+      },
+      "rights": "PUBLIC",
+      "policy": "https://archive.stsci.edu/publishing/data-use",
+      "ground_truth": false
+    },
+    {
+      "source": "M82/hst_10776_12_acs_wfc_f555w_j9l012_drc.fits",
+      "uri": "mast:HST/product/hst_10776_12_acs_wfc_f555w_j9l012_drc.fits",
+      "sha256": "7f3d12243cbb4dda30e1183dfff29ba92ef243a0c2f0b5af428e05a10f9f3efe",
+      "split": "train",
+      "group": "M82",
+      "filter": "F555W",
+      "instrument": {
+        "TELESCOP": "HST",
+        "INSTRUME": "ACS",
+        "DETECTOR": "WFC",
+        "PROPOSID": 10776,
+        "TARGNAME": "M82-POS1",
+        "EXPTIME": 340.0
+      },
+      "patches_xy": [
+        [
+          1523,
+          2956
+        ],
+        [
+          1834,
+          3056
+        ],
+        [
+          3018,
+          3845
+        ],
+        [
+          4271,
+          3654
+        ],
+        [
+          5363,
+          2585
+        ],
+        [
+          4390,
+          1952
+        ],
+        [
+          3153,
+          1278
+        ],
+        [
+          3976,
+          4391
+        ],
+        [
+          5012,
+          2199
+        ],
+        [
+          1020,
+          3156
+        ],
+        [
+          3845,
+          3480
+        ],
+        [
+          2997,
+          3772
+        ],
+        [
+          1589,
+          3084
+        ],
+        [
+          2981,
+          4231
+        ],
+        [
+          2556,
+          4920
+        ],
+        [
+          3018,
+          3086
+        ],
+        [
+          4302,
+          2232
+        ],
+        [
+          2915,
+          1987
+        ],
+        [
+          1809,
+          2921
+        ],
+        [
+          2255,
+          1519
+        ],
+        [
+          4589,
+          3037
+        ],
+        [
+          1765,
+          2099
+        ],
+        [
+          4937,
+          2741
+        ],
+        [
+          4142,
+          1798
+        ]
+      ],
+      "normalization": {
+        "offset": -0.033658865839242935,
+        "scale": 2.9135332144805672
+      },
+      "rights": "PUBLIC",
+      "policy": "https://archive.stsci.edu/publishing/data-use",
+      "ground_truth": false
+    },
+    {
+      "source": "NGC7009/hst_11122_17_wfpc2_pc_f502n_ua0117_drz.fits",
+      "uri": "mast:HST/product/hst_11122_17_wfpc2_pc_f502n_ua0117_drz.fits",
+      "sha256": "2e1680cf2a0bfb0947a5003afc7bf2ba8739fd68943b24f21f318e7dc1e8c523",
+      "split": "train",
+      "group": "NGC7009",
+      "filter": "F502N",
+      "instrument": {
+        "TELESCOP": "HST",
+        "INSTRUME": "WFPC2",
+        "DETECTOR": "PC",
+        "PROPOSID": 11122,
+        "TARGNAME": "NGC7009",
+        "EXPTIME": 320.0
+      },
+      "patches_xy": [
+        [
+          2632,
+          2149
+        ],
+        [
+          2491,
+          1793
+        ],
+        [
+          2476,
+          2118
+        ],
+        [
+          2680,
+          2083
+        ],
+        [
+          2606,
+          1942
+        ],
+        [
+          2539,
+          1938
+        ],
+        [
+          2397,
+          2035
+        ],
+        [
+          2669,
+          1964
+        ],
+        [
+          2421,
+          2159
+        ],
+        [
+          2452,
+          1994
+        ],
+        [
+          2519,
+          1796
+        ],
+        [
+          2596,
+          2011
+        ],
+        [
+          2488,
+          2175
+        ],
+        [
+          2529,
+          1850
+        ],
+        [
+          2538,
+          2208
+        ],
+        [
+          2720,
+          2076
+        ],
+        [
+          2427,
+          1929
+        ]
+      ],
+      "normalization": {
+        "offset": -0.0020221279782708735,
+        "scale": 1.6645410867853307
+      },
+      "rights": "PUBLIC",
+      "policy": "https://archive.stsci.edu/publishing/data-use",
+      "ground_truth": false
+    },
+    {
+      "source": "NGC7009/hst_11122_17_wfpc2_pc_f656n_ua0117_drz.fits",
+      "uri": "mast:HST/product/hst_11122_17_wfpc2_pc_f656n_ua0117_drz.fits",
+      "sha256": "5b3f68f0bb39a4984fa20befff9564d0644b7bb3046e0ea257c2f05ed7705c55",
+      "split": "train",
+      "group": "NGC7009",
+      "filter": "F656N",
+      "instrument": {
+        "TELESCOP": "HST",
+        "INSTRUME": "WFPC2",
+        "DETECTOR": "PC",
+        "PROPOSID": 11122,
+        "TARGNAME": "NGC7009",
+        "EXPTIME": 160.0
+      },
+      "patches_xy": [
+        [
+          2458,
+          1904
+        ],
+        [
+          2609,
+          1947
+        ],
+        [
+          2778,
+          1968
+        ],
+        [
+          2666,
+          2252
+        ],
+        [
+          2431,
+          2060
+        ],
+        [
+          2851,
+          2013
+        ],
+        [
+          2693,
+          2131
+        ],
+        [
+          2801,
+          2005
+        ],
+        [
+          2611,
+          1896
+        ],
+        [
+          2647,
+          1855
+        ],
+        [
+          2774,
+          1944
+        ],
+        [
+          2489,
+          1833
+        ],
+        [
+          2582,
+          2016
+        ],
+        [
+          2589,
+          2057
+        ],
+        [
+          2690,
+          2244
+        ],
+        [
+          2801,
+          2007
+        ],
+        [
+          2421,
+          2036
+        ],
+        [
+          2487,
+          2113
+        ],
+        [
+          2800,
+          2015
+        ],
+        [
+          2447,
+          1856
+        ],
+        [
+          2377,
+          1978
+        ],
+        [
+          2464,
+          2130
+        ],
+        [
+          2512,
+          2153
+        ]
+      ],
+      "normalization": {
+        "offset": -0.0038408384663052857,
+        "scale": 1.2718325891834705
+      },
+      "rights": "PUBLIC",
+      "policy": "https://archive.stsci.edu/publishing/data-use",
+      "ground_truth": false
+    },
+    {
+      "source": "NGC7009/hst_11122_17_wfpc2_pc_f658n_ua0117_drz.fits",
+      "uri": "mast:HST/product/hst_11122_17_wfpc2_pc_f658n_ua0117_drz.fits",
+      "sha256": "058be955da8763e8b383316049efa682502c7a42cad9e8e5272376956caddd32",
+      "split": "train",
+      "group": "NGC7009",
+      "filter": "F658N",
+      "instrument": {
+        "TELESCOP": "HST",
+        "INSTRUME": "WFPC2",
+        "DETECTOR": "PC",
+        "PROPOSID": 11122,
+        "TARGNAME": "NGC7009",
+        "EXPTIME": 1200.0
+      },
+      "patches_xy": [
+        [
+          2540,
+          2140
+        ],
+        [
+          2611,
+          2062
+        ],
+        [
+          2469,
+          2101
+        ],
+        [
+          2551,
+          1984
+        ],
+        [
+          2576,
+          2010
+        ],
+        [
+          2367,
+          2062
+        ]
+      ],
+      "normalization": {
+        "offset": -0.0012187762400135398,
+        "scale": 0.1274953241488047
+      },
+      "rights": "PUBLIC",
+      "policy": "https://archive.stsci.edu/publishing/data-use",
+      "ground_truth": false
+    },
+    {
+      "source": "NGC7009/hst_6117_03_wfpc2_pc_f469n_u32e03_drz.fits",
+      "uri": "mast:HST/product/hst_6117_03_wfpc2_pc_f469n_u32e03_drz.fits",
+      "sha256": "e2472fa6dec5005b1b0ba3c60910d7dcaac4b368729bedcd74bf6e1c410fbb5f",
+      "split": "train",
+      "group": "NGC7009",
+      "filter": "F469N",
+      "instrument": {
+        "TELESCOP": "HST",
+        "INSTRUME": "WFPC2",
+        "DETECTOR": "PC",
+        "PROPOSID": 6117,
+        "TARGNAME": "NGC7009-FLIERS",
+        "EXPTIME": 160.0
+      },
+      "patches_xy": [],
+      "normalization": {
+        "offset": -0.005573085470125079,
+        "scale": 0.05491865039803315
+      },
+      "rights": "PUBLIC",
+      "policy": "https://archive.stsci.edu/publishing/data-use",
+      "ground_truth": false
+    },
+    {
+      "source": "NGC7009/hst_6117_03_wfpc2_pc_f631n_u32e03_drz.fits",
+      "uri": "mast:HST/product/hst_6117_03_wfpc2_pc_f631n_u32e03_drz.fits",
+      "sha256": "a268300a321e127f59df6223b523d16be5eed6798218de50b12a169fe69639d2",
+      "split": "train",
+      "group": "NGC7009",
+      "filter": "F631N",
+      "instrument": {
+        "TELESCOP": "HST",
+        "INSTRUME": "WFPC2",
+        "DETECTOR": "PC",
+        "PROPOSID": 6117,
+        "TARGNAME": "NGC7009-FLIERS",
+        "EXPTIME": 1100.0
+      },
+      "patches_xy": [],
+      "normalization": {
+        "offset": -0.001271460852585733,
+        "scale": 0.011517449407838491
+      },
+      "rights": "PUBLIC",
+      "policy": "https://archive.stsci.edu/publishing/data-use",
+      "ground_truth": false
+    },
+    {
+      "source": "NGC7009/hst_6117_03_wfpc2_pc_f673n_u32e03_drz.fits",
+      "uri": "mast:HST/product/hst_6117_03_wfpc2_pc_f673n_u32e03_drz.fits",
+      "sha256": "a99677dd821848029dbca22842fec52e72dcbb25e57cfbf2eb37b7ef8087e3b6",
+      "split": "train",
+      "group": "NGC7009",
+      "filter": "F673N",
+      "instrument": {
+        "TELESCOP": "HST",
+        "INSTRUME": "WFPC2",
+        "DETECTOR": "PC",
+        "PROPOSID": 6117,
+        "TARGNAME": "NGC7009-FLIERS",
+        "EXPTIME": 900.0
+      },
+      "patches_xy": [],
+      "normalization": {
+        "offset": -0.0017926605278626084,
+        "scale": 0.0206386100919925
+      },
+      "rights": "PUBLIC",
+      "policy": "https://archive.stsci.edu/publishing/data-use",
+      "ground_truth": false
+    }
+  ],
+  "use": "Public observed scene bases with controlled added degradations",
+  "source_noise_retained": true,
+  "ground_truth": false,
+  "credit": "NASA/ESA Hubble; observing programmes; STScI/MAST",
+  "limitations": "HST optical mono scenes; no ground-camera or real clean/noisy pair qualification"
+}

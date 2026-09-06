@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "id": "forgepix-background-mono-v2",
+  "task": "background",
+  "model_file": "model.onnx",
+  "sha256": "eac1a48bbf08eba80775ac092c05618905b58fc6284378c65e5f2dd277015370",
+  "channels": 1,
+  "tile_size": 256,
+  "halo": 32,
+  "normalization": "affine_percentile_v1",
+  "output": "complete_target",
+  "status": "experimental",
+  "release_approved": false,
+  "license": "MIT",
+  "weights_origin": "Trained by ForgePix; no third-party pretrained weights",
+  "architecture": "NAFNet mono width16; upstream licence retained",
+  "upstream": "https://github.com/megvii-research/NAFNet/tree/2b4af71ebe098a92a75910c233a3965a3e93ede4",
+  "checkpoint_sha256": "e10682d60f8a4c4f6a70e4f0cc987fd7a8eca017f6cde96721b0e4958a66512d",
+  "photometry_validated": false,
+  "onnx_opset": 17,
+  "export_max_abs_errors": [
+    7.618218660354614e-07,
+    2.384185791015625e-07,
+    2.384185791015625e-06
+  ],
+  "limitations": "Synthetic and added-degradation HST scene tests; no real independent clean/noisy pairs, held-out camera or astrophotometric release qualification",
+  "inference": {
+    "strategy": "global_background_residual",
+    "working_shape": [
+      256,
+      256
+    ],
+    "residual_smoothing_sigma": 16,
+    "downsample": "area",
+    "upsample_residual": "cubic"
+  }
+}

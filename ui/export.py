@@ -1,9 +1,14 @@
 #!/usr/bin/env python3
 """ui/export.py — Export (Schnell-Chips + Dialog) als Mixin für MainWindow."""
 import os
+import json
+import hashlib
+from pathlib import Path
+import shutil
+import tempfile
 
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QGridLayout, QGroupBox,
-                               QLabel, QCheckBox, QSpinBox, QPushButton, QMessageBox)
+                               QLabel, QCheckBox, QSpinBox, QPushButton, QMessageBox, QFileDialog)
 
 from i18n import tr
 from ui.components import reveal_in_files
@@ -17,13 +22,156 @@ except Exception:
     np = None
 
 
+def _verified_ai_files(source):
+    """Verify the complete scientific group before creating an export folder."""
+    changed = tr("Ergebnisdateien wurden verändert. Bitte das bearbeitete Bild als neues Ergebnis "
+                 "einlesen; die bisherigen Begleitdateien können nicht gemeinsam exportiert werden.")
+    try:
+        provenance = (source.parent / "ai_report.json").read_bytes()
+        details = json.loads(provenance)
+    except (OSError, ValueError):
+        raise ValueError(tr("Für dieses KI-Ergebnis fehlt ein gültiger Verarbeitungsbericht. "
+                            "Bitte ein neues KI-Ergebnis erzeugen.")) from None
+    records = details.get("output_integrity") if isinstance(details, dict) else None
+    if not isinstance(records, list) or not records:
+        raise ValueError(tr("Für dieses ältere KI-Ergebnis fehlen Datei-Prüfsummen. "
+                            "Bitte ein neues KI-Ergebnis erzeugen, bevor lineare Dateien gemeinsam exportiert werden."))
+    verified = {}
+    for record in records:
+        if not isinstance(record, dict):
+            raise ValueError(changed)
+        name, size, expected = record.get("name"), record.get("bytes"), record.get("sha256")
+        if (not isinstance(name, str) or not name or Path(name).name != name or "/" in name or "\\" in name
+                or name in verified or type(size) is not int or size < 0
+                or not isinstance(expected, str) or len(expected) != 64
+                or any(char not in "0123456789abcdefABCDEF" for char in expected)):
+            raise ValueError(changed)
+        path = (source.parent / name).resolve()
+        if path.parent != source.parent:
+            raise ValueError(changed)
+        try:
+            if path.stat().st_size != size:
+                raise ValueError(changed)
+            with path.open("rb") as stream:
+                actual = hashlib.file_digest(stream, "sha256").hexdigest()
+            if actual != expected.lower():
+                raise ValueError(changed)
+        except OSError:
+            raise ValueError(changed) from None
+        verified[name] = (path, expected.lower(), size)
+    outputs = details.get("outputs")
+    if (not isinstance(outputs, list) or any(not isinstance(name, str) for name in outputs)
+            or len(set(outputs)) != len(outputs) or set(outputs) != set(verified)
+            or not {source.name, source.with_suffix(".fits").name}.issubset(verified)):
+        raise ValueError(changed)
+    return verified, provenance
+
+
 class ExportMixin:
     """Ein-Klick-Export-Chips und ausführlicher Export-Dialog (Ziele/Schärfung/Ebenen/16-bit)."""
+
+    def _write_ai_export(self, parent, linear=True, png=False, jpeg=False, preview_limit=None):
+        """Copy scientific files byte-for-byte; encode only explicit display exports."""
+        source = Path(self.result_path).resolve()
+        display = self._ai_display_for_current()
+        if (png or jpeg) and not display:
+            raise ValueError(tr("Die Vergleichsvorschau fehlt. Lineare Daten können weiterhin kopiert werden."))
+        if not any((linear, png, jpeg)):
+            raise ValueError(tr("Bitte ein Exportformat wählen."))
+        scientific, provenance = _verified_ai_files(source) if linear else ({}, None)
+        output = Path(tempfile.mkdtemp(prefix="export-ai-", dir=parent))
+        written = []
+        if linear:
+            for path, expected, size in scientific.values():
+                shutil.copy2(path, output / path.name)
+                with (output / path.name).open("rb") as stream:
+                    actual = hashlib.file_digest(stream, "sha256").hexdigest()
+                if (output / path.name).stat().st_size != size or actual != expected:
+                    raise ValueError(tr("Ergebnisdateien wurden während des Exports verändert. "
+                                        "Bitte das bearbeitete Bild als neues Ergebnis einlesen."))
+                written.append(path.name)
+            (output / "ai_report.json").write_bytes(provenance)
+            written.append("ai_report.json")
+        if png or jpeg:
+            from ui.ai_preview import export_display
+            for enabled, suffix in ((png, ".png"), (jpeg, ".jpg")):
+                if enabled:
+                    name = "display_stretched" + suffix
+                    options = [int(cv2.IMWRITE_JPEG_QUALITY), 95] if suffix == ".jpg" else None
+                    export_display(source, output / name, display["parameters"],
+                                   max_side=preview_limit, options=options)
+                    written.append(name)
+        (output / "export.json").write_text(json.dumps({
+            "source": str(source), "scientific_files_copied_unchanged": bool(linear),
+            "display_files_are_stretched": bool(png or jpeg),
+            "display_parameters": display["parameters"] if display and (png or jpeg) else None,
+            "display_max_side": preview_limit, "files": written}, indent=2), encoding="utf-8")
+        return str(output)
+
+    def _export_ai_result(self):
+        dialog = QDialog(self)
+        dialog.setWindowTitle(tr("KI-Ergebnis exportieren"))
+        dialog.resize(520, 280)
+        layout = QVBoxLayout(dialog)
+        info = QLabel(tr("Lineare FITS- und TIFF-Daten werden unverändert kopiert. "
+                         "Anzeigeexporte enthalten die sichtbare Streckung."))
+        info.setWordWrap(True)
+        layout.addWidget(info)
+        linear = QCheckBox(tr("Lineares Ergebnis: Float32-FITS und TIFF"))
+        linear.setChecked(True)
+        png = QCheckBox(tr("Gestreckte Anzeige: PNG"))
+        jpeg = QCheckBox(tr("Gestreckte Anzeige: JPG zum Teilen"))
+        for checkbox in (linear, png, jpeg):
+            layout.addWidget(checkbox)
+        if not self._ai_display_for_current():
+            png.setEnabled(False)
+            jpeg.setEnabled(False)
+        layout.addStretch()
+        row = QHBoxLayout()
+        cancel = QPushButton(tr("Abbrechen"))
+        cancel.clicked.connect(dialog.reject)
+        save = QPushButton(tr("Speicherort wählen und exportieren"))
+        save.setObjectName("primary")
+        row.addWidget(cancel)
+        row.addWidget(save)
+        layout.addLayout(row)
+
+        def execute():
+            if not any(c.isChecked() for c in (linear, png, jpeg)):
+                return
+            parent = QFileDialog.getExistingDirectory(dialog, tr("Speicherort wählen"),
+                                                      os.path.dirname(self.result_path))
+            if not parent:
+                return
+            try:
+                destination = self._write_ai_export(parent, linear.isChecked(), png.isChecked(), jpeg.isChecked())
+            except Exception as exc:
+                QMessageBox.warning(dialog, tr("Exportieren"), str(exc))
+                return
+            self._append(tr("KI-Ergebnis exportiert: {path}").format(path=destination) + "\n")
+            reveal_in_files(destination)
+            dialog.accept()
+
+        save.clicked.connect(execute)
+        dialog.show()
+        self._export_dlg = dialog
 
     def _quick_export(self, key):
         """Ein-Klick-Export eines einzelnen Presets (ohne Dialog) direkt aus dem Panel."""
         if not self.result_path or cv2 is None:
             QMessageBox.information(self, tr("Exportieren"), tr("Erst ein Ergebnis erzeugen.")); return
+        if self._is_ai_result_current():
+            if key == "print":
+                self._export_ai_result()
+                return
+            try:
+                destination = self._write_ai_export(os.path.dirname(self.result_path), linear=False, jpeg=True,
+                                                    preview_limit=1080 if key == "instagram" else 2048)
+                self._append(tr("Gestreckte Anzeige exportiert: {path}").format(path=destination) + "\n")
+                reveal_in_files(destination)
+            except Exception as exc:
+                QMessageBox.warning(self, tr("Exportieren"), str(exc))
+            return
         try:
             import focus_cull_stack as F
             stack_dir = os.path.dirname(self.result_path)
@@ -41,6 +189,9 @@ class ExportMixin:
         16-bit-TIFF), dann schreiben + Ordner zeigen."""
         if not self.result_path or cv2 is None:
             QMessageBox.information(self, tr("Exportieren"), tr("Erst ein Ergebnis erzeugen.")); return
+        if self._is_ai_result_current():
+            self._export_ai_result()
+            return
         dlg = QDialog(self); dlg.setWindowTitle(tr("Exportieren")); dlg.resize(440, 480)
         lay = QVBoxLayout(dlg)
 

@@ -1301,6 +1301,9 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         channels_action = QAction(tr("Kanäle trennen und kombinieren"), self)
         channels_action.triggered.connect(self.open_channels)
         menu.addAction(channels_action)
+        self.ai_restore_action = QAction(tr("Eigene KI: Rauschen, Hintergrund, Details und Sterne …"), self)
+        self.ai_restore_action.triggered.connect(self.open_ai_restore)
+        menu.addAction(self.ai_restore_action)
         self.tools_btn.setMenu(menu)
 
         for index, b in enumerate((self.cmp_btn, self.adjust_btn, self.enhance_btn,
@@ -1552,6 +1555,8 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         makro = self._is_makro()
         self._set_step(0)
         self.astro_group.setVisible(astro)
+        if hasattr(self, "ai_restore_action"):
+            self.ai_restore_action.setVisible(astro)
         for widget in self._astro_expert_widgets:
             widget.setVisible(pro)
         if pro:
@@ -2301,7 +2306,8 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         dlg = QDialog(self)
         dlg.setWindowTitle(tr("Vorher / Nachher — Trennstrich ziehen"))
         lay = QVBoxLayout(dlg)
-        lay.addWidget(CompareSlider(before, after))
+        labels = {"before_label": tr("Vorher"), "after_label": tr("Nachher")} if self._ai_display_for_current() else {}
+        lay.addWidget(CompareSlider(before, after, **labels))
         dlg.resize(940, 660)
         dlg.show()  # nicht-modal
         self._cmp_dlg = dlg  # Referenz halten
@@ -2383,11 +2389,25 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         """Lineares TIFF fürs Weiterreichen finden. bits=32 → 32-bit-Float (GraXpert/PixInsight);
         bits=16 → 16-bit-TIFF (StarNet++ akzeptiert nur 16-bit). Sonst Ergebnis."""
         if self.result_path:
+            if self._is_ai_result_current():
+                return self.result_path
+            if bits == 32 and self.result_path.lower().endswith((".fit", ".fits", ".fts")):
+                return self.result_path
+            if bits == 32 and self.result_path.lower().endswith((".tif", ".tiff")):
+                try:
+                    import tifffile
+                    with tifffile.TiffFile(self.result_path) as image:
+                        if image.pages[0].dtype.kind == "f":
+                            return self.result_path
+                except (OSError, ValueError):
+                    pass
             d = os.path.dirname(self.result_path)
             tifs = [f for f in os.listdir(d) if f.lower().endswith((".tif", ".tiff"))]
             if bits == 32:
-                for f in tifs:
-                    if "32bit" in f.lower():
+                if os.path.basename(self.result_path).lower() == "result_32bit.tif":
+                    return self.result_path
+                for f in sorted(tifs, key=lambda name: (name.lower() != "result_32bit.tif", name.lower())):
+                    if "32bit" in f.lower() and "stars_residual" not in f.lower():
                         return os.path.join(d, f)
             else:  # 16-bit: ein lineares TIFF OHNE 32bit-Marker bevorzugen
                 lin = [f for f in tifs if "32bit" not in f.lower()]
@@ -2573,6 +2593,28 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
 
         self._run_tool_async(tr("Kanäle trennen und kombinieren"),
                              lambda log: runner(**request, log=log), ok)
+
+    def open_ai_restore(self):
+        from ui.ai_restore_dialog import AIRestoreDialog
+        source = self._best_export_file(bits=32)
+        if source and os.path.splitext(source)[1].lower() not in (".fit", ".fits", ".fts", ".tif", ".tiff"):
+            source = None
+        dialog = AIRestoreDialog(self, source=source)
+        self._ai_restore_dialog = dialog
+        try:
+            if dialog.exec() == QDialog.Accepted and dialog.result_path:
+                self._ai_display = dialog.previews
+                self._ai_result_path = dialog.result_path
+                self._adopt_result(dialog.result_path, dialog.source_path)
+                self.export_btn.setEnabled(True)
+                self.tools_btn.setEnabled(True)
+                for button in self.export_chips:
+                    button.setEnabled(True)
+                if dialog.show_comparison:
+                    self.open_compare()
+        finally:
+            self._ai_restore_dialog = None
+            dialog.deleteLater()
 
     def open_pixelmath(self):
         """Evaluate native image expressions on explicitly selected linear files."""
@@ -3165,6 +3207,14 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
 
     # ---------- Einstellungen merken ----------
     def closeEvent(self, e):
+        restore_dialog = getattr(self, "_ai_restore_dialog", None)
+        if restore_dialog is not None and restore_dialog.is_running():
+            # Let cooperative cancellation finish before Qt destroys the dialog
+            # and its child QThread. Reissue the close once the modal dialog ends.
+            restore_dialog.finished.connect(self.close, Qt.SingleShotConnection)
+            restore_dialog.cancel_and_close()
+            e.ignore()
+            return
         active = getattr(self, "_tool_worker", None)
         if active is not None and active.isRunning():
             self._append(tr("Die Bildverarbeitung läuft noch. Bitte den Abschluss abwarten.") + "\n")

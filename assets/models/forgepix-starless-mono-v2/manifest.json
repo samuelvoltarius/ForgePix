@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "id": "forgepix-starless-mono-v2",
+  "task": "starless",
+  "model_file": "model.onnx",
+  "sha256": "af6f351360620670b5e159f329603fdcdcb4c19803b1115931ada94731f4dab2",
+  "channels": 1,
+  "tile_size": 256,
+  "halo": 32,
+  "normalization": "affine_percentile_v1",
+  "output": "complete_target",
+  "status": "experimental",
+  "release_approved": false,
+  "license": "MIT",
+  "weights_origin": "Trained by ForgePix; no third-party pretrained weights",
+  "architecture": "NAFNet mono width16; upstream licence retained",
+  "upstream": "https://github.com/megvii-research/NAFNet/tree/2b4af71ebe098a92a75910c233a3965a3e93ede4",
+  "checkpoint_sha256": "9c2065f8a90df258e5f5ec0caa65e19839b1a4a57087f8c6d775b35ca1c8566c",
+  "photometry_validated": false,
+  "onnx_opset": 17,
+  "export_max_abs_errors": [
+    5.876063369214535e-08,
+    2.086162567138672e-07,
+    1.6689300537109375e-06
+  ],
+  "limitations": "Synthetic and added-degradation HST scene tests; no real independent clean/noisy pairs, held-out camera or astrophotometric release qualification",
+  "inference": {
+    "strategy": "overlapping_tiles",
+    "stride": 192,
+    "overlap": 64,
+    "padding": "reflect"
+  }
+}

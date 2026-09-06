@@ -34,10 +34,12 @@ def save_image(path, img):
 
 class CompareSlider(QWidget):
     """Vorher/Nachher mit ziehbarem Trennstrich."""
-    def __init__(self, before_png, after_png, parent=None):
+    def __init__(self, before_png, after_png, parent=None, before_label=None, after_label=None):
         super().__init__(parent)
         self.before = QPixmap(before_png)
         self.after = QPixmap(after_png)
+        self.before_label = before_label or tr("VORHER (schärfster Einzel-Frame)")
+        self.after_label = after_label or tr("NACHHER (Stack)")
         self.pos = 0.5
         self.setMinimumSize(640, 460)
         self.setMouseTracking(True)
@@ -65,8 +67,8 @@ class CompareSlider(QWidget):
         p.setPen(QPen(QColor("#5cc85c"), 3))
         p.drawLine(divx, r.y(), divx, r.bottom())
         p.setPen(QColor("white"))
-        p.drawText(r.x() + 10, r.y() + 22, tr("VORHER (schärfster Einzel-Frame)"))
-        t = tr("NACHHER (Stack)")
+        p.drawText(r.x() + 10, r.y() + 22, self.before_label)
+        t = self.after_label
         p.drawText(r.right() - p.fontMetrics().horizontalAdvance(t) - 10, r.y() + 22, t)
 
     def _set_from_x(self, x):

@@ -57,6 +57,8 @@ jobs:
             --paths core \
             --add-data "lang${{ matrix.sep }}lang" \
             --add-data "assets/forgepix_512.png${{ matrix.sep }}assets" \
+            --add-data "assets/models${{ matrix.sep }}assets/models" \
+            --collect-all onnxruntime \
             --hidden-import focus_cull_stack --hidden-import focus_analysis \
             --hidden-import stacker --hidden-import astro --hidden-import astro_quality \
             --hidden-import longexp --hidden-import mosaic --hidden-import siril_engine \

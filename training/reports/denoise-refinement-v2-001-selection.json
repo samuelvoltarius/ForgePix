@@ -1,0 +1,12 @@
+{
+  "decision": "reject_refinement",
+  "bundled_model_sha256": "e897529adef5844b2d374496cc2a5c354e302a7b2094a666703188595f6a406a",
+  "initial_mono_mse": 3.831465406833452e-06,
+  "refined_mono_mse": 5.59837787666469e-06,
+  "refinement_to_initial_ratio": 1.461158403434867,
+  "fresh_scene_count": 128,
+  "fresh_seed": 9374209,
+  "release_approved": false,
+  "reason": "Refinement improved mixed development MSE but regressed independent aggregate error, especially correlated noise. Keep initial experimental mono weights; do not claim superiority over the RGB research baseline.",
+  "next_experiment": "Vary spatially correlated noise strength/scale; use separate noise-class and observed-scene validation gates, not only mixed mean MSE; reserve a fresh final suite."
+}

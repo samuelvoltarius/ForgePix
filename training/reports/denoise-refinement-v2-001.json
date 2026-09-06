@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "task": "denoise",
+  "status": "experimental",
+  "release_approved": false,
+  "steps": 8000,
+  "best_step": 8000,
+  "batch": 4,
+  "config": {
+    "img_channel": 1,
+    "width": 16,
+    "middle_blk_num": 2,
+    "enc_blk_nums": [
+      1,
+      1,
+      2
+    ],
+    "dec_blk_nums": [
+      1,
+      1,
+      1
+    ]
+  },
+  "contract": {
+    "channels": 1,
+    "tile_size": 256,
+    "halo": 32,
+    "normalization": "affine_percentile_v1",
+    "output": "complete_target"
+  },
+  "seed": 609062,
+  "before": {
+    "output_mse": 1.7183167003054223e-05,
+    "input_mse": 2.9798099134836775e-05,
+    "mean_bias": -6.568420826624788e-05,
+    "mae": 0.0012193130278319586,
+    "samples": 64
+  },
+  "validation": {
+    "output_mse": 9.200259164288127e-06,
+    "input_mse": 2.9798099134836775e-05,
+    "mean_bias": -2.3656709430497358e-05,
+    "mae": 0.000995892040009494,
+    "samples": 64
+  },
+  "seconds": 576.5677127490053,
+  "torch_version": "2.12.0.dev20260407+cu128",
+  "parent_checkpoint_sha256": "e2c5b901b8761908edb9cd23d3d49ee4302b8b357a5dfad4a57eca446857e417",
+  "training_source_sha256": "690e28d869a819355fa6899af1919d1448da3fc82b70962e14b5ca24ab06a304",
+  "generator_source_sha256": "eec0e96ffc8a7c8773b95a81c498483f06b3af966ba145909f91ab6183b8305e",
+  "scene_counts": {
+    "train": 563,
+    "validation": 288,
+    "test": 0
+  },
+  "limitations": "Development validation used for checkpoint selection; independent synthetic and real-camera evaluation still required. HST targets retain observational noise."
+}

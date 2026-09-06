@@ -20,6 +20,27 @@ except Exception:
 class ResultMixin:
     """Ergebnis finden/anzeigen, Vorschau-Cache, Ansicht-Umschalter, Fokus-Map, Qualitäts-Panel."""
 
+    def _is_ai_result_current(self):
+        source = getattr(self, "_ai_result_path", None)
+        return bool(source and self.result_path and os.path.normcase(os.path.abspath(source)) ==
+                    os.path.normcase(os.path.abspath(self.result_path)))
+
+    def _ai_display_for_current(self):
+        display = getattr(self, "_ai_display", None)
+        if not display or not self.result_path:
+            return None
+        current = os.path.normcase(os.path.abspath(self.result_path))
+        if current != os.path.normcase(os.path.abspath(display["result"])):
+            return None
+        try:
+            if (os.stat(self.result_path).st_mtime_ns != display["result_mtime_ns"]
+                    or os.stat(display["source"]).st_mtime_ns != display["source_mtime_ns"]
+                    or not os.path.isfile(display["before"]) or not os.path.isfile(display["after"])):
+                return None
+        except OSError:
+            return None
+        return display
+
     def _find_result(self):
         """Neuestes Stack-Bild finden — auch im Batch (<work>/<sub>/stack)."""
         wd = self._work_dir()
@@ -36,6 +57,32 @@ class ResultMixin:
         """Beliebiges Bild (auch 16-bit TIFF) zu 8-bit-PNG für die Anzeige."""
         if not src or not os.path.isfile(src):
             return None
+        display = self._ai_display_for_current()
+        if self._is_ai_result_current() and display is None:
+            # Never mix an old linked after-preview with a newly stretched
+            # before-image after an external edit to either scientific file.
+            return None
+        if display:
+            path = os.path.normcase(os.path.abspath(src))
+            for original, preview, timestamp in (("source", "before", "source_mtime_ns"),
+                                                  ("result", "after", "result_mtime_ns")):
+                if (path == os.path.normcase(os.path.abspath(display[original]))
+                        and os.stat(src).st_mtime_ns == display[timestamp]
+                        and os.path.isfile(display[preview])):
+                    return display[preview]
+        if os.path.splitext(src)[1].lower() in {".fit", ".fits", ".fts"}:
+            # A linear FITS stack cannot be read by OpenCV/QPixmap. This single
+            # preview is replaced by source-linked previews for AI comparisons.
+            out = _cache_path("fp_linear_preview_v1_", src)
+            if not os.path.isfile(out):
+                try:
+                    from ai_restore import read_source
+                    from ui.ai_preview import display_parameters, display_pixels, write_display
+                    linear = read_source(src)
+                    write_display(out, display_pixels(linear, display_parameters(linear), max_side=1400))
+                except Exception:
+                    return None
+            return out
         if cv2 is None:
             return src  # Fallback: direkt versuchen
         out = _cache_path("sf_prev_", src)

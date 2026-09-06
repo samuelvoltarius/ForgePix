@@ -208,3 +208,55 @@ Runtime 3cf7f7d7d18f5b5ff2d30f3e581c7155cb2fd0af passed 433 tests (3 skipped), C
 Expanded read-only search beyond the ASIAIR subfolders found Y:/Backup/astro/dark_300.fit, plus 30/60/120/180 s masters. The 300 s master has matching ASI294MC Pro, 4144x2822, RGGB, gain 131, offset 30, -10 C, bin 1. Its data are normalized float FITS, made with Siril 1.0.5 from 2022 captures; this age and unspecified readout mode remain limitations. Its SHA256 is d7717a414db0c41e1b36352b11a23dd192b8a12be5c71af24d2d3fbb47bcdc43. Other masters under Y:/Backup/astro/astrofotos/darks are ASI533, different size/gain and not compatible. No matching flats found. Do not repeat the earlier claim that no usable dark candidate exists; do not automatically adopt this old master for future sessions.
 Test-harness-only commit 4b2501189dada2b6fa11f2771997ea21188d237d adds explicit --dark/--flat/--bias and hashes those masters before/after. Tests 34031659275 passed. Actual clean-worktree GUI run using --dark Y:/Backup/astro/dark_300.fit passed in 188.516 s: 31/34 lights, 31 registrations, 9300 s, finite FITS/TIFF range -0.334873..0.606251, metadata validation checked all selected lights and the master with no known mismatches. All originals/master unchanged. Source/report under Codex work/forgepix-m27-dark-verified-01 and outputs/ForgePix-FITS-Dark-GUI-Test-4b25011.json; preview outputs/ForgePix-M27-Dark-Vorschau.jpg. Visual right-edge brightening is reduced, but faint-background rendering, old-dark stability, extreme negative defect pixels and missing flats still prevent image-quality signoff. A dark-only real calibration path is now exercised; do not claim a complete calibrated release or alter user's default settings.
 No further MAST retry or training job launched during this heartbeat. Continue with live rotation/cancel/error workflows, precision/defect-mask coverage and remaining native capabilities; revisit model/data acquisition on new evidence rather than repeating the recent timeouts.
+
+## Own local AI implementation and measured training iteration (2026-09-06)
+
+User priority is own trained AI integrated into ForgePix. Four new mono NAFNet
+models were trained on Spark for 4,000 steps each, with richer signed/Poisson/
+correlated-noise, Moffat/filament/elliptical-blur/gradient simulations. The verified
+public-HST scene bank has 563 training and 288 validation patches with object
+separation and rechecked source SHA256; observational noise is retained, not
+mislabelled clean truth. All source provenance is in training/reports.
+
+Four ~1.87 MB ONNX models are bundled in assets/models, with retained architecture
+licences, own-weight attribution, manifests and numerical export checks. Native
+CPU inference requires no external astronomy application/server or PyTorch.
+Each colour channel is processed independently; the affine normalization is
+inverted without clipping. FITS metadata, dtype-based integer scale and known
+coverage are handled explicitly. Raw CFA, marked nonlinear display inputs and
+partial known coverage are rejected. New output directories contain Float32
+FITS/TIFF, source/model SHA256, per-output integrity checks and signed star
+residuals. No model is enabled in automatic processing.
+
+GUI now exposes four own AI operations, strength, progress/cancel, common
+source-derived before/after stretch, scientific copy export and explicit display
+export. Audit fixed black Float/FITS previews, accidental residual selection,
+lost FITS units/WCS, inconsistent integer scales and stale paired exports.
+Closing a busy worker is cooperative. German and English labels are supplied.
+
+Independent 64-scene comparison with earlier own RGB research models: v2
+background MSE ratio 0.2078, deblur 0.6291, starless 0.8881; mono denoise 1.3416
+(worse). Ratios describe the specific synthetic test, not product parity.
+An additional 8,000-step denoiser refinement took 576.6 seconds and improved
+mixed development MSE, but a fresh 128-scene suite found it 46.1% worse than
+initial mono v2. It is rejected and not bundled. Initial mono v2 reduces input
+MSE by 85.1% there but is 31.3% worse than the RGB baseline. Correlated noise is
+the clear refinement weakness; balance per-noise-group and real-scene validation
+before further selection. See refinement report and explicit selection JSON.
+
+Background inference was further improved using whole-field AREA256 estimation,
+Gaussian-sigma16-smoothed additive residual and residual-only cubic enlargement.
+Original detail pixels are never resized in the scientific output. Four large
+gradient scenes improved by 79–95% MSE versus input (old tiled path -3–20%).
+Three gradient-free controls have smaller changes, but nonzero offsets and
+nebular-contrast errors remain. Actual larger-image tests also expose tile-phase
+dependence for other tasks. All results remain experimental, not photometric or
+camera-general qualification. Benchmark evidence is in Codex outputs/
+ForgePix-KI-Hintergrundvergleich.{py,json,md} with measured source hashes.
+
+Final local suite: 476 tests, no failures, 3 skips. Source startup/CLI smoke and
+all four actual ONNX scientific exports passed. Real full-size M27 GUI processing
+already passed for starless/deblur and the earlier tiled background path, with
+unchanged source, common previews, bit-identical Float32 FITS/TIFF and signed
+layer reconstruction within 3.73e-9. Final exact-commit GUI/CI/package evidence
+follows below. Existing RC acceptance remains open; version stays beta.

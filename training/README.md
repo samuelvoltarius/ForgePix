@@ -1,5 +1,90 @@
 # ForgePix model development
 
+## Own local models, second experiment (2026-09-06)
+
+The application now has an opt-in **Own AI image processing** tool and a
+`--ai-restore` entry point. It executes our trained ONNX weights locally with
+ONNX Runtime. PyTorch, a server and external astronomy applications are not
+required for inference. The normal processing workflow does not enable these
+experimental models automatically. The bundled `assets/models/*/manifest.json`
+and reports identify the exact weights, task, licence and measured limitations.
+
+The second training experiment uses **one monochrome network per task**, applied
+independently to each colour channel. It cannot average different channels to
+game a repeated-monochrome RGB noise test. All four tasks use fixed 256px input
+tiles and an input-derived affine p0.1/p99.9 normalization, inverted after
+inference without clipping. Whole-image normalization, reflected padding and
+64px cosine tile overlap are recorded in each output report. Global channel
+attention means changing tile context can still change results; a successful
+single-tile test alone is not a full-image quality qualification.
+
+`training.prepare_scenes` rehashes the public HST FITS, checks object/hash split
+separation, masks invalid SCI/WHT/DQ pixels and retains signed backgrounds and
+bright cores. The second scene bank contains 563 train and 288 validation patches
+from separate objects. These patches overlap within objects and are not 851
+independent observations. Validation includes M13 and M16; the final real-data
+test group is still empty. Source observational noise remains in both target
+and input. They are observed scene bases for controlled additional degradation,
+not clean/noisy independent exposure pairs.
+
+The v2 simulations add elliptical Gaussian/Moffat stars, faint curved filaments,
+weak spikes, anisotropic blur, signed gradients/glow, correlated/row/shot/read
+noise and identity examples. Denoise/background/deblur mix in observed HST scene
+bases; starless uses only known synthetic labels. Four 4,000-step jobs run
+sequentially on the Spark with an exclusive queue lock and an 80 GiB disk reserve.
+The loss includes gradients and local/global mean constraints in addition to
+MSE. Training-checkpoint selection uses a 64-scene development validation set.
+`evaluate_models` uses a separate generator and seed, compares to input and the
+earlier RGB parent with identical noise in all three channels, and measures
+stellar aperture flux, faint structures, bias and blank-region residuals.
+
+Reproduce from the repository root in a PyTorch training environment:
+
+    python -m training.prepare_scenes --input datasets/hst-diverse-001 --output datasets/scene-bank-v2 --per-file 24
+    python -m training.run_restoration_queue --output runs/restoration-v2-001 --scenes datasets/scene-bank-v2 --parents runs/multi-task-001 --steps 4000
+
+Additional denoising refinement uses a new training seed and includes the
+unmodified mono parent in checkpoint selection. It cannot promote a worse
+development result merely because the job finished. Independent evaluation is
+still required after selection. When a test is inspected for further development,
+reserve a new untouched final test before claiming release qualification.
+
+**Refinement outcome:** the extra 8,000-step run completed in 576.6 seconds.
+Its mixed development MSE improved from 1.7183e-5 to 9.2003e-6, but the new
+128-scene synthetic comparison (seed 9374209, reserved before evaluation) exposed
+a regression: mean MSE ratio versus the old RGB baseline was 1.9190, compared
+with 1.3133 for the first mono v2. The refinement is therefore **not shipped**.
+The initial mono denoiser reduces input MSE by 85.1% on that suite, but remains
+31.3% worse than the RGB comparison baseline; it is not claimed to beat it.
+Reports and the failed run remain available for analysis. Next denoiser selection
+must balance separate synthetic/noise groups and observed-scene validation rather
+than optimizing the mixed mean alone. The bundled mono v2 is an explicitly
+experimental integration, not an automatic successor to the old research model.
+
+**Background inference improvement:** large gradients need whole-field context.
+The background tool now processes a 256px area-resampled whole-field view and
+upsamples only its additive background residual, smoothed at sigma16 in that
+view. It never resizes the restored scientific image itself. The shared original
+normalization and exact source grid are retained. A bounded comparison on four
+gradient scenes and three gradient-free controls found substantially less error
+than the earlier tiled background path, but small constant offsets and nebular
+contrast changes remain. This is not photometric qualification. Other three
+tasks continue to use overlapping tiles.
+
+Export checks the ONNX graph and numerical equivalence to PyTorch on signed,
+ordinary and HDR inputs. The manifest requires SHA256, complete-target output,
+mono channels and the exact normalization/tile contract. Scientific FITS/TIFF
+outputs have unique directories, preserve metadata and include source/model
+hashes. Integer files follow the existing ForgePix dtype-max scale; float values
+retain their scale. Raw Bayer inputs, marked stretched images and known partial
+coverage masks are rejected. The GUI renders comparisons with one shared
+source-derived display stretch, separate from saved scientific values.
+
+These models remain **experimental and not photometrically validated**. This
+does not demonstrate parity with GraXpert, BlurXTerminator or StarXTerminator,
+nor generalization across real camera families, filters and telescopes. Inspect
+per-model reports instead of assuming a larger/newer experiment is better.
+
 ## Real-scene adaptation result (2026-09-06)
 
 `data-env/bin/python -m training.train_fits` was executed on the Spark.
@@ -73,8 +158,9 @@ Read `queue.jsonl`, per-task `report.json` and `supervisor.log` before launching
 another run. The queue is finite; changes and follow-up experiments are handled
 by the existing ForgePix continuation task.
 
-This directory contains an experimental, synthetic-only denoising baseline.
-It is not enabled in the application and is not release-qualified.
+The original v1 experiment below is a synthetic-only denoising baseline.
+Its checkpoints are comparison references; the app uses the separate opt-in
+mono contract described above. Neither experiment is release-qualified.
 
 The NAFNet architecture in `vendor/nafnet_upstream.py` comes from
 https://github.com/megvii-research/NAFNet at revision

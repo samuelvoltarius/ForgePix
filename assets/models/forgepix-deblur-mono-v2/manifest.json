@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "id": "forgepix-deblur-mono-v2",
+  "task": "deblur",
+  "model_file": "model.onnx",
+  "sha256": "71f8b3b6332b89d6f24af04f3860a514fa4be7ca94c306ecd89a435028688052",
+  "channels": 1,
+  "tile_size": 256,
+  "halo": 32,
+  "normalization": "affine_percentile_v1",
+  "output": "complete_target",
+  "status": "experimental",
+  "release_approved": false,
+  "license": "MIT",
+  "weights_origin": "Trained by ForgePix; no third-party pretrained weights",
+  "architecture": "NAFNet mono width16; upstream licence retained",
+  "upstream": "https://github.com/megvii-research/NAFNet/tree/2b4af71ebe098a92a75910c233a3965a3e93ede4",
+  "checkpoint_sha256": "fc75a48c96676433ce0e1158860eb50de64dc70075dbf9c9f83ce00bc21e6884",
+  "photometry_validated": false,
+  "onnx_opset": 17,
+  "export_max_abs_errors": [
+    9.19681042432785e-07,
+    1.7881393432617188e-07,
+    2.384185791015625e-06
+  ],
+  "limitations": "Synthetic and added-degradation HST scene tests; no real independent clean/noisy pairs, held-out camera or astrophotometric release qualification",
+  "inference": {
+    "strategy": "overlapping_tiles",
+    "stride": 192,
+    "overlap": 64,
+    "padding": "reflect"
+  }
+}

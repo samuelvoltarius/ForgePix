@@ -11,4 +11,5 @@ ExifRead>=3.0           # EXIF lesen ohne exiftool (Brennweite/Blende/ISO/Belich
 piexif>=1.1             # EXIF auf JPEG-Ausgaben übernehmen ohne exiftool (eingebaut, mitgeliefert)
 astropy>=5.3            # optional: FITS lesen/schreiben (Astro). Ohne astropy laufen JPG/TIFF/RAW normal.
 scipy>=1.10             # Mosaik-Optimierung und Feinregistrierung
+onnxruntime>=1.22,<2    # Eigene lokale Astro-KI; kein externer KI-Server erforderlich
 pyobjc-framework-Cocoa; sys_platform == "darwin"

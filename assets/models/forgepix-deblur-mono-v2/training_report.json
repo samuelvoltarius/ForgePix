@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "task": "deblur",
+  "status": "experimental",
+  "release_approved": false,
+  "steps": 4000,
+  "best_step": 1000,
+  "batch": 4,
+  "config": {
+    "img_channel": 1,
+    "width": 16,
+    "middle_blk_num": 2,
+    "enc_blk_nums": [
+      1,
+      1,
+      2
+    ],
+    "dec_blk_nums": [
+      1,
+      1,
+      1
+    ]
+  },
+  "contract": {
+    "channels": 1,
+    "tile_size": 256,
+    "halo": 32,
+    "normalization": "affine_percentile_v1",
+    "output": "complete_target"
+  },
+  "seed": 609061,
+  "development_validation_seed": 830122,
+  "seconds": 288.71766008995473,
+  "torch_version": "2.12.0.dev20260407+cu128",
+  "validation": {
+    "output_mse": 0.0005947752767951897,
+    "input_mse": 0.00045796452559443424,
+    "mean_bias": 0.00031150801078183576,
+    "mae": 0.0016139008257596288,
+    "samples": 64
+  },
+  "training_source_sha256": "eec0e96ffc8a7c8773b95a81c498483f06b3af966ba145909f91ab6183b8305e",
+  "scene_counts": {
+    "train": 563,
+    "validation": 288,
+    "test": 0
+  },
+  "limitations": "Synthetic and added-degradation HST scene tests; no real independent clean/noisy pairs, held-out camera or astrophotometric release qualification"
+}

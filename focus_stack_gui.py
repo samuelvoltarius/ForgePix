@@ -34,7 +34,26 @@ if __name__ == "__main__":
     # Im gebündelten Binary (PyInstaller) ist `sys.executable` das Binary selbst, nicht python.
     # Damit der GUI-Subprozess die Pipeline starten kann, dient `--cli` als zweiter Einstiegspunkt:
     #   forgepix --cli --input … → ruft focus_cull_stack.main() statt der GUI.
-    if len(sys.argv) > 1 and sys.argv[1] == "--cli":
+    if len(sys.argv) > 1 and sys.argv[1] == "--ai-restore":
+        import argparse
+        import ai_restore
+        from constants import ForgePixFehler
+        parser = argparse.ArgumentParser(description="Eigene lokale Astro-KI auf einem linearen FITS-/TIFF-Bild")
+        parser.add_argument("--input", required=True)
+        parser.add_argument("--model", required=True)
+        parser.add_argument("--output-root")
+        parser.add_argument("--strength", type=float, default=.5)
+        parser.add_argument("--experimental", action="store_true",
+                            help="Experimentelle Modelle ausdrücklich für diesen Lauf zulassen")
+        options = parser.parse_args(sys.argv[2:])
+        try:
+            result = ai_restore.run_file(options.input, options.model,
+                output_root=options.output_root, strength=options.strength,
+                allow_experimental=options.experimental)
+            print(result)
+        except (ForgePixFehler, OSError, ValueError) as exc:
+            parser.exit(1, str(exc) + "\n")
+    elif len(sys.argv) > 1 and sys.argv[1] == "--cli":
         import focus_cull_stack
         sys.argv = [sys.argv[0]] + sys.argv[2:]
         focus_cull_stack.main()
