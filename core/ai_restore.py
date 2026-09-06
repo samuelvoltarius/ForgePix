@@ -166,7 +166,8 @@ def _execution_record(device):
             "applied": False}
 
 
-def _create_session(content, *, device="auto", execution=None, log=log_print):
+def _create_session(content, *, device="auto", execution=None, log=log_print, cancel=None):
+    _cancelled(cancel)
     device = _device(device)
     if execution is None:
         execution = _execution_record(device)
@@ -194,6 +195,7 @@ def _create_session(content, *, device="auto", execution=None, log=log_print):
     if "cpu" not in candidates:
         candidates.append("cpu")
     for candidate in candidates:
+        _cancelled(cancel)
         provider = _PROVIDERS[candidate]
         attempt = {"provider": provider, "status": "initializing"}
         execution["attempts"].append(attempt)
@@ -222,6 +224,7 @@ def _create_session(content, *, device="auto", execution=None, log=log_print):
                 providers.append(_PROVIDERS["cpu"])
             # Execute precisely the hash-checked bytes; no external tensor files.
             session = ort.InferenceSession(content, sess_options=options, providers=providers)
+            _cancelled(cancel)
             # ORT's own run() fallback would mix GPU tiles with later CPU tiles.
             # ForgePix handles the failure by recomputing the complete image.
             session.disable_fallback()
@@ -238,9 +241,13 @@ def _create_session(content, *, device="auto", execution=None, log=log_print):
             execution.update(provider=provider, registered_providers=registered,
                              provider_options=provider_options)
             log("KI-Rechenbackend: %s (Anforderung: %s)." % (provider, execution["requested_device"]))
+            _cancelled(cancel)
             return session, inputs[0].name, outputs[0].name
         except Exception as exc:
             session = None
+            # A slow native initialization can return or fail after cancellation.
+            # Release it and stop before marking a failure or trying another EP.
+            _cancelled(cancel)
             attempt.update(status="initialization_failed", error=str(exc))
             if candidate == "cpu":
                 raise ForgePixFehler("Das lokale ONNX-Modell kann nicht ausgeführt werden: %s" % exc) from exc
@@ -331,7 +338,7 @@ def _infer(image, content, strength, progress, cancel, task="denoise", *, device
             progress(1, 1)
         return image.copy(), info
     execution = info["execution"]
-    session, input_name, output_name = _create_session(content, device=device, execution=execution, log=log)
+    session, input_name, output_name = _create_session(content, device=device, execution=execution, log=log, cancel=cancel)
     retry_cpu = False
     try:
         result = _infer_session(image, session, input_name, output_name, offset, scale,
@@ -352,7 +359,7 @@ def _infer(image, content, strength, progress, cancel, task="denoise", *, device
         # the failed session and partially accumulated image-sized arrays.
         session = None
         _cancelled(cancel)
-        session, input_name, output_name = _create_session(content, device="cpu", execution=execution, log=log)
+        session, input_name, output_name = _create_session(content, device="cpu", execution=execution, log=log, cancel=cancel)
         result = _infer_session(image, session, input_name, output_name, offset, scale,
                                 strength, progress, cancel, task)
     execution["applied"] = True

@@ -1,5 +1,6 @@
 """Device selection and complete-image recovery, without requiring a GPU in CI."""
 import hashlib
+import gc
 import json
 from pathlib import Path
 import sys
@@ -7,6 +8,7 @@ import tempfile
 import threading
 from types import SimpleNamespace
 import unittest
+import weakref
 from unittest.mock import patch
 
 import numpy as np
@@ -172,6 +174,37 @@ class AIDeviceTests(unittest.TestCase):
         with self.assertRaisesRegex(ForgePixFehler, "abgebrochen"):
             self.infer(runtime, np.ones((210, 220), np.float32), cancel=cancel)
         self.assertEqual(len(runtime.created), 1)
+
+    def test_cancel_during_initialization_never_tries_another_backend(self):
+        for initialization_fails in (False, True):
+            with self.subTest(initialization_fails=initialization_fails):
+                cancel = threading.Event()
+
+                class CancelledRuntime(Runtime):
+                    session_reference = None
+
+                    def InferenceSession(self, content, sess_options, providers):
+                        session = super().InferenceSession(content, sess_options, providers)
+                        self.session_reference = weakref.ref(session)
+                        cancel.set()
+                        if initialization_fails:
+                            raise RuntimeError("GPU initialization failed after user cancellation")
+                        return session
+
+                runtime = CancelledRuntime([CUDA, DML, CPU])
+                with self.assertRaisesRegex(ForgePixFehler, "abgebrochen"):
+                    self.infer(runtime, np.ones((30, 30), np.float32), cancel=cancel)
+                self.assertEqual(len(runtime.created), 1)
+                gc.collect()
+                self.assertIsNone(runtime.session_reference())
+
+    def test_already_cancelled_request_never_initializes_a_backend(self):
+        cancel = threading.Event()
+        cancel.set()
+        runtime = Runtime([DML, CPU])
+        with self.assertRaisesRegex(ForgePixFehler, "abgebrochen"):
+            self.infer(runtime, np.ones((30, 30), np.float32), cancel=cancel)
+        self.assertEqual(runtime.created, [])
 
     def test_progress_cancellation_never_restarts(self):
         cancel = threading.Event()
