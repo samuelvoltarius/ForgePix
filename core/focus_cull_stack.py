@@ -1688,7 +1688,38 @@ def _gather_session_paths(input_dir, args):
             if more:
                 print(f"  + Session {os.path.basename(d.rstrip('/'))}: {len(more)} Frames")
                 paths += more
-    return list(dict.fromkeys(paths))
+    paths = list(dict.fromkeys(paths))
+    # Dieselbe Aufnahme darf nur EINMAL in den Stapel. Andere Programme (Siril,
+    # DeepSkyStacker) legen konvertierte Kopien neben die Originale; doppelt gestapelt
+    # gewichten sie die Nacht falsch und brechen die Ausreisser-Erkennung, weil derselbe
+    # Wert zweimal in derselben Verteilung steht. Erkannt am Belichtungsbeginn.
+    try:
+        from astro_input import doppelte_aussortieren
+        paths, _doppelt = doppelte_aussortieren(paths, log=log_print)
+    except Exception as fehler:
+        print("  (Doppel-Pruefung uebersprungen: %s)" % fehler, file=sys.stderr)
+    return paths
+
+
+def _platz_pruefen(work_dir, paths, faktor=2.5, log=log_print):
+    """Reicht der Platz fuer die Zwischendateien? Warnt, bevor die Nacht anfaengt.
+
+    Registrierte Frames liegen als 16-Bit-TIFF im Arbeitsordner; bei Drizzle mehr. `faktor`
+    ist ein grober Aufschlag auf die Groesse der Eingabe. Es wird nur GEWARNT, nicht
+    abgebrochen: eine zu vorsichtige Schaetzung darf niemandem die Verarbeitung verbieten.
+    """
+    try:
+        noetig = sum(os.path.getsize(p) for p in paths if os.path.isfile(p)) * float(faktor)
+        ziel = work_dir if os.path.isdir(work_dir) else os.path.dirname(os.path.abspath(work_dir))
+        frei = shutil.disk_usage(ziel or ".").free
+    except OSError:
+        return True
+    if frei >= noetig:
+        return True
+    log("  Achtung: geschaetzt %.1f GB Zwischendateien, aber nur %.1f GB frei auf %s. "
+        "Die Verarbeitung laeuft weiter, kann aber am Plattenplatz scheitern."
+        % (noetig / 1e9, frei / 1e9, ziel))
+    return False
 
 
 def _load_astro_calibration(input_dir, args, paths):
@@ -1846,6 +1877,7 @@ def run_astro(input_dir, work_dir, args):
         print("  Keine Kalibrierungsbilder vorhanden: Stack ohne Dark-/Flat-Korrektur. "
               "Hotpixel und Vignettierung koennen im Ergebnis bleiben.")
 
+    _platz_pruefen(work_dir, paths)
     reg_dir = os.path.join(work_dir, "registered")
     if os.path.isdir(reg_dir):
         shutil.rmtree(reg_dir)

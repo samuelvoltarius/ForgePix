@@ -1121,6 +1121,59 @@ def _bg_sigma(f, coverage=None):
     return max(mad, 1e-5)
 
 
+def _bildgroesse(pfad):
+    """Nur die Groesse einer Aufnahme lesen, ohne die Pixel zu laden.
+
+    Bei FITS steht sie im Header, bei TIFF in den Kopfdaten — beides kostet Millisekunden.
+    Ein voller Lesevorgang je Datei waere bei hundert Subs unnoetig teuer, nur um Formen
+    zu vergleichen.
+    """
+    endung = os.path.splitext(pfad)[1].lower()
+    try:
+        if endung in (".fit", ".fits", ".fts"):
+            from astropy.io import fits
+            h = fits.getheader(pfad)
+            achsen = int(h.get("NAXIS", 0))
+            if achsen >= 2:
+                return (int(h["NAXIS2"]), int(h["NAXIS1"]))
+        elif endung in (".tif", ".tiff"):
+            import tifffile
+            with tifffile.TiffFile(pfad) as t:
+                form = t.series[0].shape
+                return (int(form[0]), int(form[1])) if len(form) >= 2 else None
+    except Exception:
+        return None
+    return None
+
+
+def _mehrheitsgroesse(paths, log=log_print):
+    """Die Bildgroesse bestimmen, auf die sich die MEHRHEIT der Aufnahmen einigt.
+
+    Returns:
+        (behaltene_pfade, form_des_ersten_behaltenen, aussortierte_pfade)
+
+    Kann die Groesse einer Datei nicht billig gelesen werden (fremdes Format, kaputter Header),
+    bleibt sie drin — die spaetere Pruefung faengt sie ab. Lieber einmal zu viel behalten als
+    eine brauchbare Aufnahme still wegzuwerfen.
+    """
+    groessen = {}
+    unbekannt = []
+    for p in paths:
+        g = _bildgroesse(p)
+        if g is None:
+            unbekannt.append(p)
+        else:
+            groessen.setdefault(g, []).append(p)
+    if not groessen:
+        return paths, _read_float(paths[0]).shape, []
+    mehrheit = max(groessen, key=lambda g: len(groessen[g]))
+    behalten = groessen[mehrheit] + unbekannt
+    behalten.sort(key=paths.index)
+    aussortiert = [p for p in paths if p not in set(behalten)]
+    form = _read_float(behalten[0]).shape
+    return behalten, form, aussortiert
+
+
 def stack(paths, method="sigma", kappa=2.5, normalize=True, local_norm=False,
           weight=False, sigma_iters=2, belichtungen=None, log=log_print, preview_cb=None,
           *, return_info=False):
@@ -1180,8 +1233,19 @@ def stack(paths, method="sigma", kappa=2.5, normalize=True, local_norm=False,
             skal = (t_ref / t).astype(np.float32)
             log("    gemischte Belichtungszeiten: %.0f–%.0f s, auf %.0f s skaliert "
                 "(Faktoren %.2f–%.2f)" % (t.min(), t.max(), t_ref, skal.min(), skal.max()))
+    # Die Bildgroesse kommt aus der MEHRHEIT der Aufnahmen, nicht aus der ersten Datei.
+    # Vorher galt `paths[0]` als Mass aller Dinge: lag dort ein Ausreisser (eine Voransicht,
+    # ein anders gebinntes Sub, ein Frame aus einer anderen Nacht), scheiterte der GANZE
+    # Stapel. Nachgestellt mit 10 Frames, davon einer abweichend an erster Stelle: Abbruch,
+    # neun gute Aufnahmen verloren. Jetzt bestimmt die Mehrheit, und die Abweichler werden
+    # benannt und uebersprungen statt alles mitzureissen.
+    paths, shape, aussortiert = _mehrheitsgroesse(paths, log=log)
+    if aussortiert:
+        log("    %d Aufnahme(n) mit abweichender Bildgroesse uebersprungen: %s"
+            % (len(aussortiert), ", ".join(os.path.basename(p) for p in aussortiert[:5])
+               + (" …" if len(aussortiert) > 5 else "")))
+    n = len(paths)
     first = _read_float(paths[0])
-    shape = first.shape
     if first.size == 0 or not np.isfinite(first).all():
         raise ForgePixFehler("Stacking: ungueltige Pixelwerte in der Aufnahme.")
     masks = {}

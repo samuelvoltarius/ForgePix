@@ -122,3 +122,46 @@ def kalibrierung_nach_header(wurzeln, max_dateien=4000, log=None):
         log("    Kalibrierung aus den Headern: %s"
             % (", ".join(teile) if teile else "nichts gefunden"))
     return gefunden
+
+
+def doppelte_aussortieren(paths, log=None):
+    """Dieselbe Aufnahme nicht zweimal in den Stapel lassen.
+
+    Wie sie entstehen: andere Programme (Siril, DeepSkyStacker) legen konvertierte oder
+    umbenannte Kopien neben die Originale. Wer dann auf den Ordner zeigt, stapelt einzelne
+    Aufnahmen doppelt — das Ergebnis sieht normal aus, gewichtet die Nacht aber falsch und
+    bricht die Ausreisser-Erkennung, weil ein Wert zweimal in derselben Verteilung steht.
+
+    Erkannt wird an `DATE-OBS` plus Belichtungszeit: zwei Aufnahmen mit identischem
+    Belichtungsbeginn sind dieselbe Aufnahme, egal wie die Datei heisst. Ohne Zeitstempel
+    bleibt die Datei drin — geraten wird nicht.
+
+    Returns:
+        (behalten, verworfen) als Listen von Pfaden.
+    """
+    from astropy.io import fits
+    gesehen = {}
+    behalten, verworfen = [], []
+    for p in paths:
+        schluessel = None
+        if os.path.splitext(p)[1].lower() in FITS_EXTS:
+            try:
+                h = fits.getheader(p)
+                beginn = str(h.get("DATE-OBS", "")).strip()
+                if beginn:
+                    schluessel = (beginn, str(h.get("EXPTIME", h.get("EXPOSURE", ""))).strip())
+            except (OSError, ValueError):
+                schluessel = None
+        if schluessel is None or schluessel not in gesehen:
+            if schluessel is not None:
+                gesehen[schluessel] = p
+            behalten.append(p)
+        else:
+            verworfen.append(p)
+    if verworfen and log:
+        log("    %d doppelte Aufnahme(n) aussortiert (gleicher Belichtungsbeginn): %s"
+            % (len(verworfen), ", ".join(os.path.basename(p) for p in verworfen[:5])
+               + (" …" if len(verworfen) > 5 else "")))
+        log("    Solche Kopien legen andere Programme neben die Originale; doppelt gestapelt "
+            "gewichten sie die Nacht falsch.")
+    return behalten, verworfen
