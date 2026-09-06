@@ -22,15 +22,15 @@ class ResultMixin:
 
     def _is_ai_result_current(self):
         source = getattr(self, "_ai_result_path", None)
-        return bool(source and self.result_path and os.path.normcase(os.path.abspath(source)) ==
-                    os.path.normcase(os.path.abspath(self.result_path)))
+        return bool(source and self.result_path and os.path.normcase(os.path.realpath(source)) ==
+                    os.path.normcase(os.path.realpath(self.result_path)))
 
     def _ai_display_for_current(self):
         display = getattr(self, "_ai_display", None)
         if not display or not self.result_path:
             return None
-        current = os.path.normcase(os.path.abspath(self.result_path))
-        if current != os.path.normcase(os.path.abspath(display["result"])):
+        current = os.path.normcase(os.path.realpath(self.result_path))
+        if current != os.path.normcase(os.path.realpath(display["result"])):
             return None
         try:
             if (os.stat(self.result_path).st_mtime_ns != display["result_mtime_ns"]
@@ -63,10 +63,10 @@ class ResultMixin:
             # before-image after an external edit to either scientific file.
             return None
         if display:
-            path = os.path.normcase(os.path.abspath(src))
+            path = os.path.normcase(os.path.realpath(src))
             for original, preview, timestamp in (("source", "before", "source_mtime_ns"),
                                                   ("result", "after", "result_mtime_ns")):
-                if (path == os.path.normcase(os.path.abspath(display[original]))
+                if (path == os.path.normcase(os.path.realpath(display[original]))
                         and os.stat(src).st_mtime_ns == display[timestamp]
                         and os.path.isfile(display[preview])):
                     return display[preview]

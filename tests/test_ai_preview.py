@@ -136,6 +136,29 @@ class AIPreview(unittest.TestCase):
         self.assertIsNone(window._preview_png(str(source)))
         self.assertIsNone(window._preview_png(str(result)))
 
+    def test_symlinked_folder_keeps_linked_previews_and_display_export(self):
+        actual = self.root / "actual"
+        actual.mkdir()
+        alias = self.root / "alias"
+        try:
+            alias.symlink_to(actual, target_is_directory=True)
+        except OSError as exc:
+            self.skipTest(f"Directory symlinks unavailable: {exc}")
+        image = np.linspace(.01, .1, 256, dtype=np.float32).reshape(16, 16)
+        fits.writeto(actual / "source.fits", image)
+        tifffile.imwrite(actual / "result_32bit.tif", image * .95)
+        source, result = alias / "source.fits", alias / "result_32bit.tif"
+        window = _Export()
+        window.result_path = str(result)
+        window._ai_result_path = str(result.resolve())
+        window._ai_display = create_previews(source, result)
+        self.assertTrue(window._is_ai_result_current())
+        self.assertIsNotNone(window._ai_display_for_current())
+        self.assertEqual(window._preview_png(str(source)), window._ai_display["before"])
+        self.assertEqual(window._preview_png(str(result)), window._ai_display["after"])
+        exported = Path(window._write_ai_export(str(self.root), linear=False, png=True))
+        self.assertTrue((exported / "display_stretched.png").is_file())
+
     def test_current_float_result_wins_over_star_residual_sibling(self):
         from ui.main_window import MainWindow
         result = self.root / "selected_linear.tif"

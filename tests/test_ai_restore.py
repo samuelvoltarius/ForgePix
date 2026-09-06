@@ -384,7 +384,7 @@ class AIRestoreTests(unittest.TestCase):
             with self.assertRaisesRegex(ForgePixFehler, "abgebrochen"):
                 self._file(source, strength=0, cancel=cancel)
         self.assertEqual(first.read_bytes(), prior)
-        self.assertEqual(list(self.root.glob("ai-*")), [first.parent])
+        self.assertEqual([path.resolve() for path in self.root.glob("ai-*")], [first.parent.resolve()])
 
     def test_output_integrity_covers_science_layers_and_coverage(self):
         self.manifest["task"] = "starless"
