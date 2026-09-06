@@ -291,3 +291,28 @@ Local full suite passed 485 tests (4 skips), followed by 48 focused tests (1 ski
 including the final ninth reimport case. Exact final CI and FITS evidence follow.
 The main READMEs now distinguish the optional language assistant from our four
 local pixel models and describe experimental status and rejected refinement.
+
+## Verified own-AI milestone 441b432
+
+Exact runtime 441b432b325d9b48ac962a6cc223c4fc566daf28 passed 486 tests in
+GitHub run 34036025945 on Windows/macOS/Linux and all three builds in run
+34036025903. Packaged smoke runs actually execute all four bundled ONNX models
+on FITS, in addition to GUI startup and focus stacking.
+The final clean-worktree MainWindow M27 test passed in 349.921 seconds: all four
+operations and native comparisons, unchanged 140336640-byte original, finite
+4144x2822 RGB Float32 FITS/TIFF with identical pixels. Task times were
+111.015/4.563/115.328/112.343 seconds (denoise/background/deblur/starless).
+Star-layer reconstruction error remains 3.72529e-9. Evidence: Codex
+outputs/ForgePix-KI-M27-GUI-441b432.json. A separate real MainWindow reimport of
+the full M27 background result restored the common preview and copied FITS/TIFF
+byte-for-byte in 4.634 seconds (ForgePix-KI-Reimport-M27-441b432.json).
+
+Downloaded Windows ZIP: 172598837 bytes, SHA256
+d4b083c87541dfcd3345de1ea2278c4cd887f2cbb202ec07d9d66d0c4c2daed7,
+in Codex outputs/ForgePix-441b432-Windows. Archive CRC and all four model hashes
+passed. The extracted executable locally passed GUI startup, focus stacking and
+all four actual model FITS exports; verification.json and smoke.log record it.
+This entry changes documentation only. Version remains 1.27.1-beta, experimental
+models are not defaults, and neither photometric/camera-general AI nor RC/full
+product parity is declared. The existing hourly continuation remains active;
+next training priority is correlated-noise breadth and separate validation gates.
