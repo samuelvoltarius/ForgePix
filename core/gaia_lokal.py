@@ -270,11 +270,13 @@ def zusammenfuehren(alt, neu):
     return Katalog(ra[erste], dec[erste], g[erste], c[erste], metadata=metadata)
 
 
-def _tap_abfrage(query, *, cancel=None, timeout=120):
+def _tap_abfrage(query, *, cancel=None, timeout=120, raw_rows=False):
     """Native ESA TAP/UWS query with bounded reads and cooperative cancellation.
 
     https://www.cosmos.esa.int/web/gaia-users/archive/programmatic-access
     https://www.ivoa.net/documents/UWS/20161024/REC-UWS-1.1-20161024.html
+    raw_rows=True preserves JSON integers/booleans/nulls for typed catalogues;
+    the default four floating columns remain the legacy position-catalogue API.
     """
     from http.cookiejar import CookieJar
     from urllib import request, parse, error
@@ -356,8 +358,13 @@ def _tap_abfrage(query, *, cancel=None, timeout=120):
         result = json.loads(body)
         names = [column["name"] for column in result["metadata"]]
         rows = result["data"]
-        if not isinstance(rows, list) or any(len(row) != len(names) for row in rows):
+        if (any(not isinstance(name, str) for name in names) or len(set(names)) != len(names)
+                or not isinstance(rows, list)
+                or any(not isinstance(row, list) or len(row) != len(names) for row in rows)):
             raise ValueError("ungültige Tabellenform")
+        if raw_rows:
+            check()
+            return {"columns": names, "rows": rows, "metadata": result["metadata"]}
         required = ("ra", "dec", "phot_g_mean_mag", "bp_rp")
         table = {key: np.asarray([row[names.index(key)] for row in rows], np.float64) for key in required}
         check()

@@ -1,6 +1,13 @@
 # Eigene kataloggestützte Farbkalibrierung: nächster Ausbau
 
-Stand 06.09.2026 · Entwurf, keine implementierte oder qualifizierte Funktion.
+Stand 06.09.2026 · P0-Diagnosebasis implementiert; PCC/SPCC weiterhin Entwurf, nicht qualifiziert.
+
+Das separate Gaia/GSPC-Feldformat mit verlustfreien IDs, Eigenbewegung und
+Qualitätsmerkmalen sowie native Aperturmessungen stehen jetzt über die CLI zur
+Verfügung. Sie schreiben ausschließlich Diagnoseberichte. Bedienung und Grenzen:
+[NATIVE_PHOTOMETRY.md](NATIVE_PHOTOMETRY.md). Die folgenden Farbfit-/SPCC-Schritte
+sind weiterhin nicht implementiert oder freigegeben. Die Beschreibung des alten
+Positionskatalogs bleibt für dessen eigenes, getrenntes NPZ-Format gültig.
 
 **Priorität: ein überprüfbarer empirischer Breitband-PCC nach dem nativen Solver.** Anschließend folgt eine spektrale Vorhersage mit belegten Instrumentkurven. Dafür ist kein KI-Training erforderlich. Produktgleichheit mit Siril/PixInsight wird daraus nicht abgeleitet.
 
@@ -42,4 +49,4 @@ CALSPEC-Spektren mit festgehaltenen Dateiversionen können später einen getrenn
 
 **Rechte/Datenbeschaffung:** Kleine Feldauszüge nach Bedarf; keine pauschalen Trainingsdownloads. Gaia mit Release-/ESA/Gaia/DPAC-Nachweis und gespeicherten Datenbedingungen; die aktuelle [ESA-Lizenzseite](https://www.cosmos.esa.int/web/gaia-users/license) war hier mit HTTP 451 nicht verifizierbar, deshalb keine CC0-/uneingeschränkte Weitergabe behaupten. Für mitgelieferte Kurven und Referenzspektren Rechte je Produkt dokumentieren. [MAST-Datennutzung](https://stdatu.stsci.edu/publishing/data-use) unterscheidet öffentliche Daten und gesondert lizenzierte Produkte. [GaiaXPy](https://github.com/gaia-dpci/GaiaXPy/blob/main/LICENSE) ist BSD-3-Clause und eignet sich als unabhängiges Prüfwerkzeug; eigene Integration bleibt möglich. „Gratis“ ersetzt keine Daten- oder Softwarelizenzprüfung.
 
-**Nächster Auftrag:** P0 plus native Aperturmessung, ausschließlich Diagnosebericht; danach P1 hinter den festen Gates. Kein automatischer PCC-Farbauftrag für den vorhandenen SII/OIII-Datensatz. In dieser Entwurfsrunde wurden keine weiteren Astronomiedaten geladen und kein Runtimecode geändert.
+**Nächster Auftrag:** P0-Diagnosen breiter prüfen, anschließend P1 hinter den festen Gates und eine geführte Oberfläche. Kein automatischer PCC-Farbauftrag für den vorhandenen SII/OIII-Datensatz. In der ursprünglichen Entwurfsrunde wurden keine weiteren Astronomiedaten geladen und kein Runtimecode geändert; der anschließende P0-Ausbau ist separat im RELEASE_WORKLOG dokumentiert.

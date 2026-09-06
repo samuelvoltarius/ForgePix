@@ -34,7 +34,58 @@ if __name__ == "__main__":
     # Im gebündelten Binary (PyInstaller) ist `sys.executable` das Binary selbst, nicht python.
     # Damit der GUI-Subprozess die Pipeline starten kann, dient `--cli` als zweiter Einstiegspunkt:
     #   forgepix --cli --input … → ruft focus_cull_stack.main() statt der GUI.
-    if len(sys.argv) > 1 and sys.argv[1] in {"--recipe", "--solve"}:
+    if len(sys.argv) > 1 and sys.argv[1] in {"--photometry", "--photometry-catalogue"}:
+        import argparse
+        import json
+        import signal
+        import threading
+        from pathlib import Path
+        from constants import ForgePixFehler
+        mode = sys.argv[1]
+        parser = argparse.ArgumentParser(description="Native Sternphotometrie: Diagnose ohne Farbänderung")
+        parser.add_argument("--catalogue", required=True, help="Separater Gaia-DR3/GSPC-Feldauszug als NPZ")
+        if mode == "--photometry-catalogue":
+            parser.add_argument("--ra", required=True, type=float, help="Feldmitte in Grad")
+            parser.add_argument("--dec", required=True, type=float, help="Feldmitte in Grad")
+            parser.add_argument("--radius", type=float, default=.5, help="Feldradius in Grad")
+            parser.add_argument("--max-mag", type=float, default=15.5)
+            parser.add_argument("--limit", type=int, default=20000)
+        else:
+            parser.add_argument("--input", required=True, help="Lineares Mono-/RGB-FITS mit WCS")
+            parser.add_argument("--output-root")
+            parser.add_argument("--epoch", type=float, help="Dokumentierte effektive Aufnahmeepoche als Julianisches Jahr")
+            parser.add_argument("--saturation", nargs="+", type=float, help="Belegte Sättigung in Eingangs-Pixeleinheiten; ein Wert oder R G B")
+            parser.add_argument("--variance", help="Varianz-FITS gleicher Form in Eingangseinheit²; keine Drizzle-Gewichte")
+            parser.add_argument("--linear", action="store_true", help="Lineare Eingabe ausdrücklich bestätigen, falls Headernachweis fehlt")
+            parser.add_argument("--aperture", type=float, default=6.)
+            parser.add_argument("--annulus-inner", type=float, default=9.)
+            parser.add_argument("--annulus-outer", type=float, default=14.)
+        options = parser.parse_args(sys.argv[2:])
+        cancel = threading.Event()
+        signal.signal(signal.SIGINT, lambda *_: cancel.set())
+        try:
+            if mode == "--photometry-catalogue":
+                from photometric_catalogue import download_field
+                path = Path(options.catalogue).resolve()
+                if path.exists() or not path.parent.is_dir():
+                    raise ForgePixFehler("Bitte eine neue Katalogdatei in einem vorhandenen Ordner wählen.")
+                catalogue = download_field(options.ra, options.dec, options.radius,
+                    max_mag=options.max_mag, limit=options.limit, cancel=cancel)
+                catalogue.save(path)
+                print(json.dumps({"catalogue_path": str(path), "rows": len(catalogue.columns["source_id"])}, ensure_ascii=False))
+            else:
+                from photometry_file import diagnose_file
+                saturation = options.saturation
+                if saturation and len(saturation) == 1:
+                    saturation = saturation[0]
+                result = diagnose_file(options.input, options.catalogue, options.output_root,
+                    epoch_jyear=options.epoch, saturation=saturation, variance_path=options.variance,
+                    linear_confirmed=options.linear, aperture_radius=options.aperture,
+                    annulus_inner=options.annulus_inner, annulus_outer=options.annulus_outer, cancel=cancel)
+                print(json.dumps({key: result[key] for key in ("report_path", "csv_path")}, ensure_ascii=False))
+        except (ForgePixFehler, OSError, ValueError) as exc:
+            parser.exit(130 if cancel.is_set() else 1, str(exc) + "\n")
+    elif len(sys.argv) > 1 and sys.argv[1] in {"--recipe", "--solve"}:
         import argparse
         import json
         import signal

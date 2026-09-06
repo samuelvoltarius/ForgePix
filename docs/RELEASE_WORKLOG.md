@@ -646,3 +646,36 @@ gated empirical broadband PCC; spectra and measured channel/filter responses
 are required for SPCC. Also extend recipes with native process adapters,
 mask/PixelMath preservation and batch scheduling. Existing own-AI models remain
 experimental; no model-quality upgrade or RC/product-parity claim is made.
+
+## Native photometric field and read-only aperture diagnostics (P0)
+
+The new separate Gaia DR3/GSPC field format retains exact int64 source IDs,
+BVR magnitudes/fluxes/errors/flags, astrometric errors and quality metadata.
+The bounded ESA TAP join preserves JSON integers and nulls. Existing positional
+NPZ files are not silently upgraded. New catalogues publish atomically without
+overwriting another file. Astropy propagates supported ICRS rows in TCB with
+pm_ra_cosdec; missing epochs/motion and unmodelled perspective/covariance remain
+explicit. A local real M27 field contains 6279 rows, 2419 catalogue-quality passes;
+these counts are not photometric-calibration approval.
+
+Native shared-channel subpixel apertures estimate a local sky plane and return
+net flux, diagonal error assumptions and per-star exclusions. A minimum two-pixel
+aperture/annulus gap prevents shared-pixel noise from being counted independently.
+Sky clipping that reaches its support/iteration limit retains only a flagged
+diagnostic estimate. Independent analytic, Gaussian-noise and correlated-noise
+controls test both measured values and the limits of the uncertainty model.
+
+The --photometry CLI writes JSON/CSV only, preserving physical FITS units and
+Float64 precision without normalization, clipping or image writes. Partial common
+coverage excludes affected stars; sampling weights are not variance. Unknown
+stack epoch/saturation/filter remain unknown. Original files and all used
+companions are checked before and after measurement/publication. Large int64
+pixels that Float64 cannot preserve and invalid/singular WCS are rejected;
+WCS automatic repair cannot invent a replacement geometry. JSON/CSV preserve
+decimal source-ID strings. The packaged smoke now exercises this offline route.
+
+P0 remains a CLI diagnostic foundation. No colour fit, colour gains, GUI colour
+calibration workflow, aperture correction, qualified covariance, new AI model or
+RC/parity approval is delivered. See NATIVE_PHOTOMETRY.md. Next are the gated
+empirical broadband fit and guided UI, genuine instrument-response data for SPCC,
+native recipe adapters and separately measured improvements to the four AI tracks.

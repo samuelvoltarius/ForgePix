@@ -181,6 +181,34 @@ def main():
             raise RuntimeError("Packaged native WCS does not match the independent field")
         print("Native astrometry smoke passed: independent WCS field and exact float64 FITS")
 
+        # Test the actual binary's offline photometry adapter, preserving int64
+        # identifiers and the scientific input. No catalogue/network in CI.
+        from photometric_catalogue import PhotometricCatalogue
+        sky = truth.pixel_to_world(points[:, 0], points[:, 1]).icrs
+        ids = np.arange(len(points), dtype=np.int64) + 4294967296000000001
+        photometric = PhotometricCatalogue(dict(source_id=ids, ra=sky.ra.deg, dec=sky.dec.deg,
+            ref_epoch=np.full(len(points), 2016.), pmra=np.zeros(len(points)), pmdec=np.zeros(len(points))))
+        photometric_path = Path(d) / "photometric.npz"
+        photometric.save(photometric_path)
+        original_solved = hashlib.sha256(solved_paths[0].read_bytes()).hexdigest()
+        diagnosed = subprocess.run(command + ["--photometry", "--input", str(solved_paths[0]),
+            "--catalogue", str(photometric_path), "--epoch", "2025.5", "--output-root", str(Path(d))],
+            env=env, capture_output=True, timeout=90, cwd=root)
+        if diagnosed.returncode:
+            raise RuntimeError("Packaged photometry failed: " + diagnosed.stderr.decode(errors="replace"))
+        diagnoses = list(Path(d).glob("stack-photometry-*/photometry_report.json"))
+        if len(diagnoses) != 1:
+            raise RuntimeError("Packaged photometry did not save its diagnostic report")
+        diagnosis = json.loads(diagnoses[0].read_text(encoding="utf-8"))
+        rows = diagnosis["measurement"]["stars"]
+        if ({row["source_id"] for row in rows} != {str(value) for value in ids}
+                or sum(bool(row["measured"]) for row in rows) < 40
+                or any(row["fit_eligible"] for row in rows)
+                or diagnosis["color_calibration_applied"] or diagnosis["image_written"]
+                or hashlib.sha256(solved_paths[0].read_bytes()).hexdigest() != original_solved):
+            raise RuntimeError("Packaged photometry violated diagnostic/ID/original preservation")
+        print("Native photometry smoke passed: offline catalogue apertures, exact IDs and preserved FITS")
+
 
 if __name__ == "__main__":
     main()
