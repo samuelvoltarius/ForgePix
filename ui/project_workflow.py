@@ -166,9 +166,13 @@ class ProjectMixin:
     def _project_ready(self):
         active = getattr(self, "_tool_worker", None)
         ai = getattr(self, "_ai_restore_dialog", None)
+        recipe = getattr(self, "_recipe_dialog", None)
+        catalogue_busy = any(dialog is not None and dialog.is_running() for dialog in
+                             (getattr(self, "_astrometry_dialog", None), getattr(self, "_catalogue_dialog", None)))
         if (getattr(self, "_project_worker", None) is not None
                 or (self.proc and self.proc.state() != QProcess.NotRunning)
-                or (active is not None and active.isRunning()) or (ai is not None and ai.is_running())):
+                or (active is not None and active.isRunning()) or (ai is not None and ai.is_running())
+                or (recipe is not None and recipe.is_running()) or catalogue_busy):
             QMessageBox.information(self, tr("Projekt"), tr("Bitte zuerst die laufende Verarbeitung abschließen."))
             return False
         return True

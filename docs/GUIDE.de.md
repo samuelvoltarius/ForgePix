@@ -98,10 +98,12 @@ Viele Aufnahmen desselben Himmelsausschnitts werden ausgerichtet und **gemittelt
   - **TPS-Feinregistrierung** — korrigiert Restverzeichnung (Weitwinkel/Refraktor) nach der globalen Ausrichtung.
   - **Echtes Drizzle** — Variable-Pixel-Rekonstruktion (pixfrac-Drop) statt nur Hochskalieren; braucht
     Drizzle 2× und gediterte Subs.
-  - **Photometrische Farbkalibrierung (PCC/SPCC)** — echte Katalog-Farbe: **Siril-SPCC** (Plate-Solve +
-    Gaia DR3) → eigener **astroquery**-Gaia-Pfad → **Lite** (stern-basiert, offline). Backend `auto/siril/gaia/lite`;
-    optional OSC-Sensorname und Schmalband-Modus. Siril braucht Netz oder den lokalen Gaia-Katalog; sonst
-    sauberer Rückfall. *(KI wird hier bewusst nicht genutzt — PCC ist eine Messung, kein Ermessen.)*
+  - **Native Sternfarbbalance:** `auto` und `lite` messen Sternflüsse mit lokalem Hintergrund
+    und bestimmen einen Weißabgleich unter einer neutralen Sternpopulationsannahme. Das ist keine
+    echte Katalogfarbkalibrierung. Bekannte Schmalbanddaten werden übersprungen; bei zu wenigen
+    geeigneten Sternen bleibt das Bild mit erklärtem Grund unverändert. Der ausdrücklich gewählte
+    Siril-Pfad bleibt eine externe Integration; der bisherige Gaia-Farbpfad nutzt nur Sternpositionen.
+    Siehe [wissenschaftliche Grenzen](NATIVE_STELLAR_BALANCE.md).
     - **Astrometry.net (optional, eigener Key):** ohne Siril/lokalen Solver kann der Gaia-Pfad über
       nova.astrometry.net blind plate-solven. **Eigenen API-Key** (von *My Profile* auf der Seite) unter
       *Setup → Externe Tools* eintragen — wird nur in den lokalen App-Einstellungen gespeichert, nie im Projekt.

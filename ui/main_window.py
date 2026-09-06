@@ -1317,6 +1317,15 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, ProjectM
         self.ai_restore_action = QAction(tr("Eigene KI: Rauschen, Hintergrund, Details und Sterne …"), self)
         self.ai_restore_action.triggered.connect(self.open_ai_restore)
         menu.addAction(self.ai_restore_action)
+        self.recipe_action = QAction(tr("Bearbeitungsrezepte …"), self)
+        self.recipe_action.setShortcut("Ctrl+Shift+R")
+        self.recipe_action.triggered.connect(self.open_recipes)
+        menu.addAction(self.recipe_action)
+        self.astrometry_action = QAction(tr("Himmelsposition bestimmen …"), self)
+        self.astrometry_action.triggered.connect(self.open_native_astrometry)
+        menu.addAction(self.astrometry_action)
+        self.catalogue_action = QAction(tr("Sternkatalog verwalten …"), self)
+        self.catalogue_action.triggered.connect(self.open_native_catalogue)
         self.tools_btn.setMenu(menu)
 
         for index, b in enumerate((self.cmp_btn, self.adjust_btn, self.enhance_btn,
@@ -1381,6 +1390,15 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, ProjectM
         self.result_path = None
         self.before_path = None
         self._setup_projects()
+        processing_menu = self.menuBar().addMenu(tr("Bearbeitung"))
+        processing_menu.addAction(self.ai_restore_action)
+        processing_menu.addAction(self.recipe_action)
+        processing_menu.addSeparator()
+        processing_menu.addAction(pixelmath_action)
+        processing_menu.addAction(channels_action)
+        catalogue_menu = self.menuBar().addMenu(tr("Sternkatalog"))
+        catalogue_menu.addAction(self.catalogue_action)
+        catalogue_menu.addAction(self.astrometry_action)
         self._restore_settings()
         self._set_step(0)
         self._set_task()
@@ -2613,6 +2631,65 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, ProjectM
         self._run_tool_async(tr("Kanäle trennen und kombinieren"),
                              lambda log: runner(**request, log=log), ok)
 
+    def open_native_catalogue(self):
+        if not self._project_ready():
+            return
+        from ui.catalogue_dialog import CatalogueDialog
+        dialog = CatalogueDialog(self, catalogue_path=app_settings().value("native_catalogue", ""))
+        self._catalogue_dialog = dialog
+        try:
+            if dialog.exec() == QDialog.Accepted and dialog.selected_path:
+                app_settings().setValue("native_catalogue", dialog.selected_path)
+        finally:
+            self._catalogue_dialog = None
+            dialog.deleteLater()
+
+    def open_native_astrometry(self):
+        if not self._project_ready():
+            return
+        from ui.astrometry_dialog import AstrometryDialog
+        dialog = AstrometryDialog(self, source=self._best_export_file(bits=32),
+                                  catalogue=app_settings().value("native_catalogue", ""))
+        self._astrometry_dialog = dialog
+        try:
+            if dialog.exec() == QDialog.Accepted and dialog.result_path:
+                app_settings().setValue("native_catalogue", dialog.result_report["catalogue"]["path"])
+                self._project_step_label = tr("Himmelsposition bestimmt")
+                try:
+                    self._adopt_result(dialog.result_path, dialog.result_report["source"]["path"])
+                finally:
+                    self._project_step_label = None
+                self.export_btn.setEnabled(True)
+                self.tools_btn.setEnabled(True)
+                for button in self.export_chips:
+                    button.setEnabled(True)
+        finally:
+            self._astrometry_dialog = None
+            dialog.deleteLater()
+
+    def open_recipes(self):
+        if not self._project_ready():
+            return
+        from ui.recipe_dialog import RecipeDialog
+        dialog = RecipeDialog(self, source=self._best_export_file(bits=32),
+                              project=self._project, workspace=self._project_workspace())
+        self._recipe_dialog = dialog
+        try:
+            if dialog.exec() == QDialog.Accepted and dialog.result_path:
+                if dialog.project_step and self._project:
+                    self._open_project_step(dialog.project_step)
+                else:
+                    self._ai_display = dialog.previews
+                    self._ai_result_path = dialog.result_path
+                    self._adopt_result(dialog.result_path, dialog.source_path)
+                self.export_btn.setEnabled(True)
+                self.tools_btn.setEnabled(True)
+                for button in self.export_chips:
+                    button.setEnabled(True)
+        finally:
+            self._recipe_dialog = None
+            dialog.deleteLater()
+
     def open_ai_restore(self):
         from ui.ai_restore_dialog import AIRestoreDialog
         source = self._best_export_file(bits=32)
@@ -3248,6 +3325,19 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, ProjectM
         if getattr(self, "_project_worker", None) is not None:
             e.ignore()
             return
+        for name in ("_astrometry_dialog", "_catalogue_dialog"):
+            dialog = getattr(self, name, None)
+            if dialog is not None and dialog.is_running():
+                dialog.finished.connect(self.close, Qt.SingleShotConnection)
+                dialog.cancel_and_close()
+                e.ignore()
+                return
+        recipe_dialog = getattr(self, "_recipe_dialog", None)
+        if recipe_dialog is not None and recipe_dialog.is_running():
+            recipe_dialog.finished.connect(self.close, Qt.SingleShotConnection)
+            recipe_dialog.cancel_and_close()
+            e.ignore()
+            return
         restore_dialog = getattr(self, "_ai_restore_dialog", None)
         if restore_dialog is not None and restore_dialog.is_running():
             # Let cooperative cancellation finish before Qt destroys the dialog
@@ -3308,6 +3398,15 @@ def main():
     w.show()
     if smoke:
         w._choose_module(1)
+        from ui.recipe_dialog import RecipeDialog
+        from ui.astrometry_dialog import AstrometryDialog
+        from ui.catalogue_dialog import CatalogueDialog
+        for dialog_type in (RecipeDialog, AstrometryDialog, CatalogueDialog):
+            dialog = dialog_type(w)
+            dialog.show()
+            app.processEvents()
+            dialog.close()
+            dialog.deleteLater()
         QTimer.singleShot(500, w.close)
     code = app.exec()
     if smoke_directory:

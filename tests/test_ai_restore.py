@@ -283,6 +283,95 @@ class AIRestoreTests(unittest.TestCase):
             self._file(source, strength=0)
         self.assertEqual(list(self.root.glob("ai-*")), [])
 
+    def test_drizzle_sampling_support_survives_ai_fits_tiff_and_residual_chain(self):
+        self.manifest["task"] = "starless"
+        self._save_manifest()
+        source = self.root / "drizzle-source.fits"
+        image = np.linspace(-.2, 2.5, 12 * 20 * 3, dtype=np.float32).reshape(12, 20, 3)
+        fits.writeto(source, np.moveaxis(image, -1, 0), fits.Header({
+            "FPCOV": "input-mask.tif", "FPDRZCOV": "channels.tif", "FPDRZWGT": "weights.tif", "FPPIXARE": .25}))
+        tifffile.imwrite(self.root / "input-mask.tif", np.ones((12, 20), np.uint8), description="original coverage")
+        tifffile.imwrite(self.root / "channels.tif", np.ones(image.shape, np.uint8), photometric="rgb")
+        tifffile.imwrite(self.root / "weights.tif", np.linspace(.1, 8.25, image.size, dtype=np.float32).reshape(image.shape), photometric="rgb")
+        before = {name: (self.root / name).read_bytes() for name in (source.name, "input-mask.tif", "channels.tif", "weights.tif")}
+        first = self._file(source, strength=0)
+        for input_path in (first, first.with_suffix(".fits")):
+            second = self._file(input_path, strength=0)
+            for output in (first, second):
+                report = json.loads((output.parent / "ai_report.json").read_text())
+                self.assertFalse(report["sampling_support"]["model_uncertainty_propagated"])
+                self.assertTrue(report["sampling_support"]["copied_unchanged"])
+                with tifffile.TiffFile(output) as file:
+                    metadata = json.loads(file.pages[0].description)
+                for basename in ("result_32bit", "stars_residual_32bit"):
+                    header = fits.getheader(output.parent / (basename + ".fits"))
+                    self.assertEqual(header["FPPIXARE"], .25)
+                    self.assertIn("AI uncertainty is not propagated", "".join(header["HISTORY"]))
+                    for key, original in (("FPCOV", "input-mask.tif"), ("FPDRZCOV", "channels.tif"), ("FPDRZWGT", "weights.tif")):
+                        name = header[key]
+                        self.assertEqual(metadata[key], name)
+                        self.assertEqual((output.parent / name).read_bytes(), before[original])
+                        proof = next(item for item in report["output_integrity"] if item["name"] == name)
+                        self.assertEqual(proof["sha256"], hashlib.sha256(before[original]).hexdigest())
+        for name, data in before.items():
+            self.assertEqual((self.root / name).read_bytes(), data)
+
+    def test_invalid_drizzle_support_is_rejected_before_inference(self):
+        source = self.root / "invalid-support.fits"
+        tifffile.imwrite(self.root / "all-covered.tif", np.ones((10, 10), np.uint8))
+        for key, data in (("FPDRZWGT", np.ones((3, 4), np.float32)),
+                          ("FPDRZWGT", np.full((10, 10), np.nan, np.float32)),
+                          ("FPDRZWGT", np.full((10, 10), np.inf, np.float32)),
+                          ("FPDRZWGT", np.full((10, 10), -1., np.float32)),
+                          ("FPDRZWGT", np.zeros((10, 10), np.float32)),
+                          ("FPDRZWGT", np.ones((10, 10), np.complex64)),
+                          ("FPDRZCOV", np.full((10, 10), 2, np.uint8)),
+                          ("FPDRZCOV", np.zeros((10, 10), np.uint8))):
+            with self.subTest(key=key, dtype=str(data.dtype), shape=data.shape):
+                fields = {key: "support.tif"}
+                if key == "FPDRZWGT":
+                    fields["FPDRZCOV"] = "all-covered.tif"
+                fits.writeto(source, np.ones((10, 10), np.float32), fits.Header(fields), overwrite=True)
+                tifffile.imwrite(self.root / "support.tif", data)
+                with patch.object(ai_restore, "_infer", side_effect=AssertionError("inference must not run")):
+                    with self.assertRaises(ForgePixFehler):
+                        self._file(source, strength=0)
+        for name in ("missing.tif", "../outside.tif", "invalid-support.fits"):
+            fits.setval(source, "FPDRZWGT", value=name)
+            with self.assertRaises(ForgePixFehler):
+                self._file(source, strength=0)
+        self.assertEqual(list(self.root.glob("ai-*")), [])
+
+    def test_changed_drizzle_support_cannot_publish_an_ai_result(self):
+        source = self.root / "changed-support.fits"
+        fits.writeto(source, np.ones((10, 10), np.float32), fits.Header({"FPDRZWGT": "weights.tif"}))
+        tifffile.imwrite(self.root / "weights.tif", np.full((10, 10), 8.25, np.float32))
+        original = source.read_bytes()
+        infer = ai_restore._infer
+        def mutate(*args, **kwargs):
+            result = infer(*args, **kwargs)
+            tifffile.imwrite(self.root / "weights.tif", np.full((10, 10), 9., np.float32))
+            return result
+        with patch.object(ai_restore, "_infer", side_effect=mutate):
+            with self.assertRaisesRegex(ForgePixFehler, "verändert"):
+                self._file(source, strength=0)
+        self.assertEqual(list(self.root.glob("ai-*")), [])
+        self.assertEqual(source.read_bytes(), original)
+
+    def test_drizzle_companion_alias_and_output_name_collision_are_preserved(self):
+        source = self.root / "aliases.fits"
+        fits.writeto(source, np.ones((10, 10), np.float32), fits.Header({
+            "FPCOV": "mask.tif", "FPDRZCOV": "mask.tif", "FPDRZWGT": "result_32bit.tif"}))
+        tifffile.imwrite(self.root / "mask.tif", np.ones((10, 10), np.uint8))
+        tifffile.imwrite(self.root / "result_32bit.tif", np.full((10, 10), 8.25, np.float32))
+        original = (self.root / "result_32bit.tif").read_bytes()
+        output = self._file(source, strength=0)
+        header = fits.getheader(output.with_suffix(".fits"))
+        self.assertEqual(header["FPCOV"], header["FPDRZCOV"])
+        self.assertNotEqual(header["FPDRZWGT"], output.name)
+        self.assertEqual((output.parent / header["FPDRZWGT"]).read_bytes(), original)
+        np.testing.assert_array_equal(tifffile.imread(output), np.ones((10, 10), np.float32))
+
     def test_runtime_is_optional_and_prediction_failures_are_clear(self):
         with patch.dict(sys.modules, {"onnxruntime": None}):
             with self.assertRaisesRegex(ForgePixFehler, "ONNX Runtime fehlt"):

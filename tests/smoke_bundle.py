@@ -128,6 +128,58 @@ def main():
         if hashlib.sha256(scientific.read_bytes()).hexdigest() != original:
             raise RuntimeError("AI changed its source FITS")
         print("AI smoke test passed: all four bundled models export finite float32 from FITS")
+        steps = []
+        for task in ("background", "denoise"):
+            model_id = "forgepix-" + task + "-mono-v2"
+            manifest = json.loads((root / "assets/models" / model_id / "manifest.json").read_text(encoding="utf-8"))
+            steps.append(dict(task=task, model_id=model_id, model_sha256=manifest["sha256"],
+                              strength=.5, device=args.device))
+        recipe = Path(d) / "Repeat.fprecipe"
+        recipe.write_text(json.dumps(dict(format="ForgePixRecipe", schema_version=1,
+                                          name="Package acceptance", steps=steps)), encoding="utf-8")
+        repeated = subprocess.run(command + ["--recipe", "--file", str(recipe), "--input", str(scientific),
+            "--output-root", str(Path(d)), "--experimental"], env=env, capture_output=True, timeout=120, cwd=root)
+        if repeated.returncode:
+            raise RuntimeError("Packaged recipe failed: " + repeated.stderr.decode(errors="replace"))
+        journals = list(Path(d).glob("stack-recipe-*/run.json"))
+        if len(journals) != 1:
+            raise RuntimeError("Packaged recipe did not save a unique journal")
+        journal = json.loads(journals[0].read_text(encoding="utf-8"))
+        if (journal["status"] != "completed" or journal["completed_steps"] != 2 or
+            hashlib.sha256(scientific.read_bytes()).hexdigest() != original):
+            raise RuntimeError("Packaged recipe did not preserve its source and completed chain")
+        if args.require_provider and any(step["execution"]["provider"] != args.require_provider for step in journal["steps"]):
+            raise RuntimeError("Packaged recipe used an unexpected backend")
+        print("Native recipe smoke passed: two pinned models, journal and preserved FITS")
+
+        # The tested executable performs its own detection and catalogue solve.
+        # The input fixture is generated independently with Astropy's WCS API.
+        from test_astrometry import fixture
+        points, _, shape, catalogue, hints, truth = fixture()
+        catalogue_path = Path(d) / "catalogue.npz"
+        catalogue.speichern(catalogue_path)
+        yy, xx = np.indices(shape)
+        field = np.full(shape, .01, np.float64)
+        for index, (px, py) in enumerate(points):
+            field += (.16 - index * .001) * np.exp(-((xx - px)**2 + (yy - py)**2) / 4.5)
+        solve_input = Path(d) / "astrometry.fits"
+        fits.writeto(solve_input, field, fits.Header({"FPLINEAR": True, "BUNIT": "electron"}))
+        solved = subprocess.run(command + ["--solve", "--input", str(solve_input), "--catalogue", str(catalogue_path),
+            "--ra", str(hints["ra"]), "--dec", str(hints["dec"]), "--scale", str(hints["pixelscale_arcsec"]),
+            "--output-root", str(Path(d))], env=env, capture_output=True, timeout=90, cwd=root)
+        if solved.returncode:
+            raise RuntimeError("Packaged native solve failed: " + solved.stderr.decode(errors="replace"))
+        solved_paths = list(Path(d).glob("stack-astrometry-*/solved.fits"))
+        if len(solved_paths) != 1 or not np.array_equal(fits.getdata(solved_paths[0]), field):
+            raise RuntimeError("Packaged native solver changed scientific pixel values")
+        from astropy.wcs import WCS
+        fitted = WCS(fits.getheader(solved_paths[0]))
+        gx, gy = np.meshgrid(np.linspace(0, shape[1] - 1, 6), np.linspace(0, shape[0] - 1, 5))
+        sky = truth.pixel_to_world(gx, gy)
+        sx, sy = fitted.world_to_pixel(sky)
+        if np.max(np.hypot(sx - gx, sy - gy)) > .2:
+            raise RuntimeError("Packaged native WCS does not match the independent field")
+        print("Native astrometry smoke passed: independent WCS field and exact float64 FITS")
 
 
 if __name__ == "__main__":

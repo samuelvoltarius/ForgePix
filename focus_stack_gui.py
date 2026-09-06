@@ -34,7 +34,44 @@ if __name__ == "__main__":
     # Im gebündelten Binary (PyInstaller) ist `sys.executable` das Binary selbst, nicht python.
     # Damit der GUI-Subprozess die Pipeline starten kann, dient `--cli` als zweiter Einstiegspunkt:
     #   forgepix --cli --input … → ruft focus_cull_stack.main() statt der GUI.
-    if len(sys.argv) > 1 and sys.argv[1] == "--ai-restore":
+    if len(sys.argv) > 1 and sys.argv[1] in {"--recipe", "--solve"}:
+        import argparse
+        import json
+        import signal
+        import threading
+        from constants import ForgePixFehler
+        mode = sys.argv[1]
+        parser = argparse.ArgumentParser(description="Gespeichertes Astro-Rezept oder eigene lokale Astrometrie")
+        parser.add_argument("--input", required=True)
+        parser.add_argument("--output-root")
+        if mode == "--recipe":
+            parser.add_argument("--file", required=True, help="Gespeichertes ForgePix-Rezept")
+            parser.add_argument("--experimental", action="store_true")
+        else:
+            parser.add_argument("--catalogue", required=True, help="Lokaler Gaia-Auszug als NPZ")
+            parser.add_argument("--ra", required=True, type=float, help="Bildmitte in Grad")
+            parser.add_argument("--dec", required=True, type=float, help="Bildmitte in Grad")
+            parser.add_argument("--scale", required=True, type=float, help="Bogensekunden pro Pixel")
+        options = parser.parse_args(sys.argv[2:])
+        cancel = threading.Event()
+        signal.signal(signal.SIGINT, lambda *_: cancel.set())
+        try:
+            if mode == "--recipe":
+                import recipes
+                result = recipes.run_recipe(options.file, options.input, options.output_root,
+                    allow_experimental=options.experimental, cancel=cancel)
+                print(json.dumps({key: result.get(key) for key in
+                    ("status", "result_path", "journal_path", "error")}, ensure_ascii=False))
+                sys.exit(0 if result["status"] == "completed" else 130 if result["status"] == "cancelled" else 1)
+            else:
+                from astrometry_file import solve_file
+                result = solve_file(options.input, options.catalogue,
+                    {"ra": options.ra, "dec": options.dec, "pixelscale_arcsec": options.scale},
+                    options.output_root, cancel=cancel)
+                print(json.dumps({key: result[key] for key in ("result_path", "report_path")}, ensure_ascii=False))
+        except (ForgePixFehler, OSError, ValueError) as exc:
+            parser.exit(130 if cancel.is_set() else 1, str(exc) + "\n")
+    elif len(sys.argv) > 1 and sys.argv[1] == "--ai-restore":
         import argparse
         import ai_restore
         from constants import ForgePixFehler

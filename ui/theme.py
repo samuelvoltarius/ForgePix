@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
-"""ui/theme.py — globales Qt-Stylesheet (Anthrazit + Chili-Grün) für ForgePix."""
+"""Shared graphite surfaces, readable controls and blue interaction accents."""
 THEME = """
-/* ForgePix — Anthrazit + Chili-Grün (GreenChili). Statusfarben: grün=gut, gelb=Warnung,
-   rot=Problem, blau=Info. Akzent #4F7CFF-Familie. */
+/* ForgePix — graphite workspace with a restrained blue interaction accent. */
 QWidget { background:#16171a; color:#e8eae6; font-family:"Inter", "Segoe UI"; font-size:13px; }
 QMainWindow, QDialog { background:#16171a; }
 
@@ -27,6 +26,16 @@ QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox, QPlainTextEdit {
 QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus {
     border:1px solid #6c91ff; background:#282b30; }
 QPlainTextEdit { background:#101113; border:1px solid #26282e; }
+QTreeWidget, QTableWidget, QListWidget {
+    background:#1b1d21; alternate-background-color:#202227; border:1px solid #34383f;
+    border-radius:6px; selection-background-color:#283b63; selection-color:#f5f7fb; }
+QTreeWidget::item { padding:8px 6px; border-bottom:1px solid #272b31; }
+QTreeWidget::item:selected { background:#283b63; color:#f5f7fb; }
+QHeaderView::section { background:#23262c; color:#aeb7c6; padding:9px 6px;
+    border:0; border-bottom:1px solid #34383f; font-weight:600; }
+QMenuBar { background:#1b1d21; padding:3px; border-bottom:1px solid #30343a; }
+QMenuBar::item { padding:5px 10px; background:transparent; }
+QMenuBar::item:selected { background:#283b63; border-radius:4px; }
 QComboBox::drop-down { border:none; width:22px; }
 QComboBox QAbstractItemView {
     background:#202227; border:1px solid #34383f; border-radius:8px;
@@ -49,15 +58,15 @@ QPushButton#primary:disabled { background:#283552; border-color:#283552; color:#
 /* Modul-Karten auf dem Startbildschirm */
 QPushButton#card {
     background:#202227; border:1px solid #34383f; border-radius:6px; text-align:center; }
-QPushButton#card:hover { background:#23282a; border:2px solid #4F7CFF; }
-QPushButton#card:pressed { background:#1c2a1c; }
+QPushButton#card:hover { background:#252b37; border:2px solid #4F7CFF; }
+QPushButton#card:pressed { background:#283552; }
 
 /* Schnell-Export-Chips im Entscheidungs-Panel */
 QPushButton#chip {
     background:#23252c; border:1px solid #3a3d47; border-radius:13px;
     padding:4px 11px; font-size:12px; font-weight:600; color:#cfd2cd; }
-QPushButton#chip:hover { background:#2b3a2b; border-color:#4F7CFF; color:#dff3df; }
-QPushButton#chip:pressed { background:#1c2a1c; }
+QPushButton#chip:hover { background:#283b63; border-color:#4F7CFF; color:#f5f7fb; }
+QPushButton#chip:pressed { background:#283552; }
 QPushButton#chip:disabled { background:#1b1c21; border-color:#26282f; color:#5a5d63; }
 
 QCheckBox { spacing:7px; }
@@ -91,7 +100,7 @@ QScrollBar:horizontal { background:transparent; height:10px; margin:2px; }
 QScrollBar::handle:horizontal { background:#34383f; border-radius:5px; min-width:30px; }
 
 QToolTip {
-    background:#26282e; color:#e8eae6; border:1px solid #4a7d4a; border-radius:8px; padding:6px 8px; }
+    background:#26282e; color:#e8eae6; border:1px solid #4a5f87; border-radius:8px; padding:6px 8px; }
 QMenu { background:#202227; border:1px solid #312f40; border-radius:8px; padding:4px; }
 QMenu::item:selected { background:#4F7CFF; border-radius:6px; }
 """

@@ -533,3 +533,89 @@ known-shift tolerance is unchanged and an independent common-field flux check
 measures 0.00654% error against a 0.1% bound. Export checks account for the
 reported subpixel resampling instead of assuming exact integer pixel identity.
 All 120 affected tests pass, including the sensor-defect and meridian cases.
+
+## Exact a60a832 verification completed
+
+The clean runtime a60a832996c99cd8002c593055681938a0237ece passed 591 local
+tests (10 skipped), GitHub tests 34044045018 and builds 34044086691 on all
+three platforms. Its Windows ZIP (190586786 bytes, SHA256
+cea993eafb2158fbe9a43ba0c85529d8f1734b62717adf96a004fb0051db268a) passed
+unpacked GUI/CLI, native Drizzle and all four DirectML model smoke checks.
+
+The actual beginner GUI completed the corrected 34-source M27 series with
+31 selected frames / 9300 s exposure in 260.531 s while other tests ran.
+Matching-header dark supplied, no flats; original files unchanged. No GUI
+errors or horizontal overflow at 1280x800. Four real AI GUI operations on
+this corrected linear stack passed output/provenance checks and selected
+DirectML; this is execution acceptance, not model-quality qualification.
+
+The full native CFA Drizzle rotation run completed in 637.031 s. All 31
+matrices passed the independent predeclared stellar-position gates. Excluding
+the reference, 250-286 unique mutual pairs per frame; worst median 1.083 px
+and P95 1.917 px (gates 1.5/3 px), all four quadrants represented. Original
+hashes agree. This supersedes the old shift-only alignment result and does
+not establish general photometric accuracy or recovered detail.
+
+Evidence: Codex outputs/ForgePix-Native-Weiterentwicklung-20260906/
+Pruefbericht.md and its exact-commit JSON reports. Follow-on documentation
+or feature commits must not be confused with this frozen package. The
+version remains beta. User priorities now explicitly include native
+catalogue solving/color calibration, executable repeatable macros and a
+coherent professional GUI in addition to all four AI quality tracks.
+
+## Native local astrometry, catalogue manager and executable recipes
+
+Own hinted catalogue solving now matches stellar triangles with free rotation
+and parity, refines a TAN/affine WCS and accepts it only after a fixed held-out
+third of image stars passes independent residual/distribution checks. A native
+ESA TAP client downloads bounded Gaia extracts with epoch/provenance metadata;
+the local index is rebuilt on load and RA queries are normalized. Truncated
+fields are rejected explicitly. The catalogue dialog loads, downloads and
+merges into new files asynchronously; cancellation never destroys its worker.
+
+Full real M27 acceptance used 16123 Gaia DR3 rows and historical raw-FITS hints
+(RA 300.17904 deg, Dec 22.795087 deg, focal length 1151 mm / pixel 4.630000114 um),
+not the current equipment preset. It found 154 fit and 78/80 independent
+validation stars, RMS 0.426933 pixels in all quadrants. The actual reference is
+frame 0017, although the stack filename uses frame 0001 as its base. Against
+the unused reference ASIAIR TAN-SIP WCS, a separate 25-point grid differs by
+1.80 arcsec median / 2.47 arcsec maximum; internal residuals are not absolute
+accuracy certification. No blind search, distortion fit, epoch propagation or
+spectrophotometric colour calibration is claimed.
+
+Actual MainWindow menu -> solver -> project -> restart/history -> normal
+scientific export passed on full 4144x2822 M27 in 14.969 s. Original data,
+catalogue and exported pixel-byte hashes are unchanged; FITS and provenance
+survive project archival and export. File-adapter tests also preserve Float64,
+unsigned physical values, units, coverage and weights. Derived AI outputs keep
+their original experimental/model provenance and record the WCS-only operation.
+
+Versioned .fprecipe files execute pinned model IDs/SHA256, parameters and order
+with a source snapshot, atomic run journal, cooperative cancellation and saved
+completed steps. The GUI edits/saves/loads recipes and archives each completed
+step in an active project. Real M27 GUI acceptance ran background 25% then
+denoise 50% with DirectML, reopened both project results after restart and
+verified all source/output hashes (43.015 s). This is repeatable processing,
+not a GUI action recorder, arbitrary process graph or model-quality upgrade.
+
+Public --recipe and --solve CLI routes support automation. Package smoke now
+exercises the three new dialogs, a two-step actual recipe and native solving
+against an independent WCS fixture with unchanged Float64 output. New dialogs
+use consistent graphite/blue controls and English translations. Exact-commit
+suite/build/package results follow after source freeze. Version remains beta.
+
+Workspace evidence: outputs/ForgePix-Recipes-20260906,
+outputs/ForgePix-Native-Astrometry-GUI-20260906-03 and
+work/native-astrometry-m27/run-002.json. M27's historical filter is unknown;
+these checks do not establish colour calibration or product parity.
+
+Combined-workflow acceptance caught and fixed two integration defects before
+source freeze: WCS-only derivatives of own AI estimates now retain a verified
+derived AI report, with original report embedded and no second model execution
+claim; Drizzle sampling companions (FPDRZCOV/FPDRZWGT) are validated and copied
+byte-for-byte into own AI groups instead of leaving dangling header references.
+The report explicitly distinguishes original sampling support from AI-result
+uncertainty. Changed/inconsistent companions fail before publishing an AI group.
+The combined AI -> native solver -> project/reopen/export regression passes;
+tampered astrometry reports block export. The actual source recorded by the
+completed solve is used for comparison even if the GUI input field is later edited.

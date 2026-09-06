@@ -83,10 +83,11 @@ are dropped automatically (with reasons).
   - **TPS fine registration** — corrects residual field distortion (wide-angle/refractor) after the global align.
   - **True drizzle** — real variable-pixel reconstruction (pixfrac drop) instead of plain upscaling; needs
     drizzle 2× and dithered subs.
-  - **Photometric color calibration (PCC/SPCC)** — real catalog color: **Siril SPCC** (plate-solve + Gaia DR3)
-    → own **astroquery** Gaia path → **lite** (star-based, offline). Backend `auto/siril/gaia/lite`; optional
-    OSC sensor name and narrowband mode. Siril needs network or its local Gaia catalog; otherwise it falls
-    back gracefully. *(AI is deliberately not used here — PCC is a measurement, not a judgement.)*
+  - **Native stellar white balance:** `auto` and `lite` measure stellar flux above local sky
+    and estimate gains under a neutral stellar-population assumption. This is not actual catalogue
+    color calibration. Known narrowband images are bypassed; insufficient suitable stars leave the
+    image unchanged with a reason. Explicit Siril selection remains an external integration; the
+    older Gaia color route uses positions only. See [scientific limits](NATIVE_STELLAR_BALANCE.md).
     - **Astrometry.net (optional, bring your own key):** if you have no Siril/local solver, the Gaia path can
       blind‑solve via nova.astrometry.net. Enter **your own API key** (from *My Profile* on the site) under
       *Setup → External tools* — it's stored only in local app settings, never in the project. CLI:

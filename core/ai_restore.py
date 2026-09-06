@@ -13,6 +13,7 @@ import math
 import os
 from pathlib import Path
 import re
+import shutil
 import sys
 import tempfile
 
@@ -511,6 +512,8 @@ def read_source(path):
 
 
 def _coverage(source, header, metadata, shape, cancel):
+    if metadata.get("FPCOV") and header is not None and header.get("FPCOV") and metadata["FPCOV"] != header["FPCOV"]:
+        raise ForgePixFehler("Widersprüchliche Verweise auf die Bildabdeckung.")
     name = metadata.get("FPCOV") or (header.get("FPCOV") if header is not None else None)
     if not name:
         return None, None
@@ -519,16 +522,71 @@ def _coverage(source, header, metadata, shape, cancel):
     path = (source.parent / name).resolve()
     if path.parent != source.parent or not path.is_file():
         raise ForgePixFehler("Die benötigte Bildabdeckung fehlt oder liegt außerhalb des Bildordners.")
-    _cancelled(cancel)
+    before = _file_integrity(path, cancel)
     mask = tifffile.imread(path)
-    if mask.shape != shape or not np.isin(mask, [0, 1]).all():
+    if np.iscomplexobj(mask) or mask.shape != shape or not np.isin(mask, [0, 1]).all():
         raise ForgePixFehler("Die Bildabdeckung passt nicht zum KI-Eingangsbild.")
     if not np.all(mask):
         raise ForgePixFehler("Das Bild enthält unbedeckte Bereiche. Bitte zuerst auf einen vollständig abgedeckten Bereich zuschneiden; die KI unterstützt noch keine Maskenlücken.")
-    with path.open("rb") as stream:
-        digest = hashlib.file_digest(stream, "sha256").hexdigest()
-    return mask.astype(bool), {"source": str(path), "sha256": digest,
+    if _file_integrity(path, cancel)["sha256"] != before["sha256"]:
+        raise ForgePixFehler("Die Bildabdeckung wurde während der Prüfung verändert.")
+    return mask.astype(bool), {"source": str(path), "sha256": before["sha256"], "bytes": before["bytes"],
                                "fraction": float(mask.mean()), "output": "coverage.tif"}
+
+
+def _sampling_support(source, header, metadata, shape, coverage_record, cancel):
+    """Validate original sampling support; it is not model-error propagation."""
+    records, references = [], {}
+    if coverage_record is not None:
+        records.append(dict(coverage_record, keys=["FPCOV"]))
+        references["FPCOV"] = "coverage.tif"
+    reserved = {"coverage.tif", "result_32bit.tif", "result_32bit.fits", "ai_report.json",
+                "stars_residual_32bit.tif", "stars_residual_32bit.fits"}
+    for key in ("FPDRZCOV", "FPDRZWGT"):
+        embedded = header.get(key) if header is not None else None
+        separate = metadata.get(key)
+        if embedded and separate and embedded != separate:
+            raise ForgePixFehler("Widersprüchliche Verweise auf die Drizzle-Begleitdateien.")
+        name = separate or embedded
+        if not name:
+            continue
+        if (not isinstance(name, str) or Path(name).name != name or Path(name).drive
+                or "/" in name or "\\" in name or "\x00" in name or name in {".", ".."}):
+            raise ForgePixFehler("Ungültiger Verweis auf die Drizzle-Begleitdatei.")
+        path = (source.parent / name).resolve()
+        if path.parent != source.parent or not path.is_file() or path == source:
+            raise ForgePixFehler("Die benötigte Drizzle-Begleitdatei fehlt oder liegt außerhalb des Bildordners.")
+        proof = _file_integrity(path, cancel)
+        data = tifffile.imread(path)
+        if (data.dtype.kind not in "buif" or data.shape not in (shape[:2], shape)
+                or not np.isfinite(data).all()):
+            raise ForgePixFehler("Die Drizzle-Begleitdatei passt nicht zum KI-Eingangsbild.")
+        if key == "FPDRZCOV":
+            if not np.isin(data, [0, 1]).all():
+                raise ForgePixFehler("Die Drizzle-Kanalabdeckung muss eine binäre Maske sein.")
+            complete = bool(np.all(data))
+        else:
+            if np.any(data < 0):
+                raise ForgePixFehler("Drizzle-Gewichte müssen endlich und nichtnegativ sein.")
+            complete = bool(np.all(data > 0))
+        if not complete:
+            raise ForgePixFehler("Drizzle enthält unbedeckte Samples. Bitte zuerst auf einen vollständig abgedeckten Bereich zuschneiden.")
+        if _file_integrity(path, cancel)["sha256"] != proof["sha256"]:
+            raise ForgePixFehler("Eine Drizzle-Begleitdatei wurde während der Prüfung verändert.")
+        record = next((item for item in records if item["source"] == str(path)), None)
+        if record is None:
+            # Keep the original name unless it conflicts with a generated layer.
+            # In that case a new reference preserves its meaning without overwrite.
+            output = name
+            occupied = reserved | {item["output"].casefold() for item in records}
+            while output.casefold() in occupied:
+                output = "source_" + output
+            record = {"source": str(path), "sha256": proof["sha256"], "bytes": proof["bytes"],
+                      "output": output, "shape": list(data.shape), "keys": []}
+            records.append(record)
+        record["keys"].append(key)
+        references[key] = record["output"]
+    return records, references
 
 
 def _output_header(fits, source_header, source_metadata, manifest, role, has_coverage):
@@ -540,7 +598,8 @@ def _output_header(fits, source_header, source_metadata, manifest, role, has_cov
     for key in list(header.keys()):
         if key in structural or re.fullmatch(r"NAXIS\d+", key):
             header.remove(key, remove_all=True, ignore_missing=True)
-    for key in ("FPLINE", "FPCOORD", "FILTER", "OBJECT", "INSTRUME", "TELESCOP", "EXPTIME", "BUNIT"):
+    for key in ("FPLINE", "FPCOORD", "FILTER", "OBJECT", "INSTRUME", "TELESCOP", "EXPTIME", "BUNIT",
+                "FPDRZCOV", "FPDRZWGT", "FPDRZKER", "FPDRZSCL", "FPDRZPFR", "FPDRZCFA", "FPPIXARE"):
         if key not in header and key in source_metadata and source_metadata[key] is not None:
             header[key] = source_metadata[key]
     header.update({"CREATOR": "ForgePix", "FPLINEAR": True, "FPDOMAIN": "LINEAR_AI_ESTIMATE",
@@ -565,6 +624,7 @@ def run_file(source, model_id, output_root=None, *, model_dir=None, strength=.5,
     image, manifest, content, strength = _prepare(raw, model_id, model_dir,
                                                 strength, allow_experimental, cancel)
     coverage, coverage_record = _coverage(source, source_header, source_metadata, image.shape[:2], cancel)
+    support, support_references = _sampling_support(source, source_header, source_metadata, image.shape, coverage_record, cancel)
     with source.open("rb") as stream:
         source_hash = hashlib.file_digest(stream, "sha256").hexdigest()
     log("Lokale experimentelle KI: %s; Original bleibt erhalten." % manifest["task"])
@@ -587,20 +647,28 @@ def run_file(source, model_id, output_root=None, *, model_dir=None, strength=.5,
         reconstruction_error = float(np.max(np.abs(result.astype(np.float64) + residual - image)))
     created = []
     try:
-        if coverage is not None:
-            _cancelled(cancel)
-            coverage_path = destination / "coverage.tif"
-            created.append(coverage_path)
-            tifffile.imwrite(coverage_path, coverage.astype(np.uint8), metadata=None)
+        for record in support:
+            original = Path(record["source"])
+            if _file_integrity(original, cancel)["sha256"] != record["sha256"]:
+                raise ForgePixFehler("Eine Sampling-Begleitdatei wurde während der KI-Verarbeitung verändert.")
+            copied = destination / record["output"]
+            created.append(copied)
+            shutil.copyfile(original, copied)
+            if _file_integrity(copied, cancel)["sha256"] != record["sha256"]:
+                raise ForgePixFehler("Eine Sampling-Begleitdatei konnte nicht unverändert gesichert werden.")
         for name, layer in layers.items():
             _cancelled(cancel)
             role = "stars_residual" if name == "stars_residual_32bit" else "result"
             header = _output_header(fits, source_header, source_metadata, manifest, role, coverage is not None)
+            header.update(support_references)
+            if support:
+                header.add_history("Coverage/weights retain original sampling support; AI uncertainty is not propagated.")
             metadata = dict(source_metadata, forgepix=True, linear=True, domain="LINEAR_AI_ESTIMATE",
                             status="experimental", photometry_validated=False, role=role,
                             model_id=manifest["id"], task=manifest["task"],
                             fits_header=header.tostring(sep="\n", endcard=False, padding=False))
-            for key in ("FPLINE", "FPCOORD", "FILTER", "OBJECT", "INSTRUME", "TELESCOP", "EXPTIME", "BUNIT", "FPOUNIT", "FPISCALE", "FPCHTYPE"):
+            for key in ("FPLINE", "FPCOORD", "FILTER", "OBJECT", "INSTRUME", "TELESCOP", "EXPTIME", "BUNIT", "FPOUNIT", "FPISCALE", "FPCHTYPE",
+                        "FPDRZCOV", "FPDRZWGT", "FPDRZKER", "FPDRZSCL", "FPDRZPFR", "FPDRZCFA", "FPPIXARE"):
                 if key in header:
                     metadata[key] = header[key]
             for key in ("BAYERPAT", "XBAYROFF", "YBAYROFF", "FPCOV"):
@@ -626,6 +694,9 @@ def run_file(source, model_id, output_root=None, *, model_dir=None, strength=.5,
                   "source_header_preserved": source_header is not None,
                   "source_scaling": source_scaling,
                   "coverage": coverage_record,
+                  "sampling_support": {"files": support, "references": support_references,
+                      "copied_unchanged": True, "model_uncertainty_propagated": False,
+                      "meaning": "Original sampling coverage and Drizzle overlap weights; not AI-result uncertainty or validated photometric weights."},
                   "reconstruction_max_error": reconstruction_error,
                   "residual": "signed source minus result; not a pure stellar flux measurement" if reconstruction_error is not None else None,
                   "limitations": "Model estimates may alter flux and structures; camera generalization and tile phase effects require validation.",
@@ -635,6 +706,9 @@ def run_file(source, model_id, output_root=None, *, model_dir=None, strength=.5,
         report_path = destination / "ai_report.json"
         created.append(report_path)
         report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
+        for record in support:
+            if _file_integrity(Path(record["source"]), cancel)["sha256"] != record["sha256"]:
+                raise ForgePixFehler("Eine Sampling-Begleitdatei wurde vor dem Abschluss verändert.")
         _cancelled(cancel)
     except Exception:
         for path in created:
