@@ -1,0 +1,1214 @@
+{
+  "evidence_checks_pass": true,
+  "run": "C:\\Users\\alf_a\\Documents\\Codex\\2026-09-05\\che-2\\work\\denoise-anchored-v5-mae-001",
+  "method": "Pure Python independent arithmetic over all raw development metrics; no training helper/evaluator imported",
+  "completed_steps": 6000,
+  "calibration_lambda": 0.008796099731346109,
+  "training_batch_hashes_matched": 96,
+  "parent_development_exactly_matches_v4": true,
+  "best_research": {
+    "step": 6000,
+    "geometric_group_mse_ratio": 0.889667531477457,
+    "failures": [
+      {
+        "group": "M13/correlated_medium",
+        "metric": "mae",
+        "value": 0.001973313745111227,
+        "baseline": 0.0019363198662176728,
+        "limit": 0.0019363298662176728
+      },
+      {
+        "group": "M13/correlated_small",
+        "metric": "mae",
+        "value": 0.0018744667759165168,
+        "baseline": 0.001774599077180028,
+        "limit": 0.001774609077180028
+      },
+      {
+        "group": "M13/original_replay",
+        "metric": "mse",
+        "value": 6.4237356127705425e-06,
+        "baseline": 5.880155185877811e-06,
+        "limit": 5.880156185877811e-06
+      },
+      {
+        "group": "M13/original_replay",
+        "metric": "mae",
+        "value": 0.0012754533672705293,
+        "baseline": 0.001160834333859384,
+        "limit": 0.001160844333859384
+      },
+      {
+        "group": "M13/read_dominated",
+        "metric": "mae",
+        "value": 0.0012801868142560124,
+        "baseline": 0.0010986733250319958,
+        "limit": 0.0010986833250319957
+      },
+      {
+        "group": "M13/row_noise",
+        "metric": "mae",
+        "value": 0.0015007329639047384,
+        "baseline": 0.0014288771199062467,
+        "limit": 0.0014288871199062466
+      },
+      {
+        "group": "M13/shot_dominated",
+        "metric": "mae",
+        "value": 0.0007575391791760921,
+        "baseline": 0.0007265780586749315,
+        "limit": 0.0007265880586749316
+      },
+      {
+        "group": "M16/correlated_small",
+        "metric": "mae",
+        "value": 0.0022729726042598486,
+        "baseline": 0.0022718857508152723,
+        "limit": 0.0022718957508152723
+      },
+      {
+        "group": "M16/original_replay",
+        "metric": "mae",
+        "value": 0.001272896071895957,
+        "baseline": 0.0011701929615810513,
+        "limit": 0.0011702029615810513
+      },
+      {
+        "group": "M16/read_dominated",
+        "metric": "mae",
+        "value": 0.0019917325116693974,
+        "baseline": 0.001933955936692655,
+        "limit": 0.001933965936692655
+      },
+      {
+        "group": "M16/shot_dominated",
+        "metric": "mae",
+        "value": 0.0016831691609695554,
+        "baseline": 0.0016293794615194201,
+        "limit": 0.00162938946151942
+      },
+      {
+        "group": "synthetic/correlated_large",
+        "metric": "mae",
+        "value": 0.0022273240610957146,
+        "baseline": 0.002220981987193227,
+        "limit": 0.0022209919871932268
+      },
+      {
+        "group": "synthetic/correlated_large",
+        "metric": "local_mean_rms",
+        "value": 0.0016990051371976733,
+        "baseline": 0.0016981192165985703,
+        "limit": 0.0016981292165985703
+      },
+      {
+        "group": "synthetic/correlated_medium",
+        "metric": "mae",
+        "value": 0.0025366656482219696,
+        "baseline": 0.0024868743494153023,
+        "limit": 0.0024868843494153022
+      },
+      {
+        "group": "synthetic/correlated_small",
+        "metric": "mae",
+        "value": 0.00119890330825001,
+        "baseline": 0.0010843802010640502,
+        "limit": 0.0010843902010640501
+      },
+      {
+        "group": "synthetic/original_replay",
+        "metric": "mse",
+        "value": 4.8664237510820385e-06,
+        "baseline": 4.773448836203897e-06,
+        "limit": 4.773449836203898e-06
+      },
+      {
+        "group": "synthetic/original_replay",
+        "metric": "mae",
+        "value": 0.001180176855996251,
+        "baseline": 0.0010760088916867971,
+        "limit": 0.001076018891686797
+      },
+      {
+        "group": "synthetic/read_dominated",
+        "metric": "mae",
+        "value": 0.001377237611450255,
+        "baseline": 0.0012219022028148174,
+        "limit": 0.0012219122028148174
+      },
+      {
+        "group": "synthetic/row_noise",
+        "metric": "mae",
+        "value": 0.0015244085807353258,
+        "baseline": 0.0014502054546028376,
+        "limit": 0.0014502154546028375
+      },
+      {
+        "group": "synthetic/shot_dominated",
+        "metric": "mse",
+        "value": 6.8505264607665595e-06,
+        "baseline": 6.50750553177204e-06,
+        "limit": 6.50750653177204e-06
+      },
+      {
+        "group": "synthetic/shot_dominated",
+        "metric": "mae",
+        "value": 0.0013784738257527351,
+        "baseline": 0.0012013958767056465,
+        "limit": 0.0012014058767056465
+      }
+    ],
+    "failed_metrics": {
+      "mae": 17,
+      "mse": 3,
+      "local_mean_rms": 1
+    },
+    "passes_all_groups": false
+  },
+  "eligible_checkpoint": null,
+  "all_checkpoints": [
+    {
+      "step": 1000,
+      "geometric_group_mse_ratio": 0.9498478584430038,
+      "failures": [
+        {
+          "group": "M13/correlated_medium",
+          "metric": "mae",
+          "value": 0.0019406219944357872,
+          "baseline": 0.0019363198662176728,
+          "limit": 0.0019363298662176728
+        },
+        {
+          "group": "M13/correlated_small",
+          "metric": "mae",
+          "value": 0.0018094625556841493,
+          "baseline": 0.001774599077180028,
+          "limit": 0.001774609077180028
+        },
+        {
+          "group": "M13/original_replay",
+          "metric": "mse",
+          "value": 6.12393796473043e-06,
+          "baseline": 5.880155185877811e-06,
+          "limit": 5.880156185877811e-06
+        },
+        {
+          "group": "M13/original_replay",
+          "metric": "mae",
+          "value": 0.0012057157000526786,
+          "baseline": 0.001160834333859384,
+          "limit": 0.001160844333859384
+        },
+        {
+          "group": "M13/original_replay",
+          "metric": "local_mean_rms",
+          "value": 0.00043633364839479327,
+          "baseline": 0.0004273217637091875,
+          "limit": 0.0004273317637091875
+        },
+        {
+          "group": "M13/read_dominated",
+          "metric": "mae",
+          "value": 0.0011691406834870577,
+          "baseline": 0.0010986733250319958,
+          "limit": 0.0010986833250319957
+        },
+        {
+          "group": "M13/row_noise",
+          "metric": "mae",
+          "value": 0.0014548865146934986,
+          "baseline": 0.0014288771199062467,
+          "limit": 0.0014288871199062466
+        },
+        {
+          "group": "M13/shot_dominated",
+          "metric": "mae",
+          "value": 0.0007334540714509785,
+          "baseline": 0.0007265780586749315,
+          "limit": 0.0007265880586749316
+        },
+        {
+          "group": "M16/original_replay",
+          "metric": "mae",
+          "value": 0.0012063465546816587,
+          "baseline": 0.0011701929615810513,
+          "limit": 0.0011702029615810513
+        },
+        {
+          "group": "M16/read_dominated",
+          "metric": "mae",
+          "value": 0.0019425726495683193,
+          "baseline": 0.001933955936692655,
+          "limit": 0.001933965936692655
+        },
+        {
+          "group": "M16/shot_dominated",
+          "metric": "mae",
+          "value": 0.0016347296768799424,
+          "baseline": 0.0016293794615194201,
+          "limit": 0.00162938946151942
+        },
+        {
+          "group": "synthetic/correlated_large",
+          "metric": "mae",
+          "value": 0.0022212076000869274,
+          "baseline": 0.002220981987193227,
+          "limit": 0.0022209919871932268
+        },
+        {
+          "group": "synthetic/correlated_large",
+          "metric": "local_mean_rms",
+          "value": 0.0017126307357102633,
+          "baseline": 0.0016981192165985703,
+          "limit": 0.0016981292165985703
+        },
+        {
+          "group": "synthetic/correlated_medium",
+          "metric": "mae",
+          "value": 0.0025003189221024513,
+          "baseline": 0.0024868743494153023,
+          "limit": 0.0024868843494153022
+        },
+        {
+          "group": "synthetic/correlated_medium",
+          "metric": "local_mean_rms",
+          "value": 0.0012632528087124228,
+          "baseline": 0.0012578500900417566,
+          "limit": 0.0012578600900417566
+        },
+        {
+          "group": "synthetic/correlated_small",
+          "metric": "mae",
+          "value": 0.0011303126811981201,
+          "baseline": 0.0010843802010640502,
+          "limit": 0.0010843902010640501
+        },
+        {
+          "group": "synthetic/correlated_small",
+          "metric": "local_mean_rms",
+          "value": 0.00042586150811985135,
+          "baseline": 0.00041267098276875913,
+          "limit": 0.0004126809827687591
+        },
+        {
+          "group": "synthetic/identity",
+          "metric": "local_mean_rms",
+          "value": 0.00034537274041213095,
+          "baseline": 0.0003202091611456126,
+          "limit": 0.0003202191611456126
+        },
+        {
+          "group": "synthetic/low_noise",
+          "metric": "local_mean_rms",
+          "value": 0.0003358036046847701,
+          "baseline": 0.0003194735327269882,
+          "limit": 0.0003194835327269882
+        },
+        {
+          "group": "synthetic/original_replay",
+          "metric": "mse",
+          "value": 4.84313477500109e-06,
+          "baseline": 4.773448836203897e-06,
+          "limit": 4.773449836203898e-06
+        },
+        {
+          "group": "synthetic/original_replay",
+          "metric": "mae",
+          "value": 0.0011167837074026465,
+          "baseline": 0.0010760088916867971,
+          "limit": 0.001076018891686797
+        },
+        {
+          "group": "synthetic/original_replay",
+          "metric": "local_mean_rms",
+          "value": 0.0004502457450143993,
+          "baseline": 0.0004300581058487296,
+          "limit": 0.0004300681058487296
+        },
+        {
+          "group": "synthetic/read_dominated",
+          "metric": "mae",
+          "value": 0.0012819514377042651,
+          "baseline": 0.0012219022028148174,
+          "limit": 0.0012219122028148174
+        },
+        {
+          "group": "synthetic/read_dominated",
+          "metric": "local_mean_rms",
+          "value": 0.0004650306946132332,
+          "baseline": 0.00045334274182096124,
+          "limit": 0.00045335274182096123
+        },
+        {
+          "group": "synthetic/row_noise",
+          "metric": "mae",
+          "value": 0.0014809241984039545,
+          "baseline": 0.0014502054546028376,
+          "limit": 0.0014502154546028375
+        },
+        {
+          "group": "synthetic/row_noise",
+          "metric": "local_mean_rms",
+          "value": 0.0008148664492182434,
+          "baseline": 0.000808363314718008,
+          "limit": 0.0008083733147180081
+        },
+        {
+          "group": "synthetic/shot_dominated",
+          "metric": "mse",
+          "value": 6.653659966104897e-06,
+          "baseline": 6.50750553177204e-06,
+          "limit": 6.50750653177204e-06
+        },
+        {
+          "group": "synthetic/shot_dominated",
+          "metric": "mae",
+          "value": 0.0012630107812583447,
+          "baseline": 0.0012013958767056465,
+          "limit": 0.0012014058767056465
+        },
+        {
+          "group": "synthetic/shot_dominated",
+          "metric": "local_mean_rms",
+          "value": 0.0004561416571959853,
+          "baseline": 0.00044620793778449297,
+          "limit": 0.00044621793778449296
+        }
+      ],
+      "failed_metrics": {
+        "mae": 16,
+        "mse": 3,
+        "local_mean_rms": 10
+      },
+      "passes_all_groups": false
+    },
+    {
+      "step": 2000,
+      "geometric_group_mse_ratio": 0.9146297013937406,
+      "failures": [
+        {
+          "group": "M13/correlated_medium",
+          "metric": "mae",
+          "value": 0.0019690413028001785,
+          "baseline": 0.0019363198662176728,
+          "limit": 0.0019363298662176728
+        },
+        {
+          "group": "M13/correlated_small",
+          "metric": "mae",
+          "value": 0.0018579596653580666,
+          "baseline": 0.001774599077180028,
+          "limit": 0.001774609077180028
+        },
+        {
+          "group": "M13/original_replay",
+          "metric": "mse",
+          "value": 6.305374881776515e-06,
+          "baseline": 5.880155185877811e-06,
+          "limit": 5.880156185877811e-06
+        },
+        {
+          "group": "M13/original_replay",
+          "metric": "mae",
+          "value": 0.0012509080115705729,
+          "baseline": 0.001160834333859384,
+          "limit": 0.001160844333859384
+        },
+        {
+          "group": "M13/read_dominated",
+          "metric": "mae",
+          "value": 0.0012412844225764275,
+          "baseline": 0.0010986733250319958,
+          "limit": 0.0010986833250319957
+        },
+        {
+          "group": "M13/row_noise",
+          "metric": "mse",
+          "value": 6.625961759709753e-06,
+          "baseline": 6.624668912991183e-06,
+          "limit": 6.624669912991183e-06
+        },
+        {
+          "group": "M13/row_noise",
+          "metric": "mae",
+          "value": 0.001489096088334918,
+          "baseline": 0.0014288771199062467,
+          "limit": 0.0014288871199062466
+        },
+        {
+          "group": "M13/shot_dominated",
+          "metric": "mae",
+          "value": 0.0007488125120289624,
+          "baseline": 0.0007265780586749315,
+          "limit": 0.0007265880586749316
+        },
+        {
+          "group": "M16/correlated_small",
+          "metric": "mae",
+          "value": 0.0022756638936698437,
+          "baseline": 0.0022718857508152723,
+          "limit": 0.0022718957508152723
+        },
+        {
+          "group": "M16/original_replay",
+          "metric": "mae",
+          "value": 0.0012495274422690272,
+          "baseline": 0.0011701929615810513,
+          "limit": 0.0011702029615810513
+        },
+        {
+          "group": "M16/read_dominated",
+          "metric": "mae",
+          "value": 0.00197765976190567,
+          "baseline": 0.001933955936692655,
+          "limit": 0.001933965936692655
+        },
+        {
+          "group": "M16/shot_dominated",
+          "metric": "mae",
+          "value": 0.0016662541311234236,
+          "baseline": 0.0016293794615194201,
+          "limit": 0.00162938946151942
+        },
+        {
+          "group": "synthetic/correlated_large",
+          "metric": "mae",
+          "value": 0.0022240416146814823,
+          "baseline": 0.002220981987193227,
+          "limit": 0.0022209919871932268
+        },
+        {
+          "group": "synthetic/correlated_large",
+          "metric": "local_mean_rms",
+          "value": 0.0017011846648529172,
+          "baseline": 0.0016981192165985703,
+          "limit": 0.0016981292165985703
+        },
+        {
+          "group": "synthetic/correlated_medium",
+          "metric": "mse",
+          "value": 1.859729309217073e-05,
+          "baseline": 1.8537732103141025e-05,
+          "limit": 1.8537733103141024e-05
+        },
+        {
+          "group": "synthetic/correlated_medium",
+          "metric": "mae",
+          "value": 0.0025311806239187717,
+          "baseline": 0.0024868743494153023,
+          "limit": 0.0024868843494153022
+        },
+        {
+          "group": "synthetic/correlated_small",
+          "metric": "mae",
+          "value": 0.001172237447462976,
+          "baseline": 0.0010843802010640502,
+          "limit": 0.0010843902010640501
+        },
+        {
+          "group": "synthetic/original_replay",
+          "metric": "mse",
+          "value": 4.832212198380148e-06,
+          "baseline": 4.773448836203897e-06,
+          "limit": 4.773449836203898e-06
+        },
+        {
+          "group": "synthetic/original_replay",
+          "metric": "mae",
+          "value": 0.0011562536237761378,
+          "baseline": 0.0010760088916867971,
+          "limit": 0.001076018891686797
+        },
+        {
+          "group": "synthetic/read_dominated",
+          "metric": "mae",
+          "value": 0.0013400042662397027,
+          "baseline": 0.0012219022028148174,
+          "limit": 0.0012219122028148174
+        },
+        {
+          "group": "synthetic/row_noise",
+          "metric": "mae",
+          "value": 0.0015103260520845652,
+          "baseline": 0.0014502054546028376,
+          "limit": 0.0014502154546028375
+        },
+        {
+          "group": "synthetic/shot_dominated",
+          "metric": "mse",
+          "value": 6.743898211425403e-06,
+          "baseline": 6.50750553177204e-06,
+          "limit": 6.50750653177204e-06
+        },
+        {
+          "group": "synthetic/shot_dominated",
+          "metric": "mae",
+          "value": 0.001335908891633153,
+          "baseline": 0.0012013958767056465,
+          "limit": 0.0012014058767056465
+        }
+      ],
+      "failed_metrics": {
+        "mae": 17,
+        "mse": 5,
+        "local_mean_rms": 1
+      },
+      "passes_all_groups": false
+    },
+    {
+      "step": 3000,
+      "geometric_group_mse_ratio": 0.9020638125914007,
+      "failures": [
+        {
+          "group": "M13/correlated_medium",
+          "metric": "mae",
+          "value": 0.001975883264094591,
+          "baseline": 0.0019363198662176728,
+          "limit": 0.0019363298662176728
+        },
+        {
+          "group": "M13/correlated_small",
+          "metric": "mae",
+          "value": 0.0018706215778365731,
+          "baseline": 0.001774599077180028,
+          "limit": 0.001774609077180028
+        },
+        {
+          "group": "M13/original_replay",
+          "metric": "mse",
+          "value": 6.393342118826695e-06,
+          "baseline": 5.880155185877811e-06,
+          "limit": 5.880156185877811e-06
+        },
+        {
+          "group": "M13/original_replay",
+          "metric": "mae",
+          "value": 0.001267711166292429,
+          "baseline": 0.001160834333859384,
+          "limit": 0.001160844333859384
+        },
+        {
+          "group": "M13/read_dominated",
+          "metric": "mae",
+          "value": 0.0012662195367738605,
+          "baseline": 0.0010986733250319958,
+          "limit": 0.0010986833250319957
+        },
+        {
+          "group": "M13/row_noise",
+          "metric": "mse",
+          "value": 6.629211384279188e-06,
+          "baseline": 6.624668912991183e-06,
+          "limit": 6.624669912991183e-06
+        },
+        {
+          "group": "M13/row_noise",
+          "metric": "mae",
+          "value": 0.0014992083888500929,
+          "baseline": 0.0014288771199062467,
+          "limit": 0.0014288871199062466
+        },
+        {
+          "group": "M13/shot_dominated",
+          "metric": "mae",
+          "value": 0.0007551813032478094,
+          "baseline": 0.0007265780586749315,
+          "limit": 0.0007265880586749316
+        },
+        {
+          "group": "M16/correlated_small",
+          "metric": "mae",
+          "value": 0.002276542829349637,
+          "baseline": 0.0022718857508152723,
+          "limit": 0.0022718957508152723
+        },
+        {
+          "group": "M16/original_replay",
+          "metric": "mae",
+          "value": 0.0012661998625844717,
+          "baseline": 0.0011701929615810513,
+          "limit": 0.0011702029615810513
+        },
+        {
+          "group": "M16/read_dominated",
+          "metric": "mae",
+          "value": 0.0019888784736394882,
+          "baseline": 0.001933955936692655,
+          "limit": 0.001933965936692655
+        },
+        {
+          "group": "M16/shot_dominated",
+          "metric": "mae",
+          "value": 0.0016773201059550047,
+          "baseline": 0.0016293794615194201,
+          "limit": 0.00162938946151942
+        },
+        {
+          "group": "synthetic/correlated_large",
+          "metric": "mae",
+          "value": 0.0022273880895227194,
+          "baseline": 0.002220981987193227,
+          "limit": 0.0022209919871932268
+        },
+        {
+          "group": "synthetic/correlated_large",
+          "metric": "local_mean_rms",
+          "value": 0.001702251029200852,
+          "baseline": 0.0016981192165985703,
+          "limit": 0.0016981292165985703
+        },
+        {
+          "group": "synthetic/correlated_medium",
+          "metric": "mse",
+          "value": 1.8597578673507087e-05,
+          "baseline": 1.8537732103141025e-05,
+          "limit": 1.8537733103141024e-05
+        },
+        {
+          "group": "synthetic/correlated_medium",
+          "metric": "mae",
+          "value": 0.002539240289479494,
+          "baseline": 0.0024868743494153023,
+          "limit": 0.0024868843494153022
+        },
+        {
+          "group": "synthetic/correlated_small",
+          "metric": "mae",
+          "value": 0.0011900027748197317,
+          "baseline": 0.0010843802010640502,
+          "limit": 0.0010843902010640501
+        },
+        {
+          "group": "synthetic/original_replay",
+          "metric": "mse",
+          "value": 4.864211859967327e-06,
+          "baseline": 4.773448836203897e-06,
+          "limit": 4.773449836203898e-06
+        },
+        {
+          "group": "synthetic/original_replay",
+          "metric": "mae",
+          "value": 0.0011724054347723722,
+          "baseline": 0.0010760088916867971,
+          "limit": 0.001076018891686797
+        },
+        {
+          "group": "synthetic/read_dominated",
+          "metric": "mae",
+          "value": 0.0013645300641655922,
+          "baseline": 0.0012219022028148174,
+          "limit": 0.0012219122028148174
+        },
+        {
+          "group": "synthetic/row_noise",
+          "metric": "mae",
+          "value": 0.0015221438370645046,
+          "baseline": 0.0014502054546028376,
+          "limit": 0.0014502154546028375
+        },
+        {
+          "group": "synthetic/shot_dominated",
+          "metric": "mse",
+          "value": 6.821883744123625e-06,
+          "baseline": 6.50750553177204e-06,
+          "limit": 6.50750653177204e-06
+        },
+        {
+          "group": "synthetic/shot_dominated",
+          "metric": "mae",
+          "value": 0.001362883485853672,
+          "baseline": 0.0012013958767056465,
+          "limit": 0.0012014058767056465
+        }
+      ],
+      "failed_metrics": {
+        "mae": 17,
+        "mse": 5,
+        "local_mean_rms": 1
+      },
+      "passes_all_groups": false
+    },
+    {
+      "step": 4000,
+      "geometric_group_mse_ratio": 0.8946036365225154,
+      "failures": [
+        {
+          "group": "M13/correlated_medium",
+          "metric": "mae",
+          "value": 0.0019741151481866837,
+          "baseline": 0.0019363198662176728,
+          "limit": 0.0019363298662176728
+        },
+        {
+          "group": "M13/correlated_small",
+          "metric": "mae",
+          "value": 0.0018739893566817045,
+          "baseline": 0.001774599077180028,
+          "limit": 0.001774609077180028
+        },
+        {
+          "group": "M13/original_replay",
+          "metric": "mse",
+          "value": 6.417844360839808e-06,
+          "baseline": 5.880155185877811e-06,
+          "limit": 5.880156185877811e-06
+        },
+        {
+          "group": "M13/original_replay",
+          "metric": "mae",
+          "value": 0.0012735980562865734,
+          "baseline": 0.001160834333859384,
+          "limit": 0.001160844333859384
+        },
+        {
+          "group": "M13/read_dominated",
+          "metric": "mae",
+          "value": 0.0012758972588926554,
+          "baseline": 0.0010986733250319958,
+          "limit": 0.0010986833250319957
+        },
+        {
+          "group": "M13/row_noise",
+          "metric": "mae",
+          "value": 0.0015004005981609225,
+          "baseline": 0.0014288771199062467,
+          "limit": 0.0014288871199062466
+        },
+        {
+          "group": "M13/shot_dominated",
+          "metric": "mae",
+          "value": 0.0007567504071630538,
+          "baseline": 0.0007265780586749315,
+          "limit": 0.0007265880586749316
+        },
+        {
+          "group": "M16/correlated_small",
+          "metric": "mae",
+          "value": 0.002275991253554821,
+          "baseline": 0.0022718857508152723,
+          "limit": 0.0022718957508152723
+        },
+        {
+          "group": "M16/original_replay",
+          "metric": "mae",
+          "value": 0.0012709174770861864,
+          "baseline": 0.0011701929615810513,
+          "limit": 0.0011702029615810513
+        },
+        {
+          "group": "M16/read_dominated",
+          "metric": "mae",
+          "value": 0.0019923564977943897,
+          "baseline": 0.001933955936692655,
+          "limit": 0.001933965936692655
+        },
+        {
+          "group": "M16/shot_dominated",
+          "metric": "mae",
+          "value": 0.0016816450515761971,
+          "baseline": 0.0016293794615194201,
+          "limit": 0.00162938946151942
+        },
+        {
+          "group": "synthetic/correlated_large",
+          "metric": "mae",
+          "value": 0.0022271277848631144,
+          "baseline": 0.002220981987193227,
+          "limit": 0.0022209919871932268
+        },
+        {
+          "group": "synthetic/correlated_large",
+          "metric": "local_mean_rms",
+          "value": 0.001700699096545577,
+          "baseline": 0.0016981192165985703,
+          "limit": 0.0016981292165985703
+        },
+        {
+          "group": "synthetic/correlated_medium",
+          "metric": "mae",
+          "value": 0.0025373310782015324,
+          "baseline": 0.0024868743494153023,
+          "limit": 0.0024868843494153022
+        },
+        {
+          "group": "synthetic/correlated_small",
+          "metric": "mae",
+          "value": 0.0011965163284912705,
+          "baseline": 0.0010843802010640502,
+          "limit": 0.0010843902010640501
+        },
+        {
+          "group": "synthetic/original_replay",
+          "metric": "mse",
+          "value": 4.865827577305026e-06,
+          "baseline": 4.773448836203897e-06,
+          "limit": 4.773449836203898e-06
+        },
+        {
+          "group": "synthetic/original_replay",
+          "metric": "mae",
+          "value": 0.0011779679916799068,
+          "baseline": 0.0010760088916867971,
+          "limit": 0.001076018891686797
+        },
+        {
+          "group": "synthetic/read_dominated",
+          "metric": "mae",
+          "value": 0.0013731499202549458,
+          "baseline": 0.0012219022028148174,
+          "limit": 0.0012219122028148174
+        },
+        {
+          "group": "synthetic/row_noise",
+          "metric": "mae",
+          "value": 0.001523539307527244,
+          "baseline": 0.0014502054546028376,
+          "limit": 0.0014502154546028375
+        },
+        {
+          "group": "synthetic/shot_dominated",
+          "metric": "mse",
+          "value": 6.840111836936558e-06,
+          "baseline": 6.50750553177204e-06,
+          "limit": 6.50750653177204e-06
+        },
+        {
+          "group": "synthetic/shot_dominated",
+          "metric": "mae",
+          "value": 0.0013734500389546156,
+          "baseline": 0.0012013958767056465,
+          "limit": 0.0012014058767056465
+        }
+      ],
+      "failed_metrics": {
+        "mae": 17,
+        "mse": 3,
+        "local_mean_rms": 1
+      },
+      "passes_all_groups": false
+    },
+    {
+      "step": 5000,
+      "geometric_group_mse_ratio": 0.8916153348710486,
+      "failures": [
+        {
+          "group": "M13/correlated_medium",
+          "metric": "mae",
+          "value": 0.0019738427363336086,
+          "baseline": 0.0019363198662176728,
+          "limit": 0.0019363298662176728
+        },
+        {
+          "group": "M13/correlated_small",
+          "metric": "mae",
+          "value": 0.0018733162432909012,
+          "baseline": 0.001774599077180028,
+          "limit": 0.001774609077180028
+        },
+        {
+          "group": "M13/original_replay",
+          "metric": "mse",
+          "value": 6.416580617951695e-06,
+          "baseline": 5.880155185877811e-06,
+          "limit": 5.880156185877811e-06
+        },
+        {
+          "group": "M13/original_replay",
+          "metric": "mae",
+          "value": 0.0012737576616927981,
+          "baseline": 0.001160834333859384,
+          "limit": 0.001160844333859384
+        },
+        {
+          "group": "M13/read_dominated",
+          "metric": "mae",
+          "value": 0.001277632312849164,
+          "baseline": 0.0010986733250319958,
+          "limit": 0.0010986833250319957
+        },
+        {
+          "group": "M13/row_noise",
+          "metric": "mae",
+          "value": 0.0014996047830209136,
+          "baseline": 0.0014288771199062467,
+          "limit": 0.0014288871199062466
+        },
+        {
+          "group": "M13/shot_dominated",
+          "metric": "mae",
+          "value": 0.0007571487803943455,
+          "baseline": 0.0007265780586749315,
+          "limit": 0.0007265880586749316
+        },
+        {
+          "group": "M16/correlated_small",
+          "metric": "mae",
+          "value": 0.002272575395181775,
+          "baseline": 0.0022718857508152723,
+          "limit": 0.0022718957508152723
+        },
+        {
+          "group": "M16/original_replay",
+          "metric": "mae",
+          "value": 0.0012719170190393925,
+          "baseline": 0.0011701929615810513,
+          "limit": 0.0011702029615810513
+        },
+        {
+          "group": "M16/read_dominated",
+          "metric": "mae",
+          "value": 0.001989952055737376,
+          "baseline": 0.001933955936692655,
+          "limit": 0.001933965936692655
+        },
+        {
+          "group": "M16/shot_dominated",
+          "metric": "mae",
+          "value": 0.0016818528529256582,
+          "baseline": 0.0016293794615194201,
+          "limit": 0.00162938946151942
+        },
+        {
+          "group": "synthetic/correlated_large",
+          "metric": "mae",
+          "value": 0.002227793214842677,
+          "baseline": 0.002220981987193227,
+          "limit": 0.0022209919871932268
+        },
+        {
+          "group": "synthetic/correlated_large",
+          "metric": "local_mean_rms",
+          "value": 0.001701782806776464,
+          "baseline": 0.0016981192165985703,
+          "limit": 0.0016981292165985703
+        },
+        {
+          "group": "synthetic/correlated_medium",
+          "metric": "mae",
+          "value": 0.0025368824135512114,
+          "baseline": 0.0024868743494153023,
+          "limit": 0.0024868843494153022
+        },
+        {
+          "group": "synthetic/correlated_small",
+          "metric": "mae",
+          "value": 0.0011976228561252356,
+          "baseline": 0.0010843802010640502,
+          "limit": 0.0010843902010640501
+        },
+        {
+          "group": "synthetic/original_replay",
+          "metric": "mse",
+          "value": 4.867633833782747e-06,
+          "baseline": 4.773448836203897e-06,
+          "limit": 4.773449836203898e-06
+        },
+        {
+          "group": "synthetic/original_replay",
+          "metric": "mae",
+          "value": 0.0011786787072196603,
+          "baseline": 0.0010760088916867971,
+          "limit": 0.001076018891686797
+        },
+        {
+          "group": "synthetic/read_dominated",
+          "metric": "mae",
+          "value": 0.0013756960397586226,
+          "baseline": 0.0012219022028148174,
+          "limit": 0.0012219122028148174
+        },
+        {
+          "group": "synthetic/row_noise",
+          "metric": "mae",
+          "value": 0.001523844781331718,
+          "baseline": 0.0014502054546028376,
+          "limit": 0.0014502154546028375
+        },
+        {
+          "group": "synthetic/shot_dominated",
+          "metric": "mse",
+          "value": 6.848311841167742e-06,
+          "baseline": 6.50750553177204e-06,
+          "limit": 6.50750653177204e-06
+        },
+        {
+          "group": "synthetic/shot_dominated",
+          "metric": "mae",
+          "value": 0.0013756935950368643,
+          "baseline": 0.0012013958767056465,
+          "limit": 0.0012014058767056465
+        }
+      ],
+      "failed_metrics": {
+        "mae": 17,
+        "mse": 3,
+        "local_mean_rms": 1
+      },
+      "passes_all_groups": false
+    },
+    {
+      "step": 6000,
+      "geometric_group_mse_ratio": 0.889667531477457,
+      "failures": [
+        {
+          "group": "M13/correlated_medium",
+          "metric": "mae",
+          "value": 0.001973313745111227,
+          "baseline": 0.0019363198662176728,
+          "limit": 0.0019363298662176728
+        },
+        {
+          "group": "M13/correlated_small",
+          "metric": "mae",
+          "value": 0.0018744667759165168,
+          "baseline": 0.001774599077180028,
+          "limit": 0.001774609077180028
+        },
+        {
+          "group": "M13/original_replay",
+          "metric": "mse",
+          "value": 6.4237356127705425e-06,
+          "baseline": 5.880155185877811e-06,
+          "limit": 5.880156185877811e-06
+        },
+        {
+          "group": "M13/original_replay",
+          "metric": "mae",
+          "value": 0.0012754533672705293,
+          "baseline": 0.001160834333859384,
+          "limit": 0.001160844333859384
+        },
+        {
+          "group": "M13/read_dominated",
+          "metric": "mae",
+          "value": 0.0012801868142560124,
+          "baseline": 0.0010986733250319958,
+          "limit": 0.0010986833250319957
+        },
+        {
+          "group": "M13/row_noise",
+          "metric": "mae",
+          "value": 0.0015007329639047384,
+          "baseline": 0.0014288771199062467,
+          "limit": 0.0014288871199062466
+        },
+        {
+          "group": "M13/shot_dominated",
+          "metric": "mae",
+          "value": 0.0007575391791760921,
+          "baseline": 0.0007265780586749315,
+          "limit": 0.0007265880586749316
+        },
+        {
+          "group": "M16/correlated_small",
+          "metric": "mae",
+          "value": 0.0022729726042598486,
+          "baseline": 0.0022718857508152723,
+          "limit": 0.0022718957508152723
+        },
+        {
+          "group": "M16/original_replay",
+          "metric": "mae",
+          "value": 0.001272896071895957,
+          "baseline": 0.0011701929615810513,
+          "limit": 0.0011702029615810513
+        },
+        {
+          "group": "M16/read_dominated",
+          "metric": "mae",
+          "value": 0.0019917325116693974,
+          "baseline": 0.001933955936692655,
+          "limit": 0.001933965936692655
+        },
+        {
+          "group": "M16/shot_dominated",
+          "metric": "mae",
+          "value": 0.0016831691609695554,
+          "baseline": 0.0016293794615194201,
+          "limit": 0.00162938946151942
+        },
+        {
+          "group": "synthetic/correlated_large",
+          "metric": "mae",
+          "value": 0.0022273240610957146,
+          "baseline": 0.002220981987193227,
+          "limit": 0.0022209919871932268
+        },
+        {
+          "group": "synthetic/correlated_large",
+          "metric": "local_mean_rms",
+          "value": 0.0016990051371976733,
+          "baseline": 0.0016981192165985703,
+          "limit": 0.0016981292165985703
+        },
+        {
+          "group": "synthetic/correlated_medium",
+          "metric": "mae",
+          "value": 0.0025366656482219696,
+          "baseline": 0.0024868743494153023,
+          "limit": 0.0024868843494153022
+        },
+        {
+          "group": "synthetic/correlated_small",
+          "metric": "mae",
+          "value": 0.00119890330825001,
+          "baseline": 0.0010843802010640502,
+          "limit": 0.0010843902010640501
+        },
+        {
+          "group": "synthetic/original_replay",
+          "metric": "mse",
+          "value": 4.8664237510820385e-06,
+          "baseline": 4.773448836203897e-06,
+          "limit": 4.773449836203898e-06
+        },
+        {
+          "group": "synthetic/original_replay",
+          "metric": "mae",
+          "value": 0.001180176855996251,
+          "baseline": 0.0010760088916867971,
+          "limit": 0.001076018891686797
+        },
+        {
+          "group": "synthetic/read_dominated",
+          "metric": "mae",
+          "value": 0.001377237611450255,
+          "baseline": 0.0012219022028148174,
+          "limit": 0.0012219122028148174
+        },
+        {
+          "group": "synthetic/row_noise",
+          "metric": "mae",
+          "value": 0.0015244085807353258,
+          "baseline": 0.0014502054546028376,
+          "limit": 0.0014502154546028375
+        },
+        {
+          "group": "synthetic/shot_dominated",
+          "metric": "mse",
+          "value": 6.8505264607665595e-06,
+          "baseline": 6.50750553177204e-06,
+          "limit": 6.50750653177204e-06
+        },
+        {
+          "group": "synthetic/shot_dominated",
+          "metric": "mae",
+          "value": 0.0013784738257527351,
+          "baseline": 0.0012013958767056465,
+          "limit": 0.0012014058767056465
+        }
+      ],
+      "failed_metrics": {
+        "mae": 17,
+        "mse": 3,
+        "local_mean_rms": 1
+      },
+      "passes_all_groups": false
+    }
+  ],
+  "final_seed_consumed": false,
+  "final_evaluation_independently_recounted": false,
+  "final_recount": null,
+  "bundled_weights_changed": false,
+  "limitations": "Evidence integrity/development-gate recount only. No real-camera or full-image quality certification."
+}

@@ -1,0 +1,191 @@
+{
+  "synthetic/identity": {
+    "mse": 3.590559572330676e-06,
+    "mae": 0.0006358051323331892,
+    "absolute_image_bias": 0.00013706155004911125,
+    "local_mean_rms": 0.0003202091611456126,
+    "scenes": 16
+  },
+  "synthetic/low_noise": {
+    "mse": 3.786910610870109e-06,
+    "mae": 0.0006637637852691114,
+    "absolute_image_bias": 0.00012092186079826206,
+    "local_mean_rms": 0.0003194735327269882,
+    "scenes": 16
+  },
+  "synthetic/read_dominated": {
+    "mse": 6.015820872562472e-06,
+    "mae": 0.0012219022028148174,
+    "absolute_image_bias": 0.00015421214629895985,
+    "local_mean_rms": 0.00045334274182096124,
+    "scenes": 16
+  },
+  "synthetic/shot_dominated": {
+    "mse": 6.50750553177204e-06,
+    "mae": 0.0012013958767056465,
+    "absolute_image_bias": 0.0001008675608318299,
+    "local_mean_rms": 0.00044620793778449297,
+    "scenes": 16
+  },
+  "synthetic/correlated_small": {
+    "mse": 4.9372015382687096e-06,
+    "mae": 0.0010843802010640502,
+    "absolute_image_bias": 0.0001390689139952883,
+    "local_mean_rms": 0.00041267098276875913,
+    "scenes": 16
+  },
+  "synthetic/correlated_medium": {
+    "mse": 1.8537732103141025e-05,
+    "mae": 0.0024868743494153023,
+    "absolute_image_bias": 0.00013908100663684309,
+    "local_mean_rms": 0.0012578500900417566,
+    "scenes": 16
+  },
+  "synthetic/correlated_large": {
+    "mse": 1.4990032468631398e-05,
+    "mae": 0.002220981987193227,
+    "absolute_image_bias": 0.00016174536722246557,
+    "local_mean_rms": 0.0016981192165985703,
+    "scenes": 16
+  },
+  "synthetic/row_noise": {
+    "mse": 6.248505997064058e-06,
+    "mae": 0.0014502054546028376,
+    "absolute_image_bias": 0.0002505184384062886,
+    "local_mean_rms": 0.000808363314718008,
+    "scenes": 16
+  },
+  "synthetic/original_replay": {
+    "mse": 4.773448836203897e-06,
+    "mae": 0.0010760088916867971,
+    "absolute_image_bias": 0.00013501624925993383,
+    "local_mean_rms": 0.0004300581058487296,
+    "scenes": 16
+  },
+  "M13/identity": {
+    "mse": 2.0470909021241823e-06,
+    "mae": 0.00034749414771795273,
+    "absolute_image_bias": 6.151009438326582e-05,
+    "local_mean_rms": 0.00011222038301639259,
+    "scenes": 16
+  },
+  "M13/low_noise": {
+    "mse": 1.3777676940662786e-05,
+    "mae": 0.0006473219837062061,
+    "absolute_image_bias": 9.831348870648071e-05,
+    "local_mean_rms": 0.00022256982629187405,
+    "scenes": 16
+  },
+  "M13/read_dominated": {
+    "mse": 1.0484502126928419e-05,
+    "mae": 0.0010986733250319958,
+    "absolute_image_bias": 5.365169272408821e-05,
+    "local_mean_rms": 0.00033122827881015837,
+    "scenes": 16
+  },
+  "M13/shot_dominated": {
+    "mse": 6.040333573764656e-06,
+    "mae": 0.0007265780586749315,
+    "absolute_image_bias": 4.3851199734490365e-05,
+    "local_mean_rms": 0.00019556422194000334,
+    "scenes": 16
+  },
+  "M13/correlated_small": {
+    "mse": 1.157009228336392e-05,
+    "mae": 0.001774599077180028,
+    "absolute_image_bias": 9.066567872650921e-05,
+    "local_mean_rms": 0.0005748881376348436,
+    "scenes": 16
+  },
+  "M13/correlated_medium": {
+    "mse": 2.2873442503623664e-05,
+    "mae": 0.0019363198662176728,
+    "absolute_image_bias": 7.735812687315047e-05,
+    "local_mean_rms": 0.0007074082968756557,
+    "scenes": 16
+  },
+  "M13/correlated_large": {
+    "mse": 1.9926324966945685e-05,
+    "mae": 0.002539524110034108,
+    "absolute_image_bias": 4.5988537749508396e-05,
+    "local_mean_rms": 0.0019628582522273064,
+    "scenes": 16
+  },
+  "M13/row_noise": {
+    "mse": 6.624668912991183e-06,
+    "mae": 0.0014288771199062467,
+    "absolute_image_bias": 0.00016957965272013098,
+    "local_mean_rms": 0.0007305497420020401,
+    "scenes": 16
+  },
+  "M13/original_replay": {
+    "mse": 5.880155185877811e-06,
+    "mae": 0.001160834333859384,
+    "absolute_image_bias": 9.883756138151512e-05,
+    "local_mean_rms": 0.0004273217637091875,
+    "scenes": 16
+  },
+  "M16/identity": {
+    "mse": 0.00014135958917904645,
+    "mae": 0.0010376505088061094,
+    "absolute_image_bias": 4.8971251089824364e-05,
+    "local_mean_rms": 0.0003148574905935675,
+    "scenes": 16
+  },
+  "M16/low_noise": {
+    "mse": 9.348717867396772e-06,
+    "mae": 0.0007389683159999549,
+    "absolute_image_bias": 2.8980062779737636e-05,
+    "local_mean_rms": 0.0001192412237287499,
+    "scenes": 16
+  },
+  "M16/read_dominated": {
+    "mse": 5.041279291617684e-05,
+    "mae": 0.001933955936692655,
+    "absolute_image_bias": 6.027664494467899e-05,
+    "local_mean_rms": 0.0004292776866350323,
+    "scenes": 16
+  },
+  "M16/shot_dominated": {
+    "mse": 3.570768240024336e-05,
+    "mae": 0.0016293794615194201,
+    "absolute_image_bias": 4.2031213524751365e-05,
+    "local_mean_rms": 0.0004561660171020776,
+    "scenes": 16
+  },
+  "M16/correlated_small": {
+    "mse": 2.1167001250432804e-05,
+    "mae": 0.0022718857508152723,
+    "absolute_image_bias": 0.0001068779529305175,
+    "local_mean_rms": 0.0006419005221687257,
+    "scenes": 16
+  },
+  "M16/correlated_medium": {
+    "mse": 8.391479059355333e-05,
+    "mae": 0.0031719517428427935,
+    "absolute_image_bias": 0.00011370757420081645,
+    "local_mean_rms": 0.0015078517608344555,
+    "scenes": 16
+  },
+  "M16/correlated_large": {
+    "mse": 0.00048332897131331265,
+    "mae": 0.003555822651833296,
+    "absolute_image_bias": 0.00010844370990525931,
+    "local_mean_rms": 0.002590861637145281,
+    "scenes": 16
+  },
+  "M16/row_noise": {
+    "mse": 1.4147266483632848e-05,
+    "mae": 0.001815442694351077,
+    "absolute_image_bias": 0.0001973893668036908,
+    "local_mean_rms": 0.0008168633794412017,
+    "scenes": 16
+  },
+  "M16/original_replay": {
+    "mse": 6.118676083133323e-06,
+    "mae": 0.0011701929615810513,
+    "absolute_image_bias": 0.00013024920190218836,
+    "local_mean_rms": 0.00044459186028689146,
+    "scenes": 16
+  }
+}

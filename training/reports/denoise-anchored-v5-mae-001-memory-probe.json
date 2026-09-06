@@ -1,0 +1,22 @@
+{
+  "type": "preflight_forward_backward_memory_probe",
+  "optimizer_steps": 0,
+  "training_or_final_data_used": false,
+  "seed": 790069,
+  "batch": 4,
+  "tile": 256,
+  "model": "unchanged_v4_mean_anchored_parent",
+  "device": "NVIDIA GB10",
+  "torch_version": "2.12.0.dev20260407+cu128",
+  "cuda_version": "12.8",
+  "forward_backward_peak_allocated_bytes": 1400877568,
+  "scene_bank_bytes": 223084544,
+  "development_tensor_bytes": 226492416,
+  "estimated_optimizer_state_bytes": 3502472,
+  "derived_minimum_cuda_free_bytes": 6056589704,
+  "derivation": "max(2 GiB, 4 * measured forward/backward peak + all banks + all development tensors + AdamW moments)",
+  "cuda_free_bytes_after_probe": 5140504576,
+  "cuda_total_bytes": 130596048896,
+  "mem_available_bytes": 27081265152,
+  "seconds": 1.330849808990024
+}

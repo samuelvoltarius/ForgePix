@@ -1,5 +1,33 @@
 # ForgePix model development
 
+## Bounded V5 MAE experiment completed (2026-09-06)
+
+The single authorized `denoise-anchored-v5-mae-001` run completed exactly 6,000
+CUDA optimizer steps on Spark/GB10. It adds only the planned MAE loss term to V4;
+the fixed coefficient 0.008796099731346109 comes from 96 training batches, with
+RNG/model state restored and the first 96 actual batch hashes reproduced exactly.
+Splits, architecture, original mono parent, schedule and numerical gates were
+unchanged. Six independent Torch/CUDA preflight tests passed on Spark.
+
+The candidate is **rejected**: geometric development MSE ratio 0.8896675315
+(11.03% lower), but 17 MAE, three MSE and one local-mean gate fail; all 27 bias
+gates pass. A separate implementation recounted all 648 development comparisons.
+Optimization took 554.94 s, development evaluation 23.64 s; measured peak CUDA
+allocation was 1.857 GB. The initially unmeasured 8-GiB preflight threshold was
+replaced, before any optimization, by a disclosed 6-GiB reserve justified by an
+independent forward/backward memory probe plus banks, validation and AdamW state.
+Other jobs were untouched; disk reserve remained 80 GiB.
+
+Total completed optimization across these experiments is now 42,000 steps.
+Final seed **9671507 remains unused**. No final evaluation, ONNX export or bundled
+model change occurred. All four shipped models remain experimental. Sources,
+calibration, batch reproduction, resources, six development checkpoints and the
+independent decision are archived as
+`training/reports/denoise-anchored-v5-mae-001-*.json`.
+Do not repeat V5 or consume the final seed automatically. The preservation tests
+for background/deblur/starless in DENOISE_V5_PLAN.md remain the next bounded AI
+work; an improved average alone never overrides the per-group preservation gates.
+
 ## Own local models, second experiment (2026-09-06)
 
 The application now has an opt-in **Own AI image processing** tool and a
