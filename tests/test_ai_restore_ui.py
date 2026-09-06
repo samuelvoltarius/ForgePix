@@ -15,11 +15,20 @@ from contextlib import redirect_stdout, redirect_stderr
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "core"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # Geschwistermodule (gui_support) auch bei `python -m unittest tests.X`
 
 import numpy as np
 import tifffile
 from PySide6.QtWidgets import QApplication, QDialog
 from ui.ai_restore_dialog import AIRestoreDialog, _execution_feedback
+# Die ganze Fensterkette VOR den sys.modules-Ersetzungen laden. `runpy.run_path` fuehrt den
+# Einstiegspunkt spaeter erneut aus; waere `cv2` dann noch nicht geladen, liefe seine
+# Startsequenz waehrend eines aktiven `patch.dict(sys.modules, ...)` und stirbt unter
+# Python 3.14 an `module 'cv2.dnn' has no attribute 'DictValue'`.
+import ui.components  # noqa: E402,F401
+import ui.export      # noqa: E402,F401
+import ui.main_window  # noqa: E402,F401
+from gui_support import stilles_hauptfenster, stilles_hauptfenster_aufsetzen
 
 
 class AIRestoreUI(unittest.TestCase):
@@ -229,9 +238,7 @@ class AIRestoreUI(unittest.TestCase):
 
     def test_astro_action_is_available_without_enabling_automatic_inference(self):
         from ui.main_window import MainWindow
-        with patch.object(MainWindow, "_restore_settings"), \
-             patch.object(MainWindow, "_save_settings"), \
-             patch("ui.main_window._UpdateChecker.start"):
+        with stilles_hauptfenster():
             window = MainWindow()
             try:
                 window._choose_module(1)
@@ -256,9 +263,7 @@ class AIRestoreUI(unittest.TestCase):
             raise RuntimeError("KI-Verarbeitung abgebrochen.")
 
         self.api.run_file.side_effect = process
-        with patch.object(MainWindow, "_restore_settings"), \
-             patch.object(MainWindow, "_save_settings"), \
-             patch("ui.main_window._UpdateChecker.start"):
+        with stilles_hauptfenster():
             window = MainWindow()
             try:
                 dialog = self.dialog()

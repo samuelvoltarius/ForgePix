@@ -10,6 +10,7 @@ from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "core"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # Geschwistermodule (gui_support) auch bei `python -m unittest tests.X`
 
 import cv2
 import numpy as np
@@ -21,6 +22,7 @@ from project_store import Project, ProjectError, fingerprint, resolve
 from ui.main_window import MainWindow
 from ui.project_dialog import ProjectHistoryDialog
 from ui.project_workflow import _standalone_preview
+from gui_support import stilles_hauptfenster, stilles_hauptfenster_aufsetzen
 
 
 class ProjectUI(unittest.TestCase):
@@ -32,11 +34,7 @@ class ProjectUI(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name).resolve()
-        for target in ("ui.main_window.MainWindow._restore_settings", "ui.main_window.MainWindow._save_settings",
-                       "ui.main_window._UpdateChecker.start"):
-            context = patch(target)
-            context.start()
-            self.addCleanup(context.stop)
+        stilles_hauptfenster_aufsetzen(self)
         self.window = MainWindow()
         self.addCleanup(self.window.deleteLater)
         self.window._choose_module(1)

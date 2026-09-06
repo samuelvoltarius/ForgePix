@@ -10,6 +10,7 @@ from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "core"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # Geschwistermodule (gui_support) auch bei `python -m unittest tests.X`
 
 import numpy as np
 import tifffile
@@ -20,6 +21,7 @@ from astrometry_file import solve_file
 from test_astrometry import fixture
 from project_store import Project
 from ui.astrometry_dialog import AstrometryDialog, header_hints
+from gui_support import stilles_hauptfenster_aufsetzen
 
 
 class AstrometryFileTests(unittest.TestCase):
@@ -97,11 +99,7 @@ class AstrometryFileTests(unittest.TestCase):
         derived = json.loads((solved.parent / "ai_report.json").read_text(encoding="utf-8"))
         self.assertEqual(derived["model_sha256"], original_ai_report["model_sha256"])
         self.assertFalse(derived["postprocessing"][-1]["model_executed_again"])
-        for target in ("ui.main_window.MainWindow._restore_settings", "ui.main_window.MainWindow._save_settings",
-                       "ui.main_window._UpdateChecker.start"):
-            context = patch(target)
-            context.start()
-            self.addCleanup(context.stop)
+        stilles_hauptfenster_aufsetzen(self)
         window = MainWindow()
         self.addCleanup(window.deleteLater)
         window._project = Project.create(self.root / "AI-Solve.forgepix", "AI-Solve", {})

@@ -10,6 +10,7 @@ from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "core"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # Geschwistermodule (gui_support) auch bei `python -m unittest tests.X`
 
 import numpy as np
 import tifffile
@@ -18,6 +19,7 @@ from PySide6.QtWidgets import QApplication
 
 from ui.ai_preview import create_previews
 from ui.main_window import MainWindow
+from gui_support import stilles_hauptfenster, stilles_hauptfenster_aufsetzen
 
 
 class AIReimportTests(unittest.TestCase):
@@ -57,13 +59,7 @@ class AIReimportTests(unittest.TestCase):
                                              "sha256": self.digest(path)} for path in files]}
         self.write_report()
         self.originals = {path.name: path.read_bytes() for path in [self.source, *files]}
-        for name in ("_restore_settings", "_save_settings"):
-            patcher = patch.object(MainWindow, name)
-            patcher.start()
-            self.addCleanup(patcher.stop)
-        updater = patch("ui.main_window._UpdateChecker.start")
-        updater.start()
-        self.addCleanup(updater.stop)
+        stilles_hauptfenster_aufsetzen(self)
 
     @staticmethod
     def digest(path):

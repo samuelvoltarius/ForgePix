@@ -7,8 +7,10 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "core"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # Geschwistermodule (gui_support) auch bei `python -m unittest tests.X`
 from PySide6.QtWidgets import QApplication
 from ui.main_window import MainWindow
+from gui_support import stilles_hauptfenster, stilles_hauptfenster_aufsetzen
 
 
 class AstroUI(unittest.TestCase):
@@ -17,9 +19,7 @@ class AstroUI(unittest.TestCase):
         cls.app = QApplication.instance() or QApplication([])
 
     def test_native_color_choice_does_not_send_disabled_siril_narrowband_flag(self):
-        with patch.object(MainWindow, "_restore_settings"), \
-             patch.object(MainWindow, "_save_settings"), \
-             patch("ui.main_window._UpdateChecker.start"):
+        with stilles_hauptfenster():
             window = MainWindow()
             try:
                 window.astro_group.setChecked(True)
@@ -39,9 +39,7 @@ class AstroUI(unittest.TestCase):
                 type(self).app.processEvents()
 
     def test_cfa_drizzle_can_use_original_size(self):
-        with patch.object(MainWindow, "_restore_settings"), \
-             patch.object(MainWindow, "_save_settings"), \
-             patch("ui.main_window._UpdateChecker.start"):
+        with stilles_hauptfenster():
             window = MainWindow()
             try:
                 window.astro_group.setChecked(True)
@@ -57,9 +55,7 @@ class AstroUI(unittest.TestCase):
     def test_incomplete_drizzle_is_visible_with_real_used_frame_count(self):
         import json
         with tempfile.TemporaryDirectory() as folder, \
-             patch.object(MainWindow, "_restore_settings"), \
-             patch.object(MainWindow, "_save_settings"), \
-             patch("ui.main_window._UpdateChecker.start"):
+             stilles_hauptfenster():
             window = MainWindow()
             try:
                 window.work_edit.setText(folder)
@@ -78,9 +74,7 @@ class AstroUI(unittest.TestCase):
                 type(self).app.processEvents()
 
     def test_normal_astro_honors_calibration_and_cosmetic(self):
-        with patch.object(MainWindow, "_restore_settings"), \
-             patch.object(MainWindow, "_save_settings"), \
-             patch("ui.main_window._UpdateChecker.start"):
+        with stilles_hauptfenster():
             window = MainWindow()
             try:
                 window.astro_group.setChecked(True)
@@ -107,9 +101,7 @@ class AstroUI(unittest.TestCase):
     def test_running_image_worker_prevents_destruction_and_overlap(self):
         from types import SimpleNamespace
         from PySide6.QtGui import QCloseEvent
-        with patch.object(MainWindow, "_restore_settings"), \
-             patch.object(MainWindow, "_save_settings"), \
-             patch("ui.main_window._UpdateChecker.start"):
+        with stilles_hauptfenster():
             window = MainWindow()
             window._tool_worker = SimpleNamespace(isRunning=lambda: True)
             event = QCloseEvent()
@@ -123,9 +115,7 @@ class AstroUI(unittest.TestCase):
             type(self).app.processEvents()
 
     def test_beginner_controls_and_nonoverlapping_expert_layout(self):
-        with patch.object(MainWindow, "_restore_settings"), \
-             patch.object(MainWindow, "_save_settings"), \
-             patch("ui.main_window._UpdateChecker.start"):
+        with stilles_hauptfenster():
             window = MainWindow()
             try:
                 window._choose_module(1)
@@ -151,9 +141,7 @@ class AstroUI(unittest.TestCase):
         import numpy as np
         from astropy.io import fits
         with tempfile.TemporaryDirectory() as folder, \
-             patch.object(MainWindow, "_restore_settings"), \
-             patch.object(MainWindow, "_save_settings"), \
-             patch("ui.main_window._UpdateChecker.start"):
+             stilles_hauptfenster():
             series = Path(folder) / "M27"
             series.mkdir()
             fits.writeto(series / "Light.fit", np.ones((20, 20), np.float32))
