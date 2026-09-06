@@ -597,6 +597,25 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, ProjectM
                               "Meridianumschlag oder bei Feldrotation aus. Das ist die empfohlene "
                               "Einstellung. Nur Verschiebung eignet sich für Serien ohne Drehung; "
                               "eine nachgeführte Montierung kann beim Meridianumschlag das Bild drehen."), 11, 3)
+        # Kamera direkt neben dem Filter — Alfreds DAU-Vorgabe ist "welche Kamera, welcher
+        # Filter, wie soll es aussehen". Die Kamera stand bisher NUR im Ausruestungs-Dialog,
+        # war also im Anfaenger-Modus gar nicht erreichbar. Zeile 23, weil 6-8/17-19/21-22 schon
+        # belegt sind; 23 kommt unten zur Anfaenger-Liste dazu.
+        self.astro_kamera = QComboBox()
+        try:
+            import equipment as _eq
+            for _k, _name, _pitch in _eq.alle_kameras():
+                self.astro_kamera.addItem(_name, _k)
+        except Exception:
+            self.astro_kamera.addItem(tr("Eigene Werte eintragen"), "manuell")
+        self.astro_kamera.currentIndexChanged.connect(lambda _i: self._kamera_gewaehlt())
+        ar.addWidget(QLabel(tr("Kamera")), 13, 0)
+        ar.addWidget(self.astro_kamera, 13, 1, 1, 2)
+        ar.addWidget(help_btn(tr(
+            "Welche Kamera die Aufnahmen gemacht hat. Daraus kommen Pixelgroesse und "
+            "Abbildungsmassstab — und eine Plausibilitaetspruefung der Farben: weicht der "
+            "Hintergrund weit von dem ab, was diese Kamera sonst zeigt, fehlt meist ein Flat "
+            "oder der eingestellte Filter ist nicht der, mit dem aufgenommen wurde.")), 13, 3)
         ar.addWidget(QLabel(tr("Filter")), 17, 0); ar.addWidget(self.astro_filter, 17, 1, 1, 2)
         ar.addWidget(help_btn("Der Aufnahmefilter bestimmt, welche Emissionslinien überhaupt "
                               "ankommen. Hα/OIII und SII/OIII sind verschiedene Varianten. "
@@ -809,7 +828,7 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, ProjectM
             #   22     Bildstil        (wie es aussehen soll — immer)
             # Palette und Bildstil fehlten hier: der Anfaenger konnte Dark und Flat waehlen,
             # aber nicht, wie das Bild werden soll. Genau das war der Punkt.
-            if widget is not None and row not in {6, 7, 8, 17, 18, 19, 21, 22}:
+            if widget is not None and row not in {6, 7, 8, 13, 17, 18, 19, 21, 22}:
                 self._astro_expert_widgets.append(widget)
         for combo in g_astro.findChildren(QComboBox):
             combo.setMinimumWidth(0)
@@ -2634,6 +2653,25 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, ProjectM
         wk.start()
         busy.exec()
 
+    def _kamera_gewaehlt(self):
+        """Kameraauswahl in dieselben Einstellungen schreiben, die der Ausruestungs-Dialog nutzt.
+
+        Sonst haette man zwei Wahrheiten: eine im Astro-Reiter, eine im Dialog. Die Pixelgroesse
+        kommt aus der Kameraliste und wird gleich mitgeschrieben, damit der Abbildungsmassstab
+        stimmt, ohne dass jemand den Dialog oeffnen muss.
+        """
+        try:
+            schluessel = self.astro_kamera.currentData()
+            st = app_settings()
+            st.setValue("equipment/camera", schluessel)
+            import equipment as _eq
+            for _k, _name, _pitch in _eq.alle_kameras():
+                if _k == schluessel and _pitch:
+                    st.setValue("equipment/pixel", float(_pitch))
+                    break
+        except Exception:
+            pass
+
     def open_equipment(self):
         from ui.equipment_dialog import EquipmentDialog
         dialog = EquipmentDialog(self, initial_filter=self.astro_filter.currentData())
@@ -2641,7 +2679,13 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, ProjectM
             index = self.astro_filter.findData(dialog.filter.currentData())
             if index >= 0:
                 self.astro_filter.setCurrentIndex(index)
-                self._save_settings()
+            # Kamera aus dem Dialog in den Astro-Reiter spiegeln — eine Wahrheit, zwei Orte.
+            wahl = dialog.camera.currentData()
+            if isinstance(wahl, (list, tuple)) and wahl:
+                k = self.astro_kamera.findData(wahl[0])
+                if k >= 0:
+                    self.astro_kamera.setCurrentIndex(k)
+            self._save_settings()
 
     def open_channels(self):
         import channels

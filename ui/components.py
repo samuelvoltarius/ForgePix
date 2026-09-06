@@ -12,7 +12,7 @@ import subprocess
 import cv2
 import numpy as np
 
-from PySide6.QtCore import Qt, QRect
+from PySide6.QtCore import Qt, QRect, QTimer
 from PySide6.QtGui import QPixmap, QImage, QPainter, QColor, QPen, QCursor
 from PySide6.QtWidgets import (
     QWidget, QLabel, QDialog, QPushButton, QSlider, QComboBox, QSpinBox,
@@ -421,7 +421,7 @@ class AdjustDialog(QDialog):
     def _on_slider(self, key, v):
         self.vals[key] = v
         self.value_labels[key].setText(str(v))
-        self._update()
+        self._update_spaeter()
 
     def _on_curve(self, points):
         self.curve = [list(p) for p in points] if points else None
@@ -438,14 +438,14 @@ class AdjustDialog(QDialog):
         cur = self.hsl.setdefault(band, [0, 0, 0])
         cur[("Farbton", "Sättigung", "Luminanz").index(sub)] = v
         self.hsl[band] = cur
-        self._update()
+        self._update_spaeter()
 
     def _on_geo(self, key, v):
         if key == "angle":
             self.angle = v
         else:
             self.crop[key] = v
-        self._update()
+        self._update_spaeter()
 
     def _geometry(self, img):
         out = img
@@ -540,7 +540,32 @@ class AdjustDialog(QDialog):
             self.mask = np.clip(self.mask - disc, 0, 1)
         self._update()
 
+    def _update_spaeter(self):
+        """Vorschau NICHT sofort neu rechnen, sondern kurz warten (Entprellung).
+
+        Warum: `valueChanged` feuert bei jedem Schritt, den ein Regler beim Ziehen durchlaeuft —
+        beim Ueberstreichen sind das schnell dutzende Ereignisse. Jedes davon rechnete bisher
+        die Vorschau SYNCHRON neu. Gemessen an einer 900-px-Vorschau:
+
+            alle Regler auf 0                      7 ms
+            Klarheit 50                           80 ms
+            Dunst entfernen 50                    86 ms
+            Capture-Schaerfung 50                117 ms
+            alle drei zusammen                   246 ms
+
+        Bei 246 ms je Ereignis staut sich die Warteschlange schneller, als sie abgearbeitet
+        wird: die Oberflaeche reagiert nicht mehr und wirkt aufgehaengt. Mit 120 ms Ruhe davor
+        wird waehrend eines Ziehvorgangs nur EINMAL gerechnet, am Ende.
+        """
+        if getattr(self, "_entprell", None) is None:
+            self._entprell = QTimer(self)
+            self._entprell.setSingleShot(True)
+            self._entprell.timeout.connect(self._update)
+        self._entprell.start(120)
+
     def _update(self):
+        if getattr(self, "_entprell", None) is not None:
+            self._entprell.stop()
         g = self._geometry(self.base)
         out = self._masked(g, adjust_image(g, self._params()))
         pix, _ = _bgr_to_pixmap(out, max_w=900)
