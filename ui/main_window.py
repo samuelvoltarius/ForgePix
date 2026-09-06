@@ -470,6 +470,7 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, ProjectM
         self.astro_palette.addItem(tr("Foraxx — dynamisch"), "foraxx")
         self.astro_palette.addItem(tr("SHO Gold — synthetischer Hubble-Look"), "sho")
         self.astro_palette.currentIndexChanged.connect(lambda _i: self._rerender_palette())
+        self.astro_filter.currentIndexChanged.connect(lambda _i: self._palette_verfuegbarkeit())
         # Starless-Regler: nach einem Starless-Workflow Nebel-Boost + Stern-Stärke SOFORT neu mischen
         self._starless_dir = None
         self.starless_neb = QDoubleSpinBox(); self.starless_neb.setRange(0.0, 1.5)
@@ -798,7 +799,17 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, ProjectM
             item = ar.itemAt(index)
             row, _, _, _ = ar.getItemPosition(index)
             widget = item.widget()
-            if widget is not None and row not in {6, 7, 8, 17, 19, 21}:
+            # Was der ANFAENGER sieht. Alfreds Vorgabe: "nur andruecken welche Kamera,
+            # welcher Filter und wie das Bild am Schluss aussehen soll — fertig."
+            #   6/7/8  Dark, Flat, Autokalibrierung
+            #   17     Filter          (welcher Filter)
+            #   18     Palette         (wie es aussehen soll — bei Dual-Band)
+            #   19     Sessions
+            #   21     Hinweiszeile
+            #   22     Bildstil        (wie es aussehen soll — immer)
+            # Palette und Bildstil fehlten hier: der Anfaenger konnte Dark und Flat waehlen,
+            # aber nicht, wie das Bild werden soll. Genau das war der Punkt.
+            if widget is not None and row not in {6, 7, 8, 17, 18, 19, 21, 22}:
                 self._astro_expert_widgets.append(widget)
         for combo in g_astro.findChildren(QComboBox):
             combo.setMinimumWidth(0)
@@ -1763,9 +1774,33 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, ProjectM
         f = self._gewaehlter_filter()
         return bool(f and (f.ist_dualband or f.art == "multiband"))
 
+    def _palette_verfuegbarkeit(self):
+        """Die Palettenauswahl nur anbieten, wenn sie ueberhaupt etwas bewirken kann.
+
+        Vorher war sie IMMER bedienbar, obwohl `_common_args` `--palette` nur mitgibt, wenn ein
+        Dual-Band-Filter gewaehlt ist. Die Vorgabe ist aber der UV/IR-Sperrfilter — wer also eine
+        Palette anklickt, ohne vorher den Filter zu setzen, aendert nichts und erfaehrt auch
+        nicht warum. Genau das ist aufgefallen: "ich sehe keine Aenderungen".
+
+        Eine Palette braucht Ha UND OIII getrennt. Bei Breitband gibt es diese Kanaele nicht;
+        sie zu erfinden waere kein Bildstil, sondern eine Faelschung. Darum: abschalten und
+        sagen, warum.
+        """
+        if not hasattr(self, "astro_palette"):
+            return
+        moeglich = self._filter_ist_dualband()
+        self.astro_palette.setEnabled(moeglich)
+        if moeglich:
+            self.astro_palette.setToolTip(tr("Falschfarben-Palette fuer Dual-Band-Daten."))
+        else:
+            self.astro_palette.setToolTip(tr(
+                "Nur mit einem Dual-Band-/Schmalbandfilter moeglich: eine Palette trennt Ha und "
+                "OIII, und die gibt es bei Breitband nicht. Oben den Aufnahme-Filter waehlen."))
+
     def _filter_hinweis(self):
         """Beschreibung des Filters ins Log — und die ehrliche Warnung, wenn die gewaehlte
         Palette dazu gar keine physikalische Grundlage hat (SHO braucht SII)."""
+        self._palette_verfuegbarkeit()
         try:
             import filters as _flt
             f = self._gewaehlter_filter()

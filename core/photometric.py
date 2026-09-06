@@ -308,6 +308,42 @@ def gaia_pcc(bgr, hints=None, siril_path=None, astrometry_key=None, log=log_prin
         shutil.rmtree(work, ignore_errors=True)
 
 
+def _solve_wcs_nativ(bgr, hints, katalog, log=log_print):
+    """Mit dem EIGENEN Solver (`core/astrometry.py`) gegen den lokalen Gaia-Auszug lösen.
+
+    Gibt ein WCS zurück oder None — None heißt "hat nicht geklappt, nächste Stufe versuchen",
+    nicht "Fehler". Der Solver ist bewusst KEIN blinder Solver: er braucht Näherungen für RA,
+    DEC und den Bildmaßstab. Die stehen bei ASIAIR, N.I.N.A. und Seestar im Header
+    (RA/DEC/FOCALLEN/XPIXSZ) — an Alfreds M27-Subs geprüft: ra 300.179, dec 22.795,
+    focal 1151, pixelsize 4.63. Fehlen sie, greift die nächste Stufe.
+    """
+    if katalog is None or hints is None:
+        return None
+    try:
+        import astrometry as _astrometry
+    except Exception as fehler:
+        log("  Eigener Solver nicht verfügbar (%s)" % fehler)
+        return None
+    noetig = ("ra", "dec")
+    if any(hints.get(k) is None for k in noetig):
+        log("  Eigener Solver übersprungen: RA/DEC fehlen im Header.")
+        return None
+    if all(hints.get(k) is None for k in ("pixelscale_arcsec", "fov_width_deg")) and             (hints.get("focal") is None or hints.get("pixelsize") is None):
+        log("  Eigener Solver übersprungen: Bildmaßstab nicht bestimmbar.")
+        return None
+    try:
+        ergebnis = _astrometry.solve(bgr, katalog, hints, log=log)
+    except Exception as fehler:
+        log("  Eigener Solver hat nicht gelöst (%s) — nächste Stufe." % fehler)
+        return None
+    bericht = getattr(ergebnis, "report", {}) or {}
+    log("  Eigener Solver: gelöst, %s Sterne gefittet, %s unabhängig geprüft, "
+        "Rest %.2f px — ohne Siril, ohne Netz."
+        % (bericht.get("fit_matches", "?"), bericht.get("validation_matches", "?"),
+           float(bericht.get("validation_rms_px", float("nan")))))
+    return ergebnis.wcs
+
+
 def lokal_pcc(bgr, hints=None, siril_path=None, katalog_pfad=None, log=log_print):
     """White balance using positions in a local Gaia excerpt, with external solving.
 
@@ -325,7 +361,14 @@ def lokal_pcc(bgr, hints=None, siril_path=None, katalog_pfad=None, log=log_print
     work = tempfile.mkdtemp(prefix="forgepix_lokal_")
     try:
         gray = cv2.cvtColor(np.clip(bgr, 0, 1).astype(np.float32), cv2.COLOR_BGR2GRAY)
-        wcs = _solve_wcs_siril(bgr, hints, work, siril_path, log)
+        # ZUERST der eigene Solver. Er stand fertig in `core/astrometry.py`, wurde aber von der
+        # Pipeline nie aufgerufen — gelöst hat immer Siril, danach ASTAP, danach
+        # astrometry.net über das Netz. Damit war der ganze "lokal"-Weg trotz eigenem Katalog
+        # von fremder Software abhängig. Der eigene Solver braucht denselben Katalog, den wir
+        # hier ohnehin schon geladen haben, plus RA/DEC und Bildmaßstab aus dem Header.
+        wcs = _solve_wcs_nativ(bgr, hints, kat, log)
+        if wcs is None:
+            wcs = _solve_wcs_siril(bgr, hints, work, siril_path, log)
         if wcs is None:
             kind, solver = _find_solver()
             if not solver:

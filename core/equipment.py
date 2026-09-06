@@ -451,3 +451,68 @@ def bericht(daten, fwhm_px=None, gedithert=None):
         if rat:
             zeilen.append(rat)
     return zeilen
+
+
+# ---------------------------------------------------------------------------
+# Farbverhalten der Sensoren — als PRÜFUNG, nicht als Korrektur.
+#
+# Warum nicht als Korrektur: der Kanalversatz, den man im Hintergrund misst, ist KEINE
+# Sensoreigenschaft. Er entsteht aus Sensorempfindlichkeit UND Filter UND Himmel UND Gain.
+# An echten Daten gemessen (ASI294MC Pro, 8×300 s M27, SVBONY SV220, ohne Flat) lag Grün
+# 0,75 % über Blau — mit einem anderen Filter oder bei Mond ist das eine andere Zahl. Eine
+# gespeicherte Konstante wäre ab dem nächsten Filterwechsel falsch, und die Messung je Bild
+# schlägt sie ohnehin deutlich (Grünstich nach dem Strecken: 1,09 statt 35,06).
+#
+# Wofür die Werte trotzdem gut sind — dieselbe Rolle wie `filters.palette_ehrlich()`:
+# auffallen, wenn etwas physikalisch nicht zusammenpasst. Ein Hintergrund, der weit neben dem
+# liegt, was diese Kamera üblicherweise zeigt, ist ein Hinweis auf ein fehlendes Flat, einen
+# anderen Filter als eingestellt oder eine kaputte Kalibrierung.
+#
+# `spanne` ist bewusst weit: es geht um „das kann nicht stimmen", nicht um Feinabgleich.
+# Einträge ohne Messung gehören NICHT hier hinein — geraten wird nichts.
+SENSOR_FARBE = {
+    "asi294mc": {
+        "g_zu_b": 1.0075, "g_zu_r": 1.0046, "spanne": 0.06,
+        "quelle": "gemessen an 8×300 s M27, Gain 131, −10 °C, SVBONY SV220, ohne Flat "
+                  "(06.09.2026)",
+    },
+}
+
+
+def farb_plausibel(kamera_schluessel, bgr, log=None):
+    """Passt das Farbverhalten zu dem, was diese Kamera üblicherweise zeigt?
+
+    Erwartet ein LINEARES Bild (vor dem Strecken) — nach einer Streckung sind die Verhältnisse
+    verzerrt und die Prüfung wertlos.
+
+    Returns:
+        (ok, satz). `ok` ist True auch dann, wenn nichts hinterlegt ist — eine fehlende
+        Vergleichszahl ist kein Befund. Der Satz sagt in dem Fall, dass nicht geprüft wurde.
+    """
+    import numpy as np
+
+    eintrag = SENSOR_FARBE.get(str(kamera_schluessel or "").lower())
+    if eintrag is None:
+        return True, "Für diese Kamera ist kein gemessenes Farbverhalten hinterlegt — nicht geprüft."
+    a = np.asarray(bgr, np.float32)
+    if a.ndim != 3 or a.shape[2] != 3:
+        return True, "Einkanaliges Bild — Farbprüfung entfällt."
+    lum = a.mean(axis=2)
+    dunkel = lum < np.percentile(lum, 40)          # Hintergrund, nicht das Objekt
+    if int(dunkel.sum()) < 500:
+        return True, "Zu wenig Hintergrund für eine Farbprüfung."
+    b, g, r = (float(a[..., i][dunkel].mean()) for i in range(3))
+    if min(b, r) <= 1e-9:
+        return True, "Hintergrund zu dunkel für eine Farbprüfung."
+    ist_gb, ist_gr = g / b, g / r
+    soll_gb, soll_gr = eintrag["g_zu_b"], eintrag["g_zu_r"]
+    spanne = float(eintrag.get("spanne", 0.06))
+    ab_gb, ab_gr = abs(ist_gb - soll_gb), abs(ist_gr - soll_gr)
+    if ab_gb <= spanne and ab_gr <= spanne:
+        return True, ("Farbverhalten passt zur Kamera (G/B %.3f, G/R %.3f)." % (ist_gb, ist_gr))
+    return False, (
+        "Achtung: G/B %.3f und G/R %.3f weichen von dem ab, was diese Kamera sonst zeigt "
+        "(%.3f / %.3f, %s). Häufigste Ursachen: es fehlt ein Flat, der Aufnahme-Filter ist ein "
+        "anderer als eingestellt, oder die Kalibrierung stimmt nicht. Die Bearbeitung läuft "
+        "trotzdem — der Hintergrund wird ohnehin je Bild gemessen."
+        % (ist_gb, ist_gr, soll_gb, soll_gr, eintrag["quelle"]))

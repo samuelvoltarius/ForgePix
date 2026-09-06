@@ -179,7 +179,10 @@ class LiveStack:
         erg = self.ergebnis()
         if erg is None:
             return False
-        v = astro.autostretch(erg) if strecken else erg
+        # über `astro.vorschau_ansicht`, nicht über `autostretch` allein: sonst ist die
+        # Live-Vorschau grünstichig, während der spätere Export neutral ist (gemessen
+        # 36,97 gegen 0,96 an echten M27-Daten). Siehe dort die Begründung.
+        v = astro.vorschau_ansicht(erg) if strecken else erg
         if skala and skala != 1.0:
             v = cv2.resize(v, (0, 0), fx=skala, fy=skala)
         return bool(imwrite(pfad, np.clip(v * 255, 0, 255).astype(np.uint8),

@@ -1856,9 +1856,14 @@ def run_astro(input_dir, work_dir, args):
     print(f"  Registrieren … ({', '.join(extras)})")
     pv_path = os.path.join(work_dir, "_live_preview.jpg")
 
+    _schmalband_vorschau = bool(getattr(args, "dualband", False)) or _detect_dualband(paths)
+
     def _preview_cb(img01, i, n):
         try:
-            v = astro.autostretch(img01, strength=6.0, saturation=1.05)
+            # Vorschau MIT Neutralisierung — sonst gruenstichig (gemessen 36,97 gegen
+            # 0,96 bei echten M27-Daten). Bei Schmalband bleibt Gruen eine echte Linie.
+            v = astro.vorschau_ansicht(img01, strength=6.0, saturation=1.05,
+                                       neutralisieren=not _schmalband_vorschau)
             small = cv2.resize(v, (0, 0), fx=0.4, fy=0.4)
             imwrite(pv_path, np.clip(small * 255, 0, 255).astype(np.uint8),
                         [int(cv2.IMWRITE_JPEG_QUALITY), 80])
