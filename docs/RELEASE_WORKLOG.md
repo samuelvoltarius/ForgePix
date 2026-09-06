@@ -7,6 +7,13 @@ path. Replaced with existing `_guess_and_apply_module`; added regression coverag
 for nested real FITS selection. Repeated GUI run in work/m27-rc-gui uses 34 FITS,
 retains 31, registers all 31; inspect gui.log and final products before claiming
 the complete run passed. This was not covered by the earlier startup-only smoke.
+Completed: GUI process exit 0, 31 registered/integrated of 34 FITS, 9,300 seconds
+accepted exposure. FITS and float TIFF outputs are finite; TIFF dimensions
+2822 x 4144 x 3. Preview visibly retains strong right-edge amp glow without darks
+and bright M27 core; successful execution is not a claim of finished image quality.
+Latest local suite: 371 tests, 3 skipped. The test harness instantiated MainWindow
+directly without the normal application theme; its screenshot is execution evidence,
+not the release visual-design reference.
 
 Real HST scene adaptation has completed on Spark; see training/README.md. Adapted
 denoiser regressed against its parent on held-out object patches and was rejected.
