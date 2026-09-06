@@ -94,6 +94,10 @@ class LiveStack:
             pfad, f = None, np.asarray(bild_oder_pfad, np.float32)
         if f is None:
             return False
+        if f.size == 0 or not np.isfinite(f).all():
+            self.log("    Live: Aufnahme enthält leere oder ungültige Pixel — übersprungen")
+            self.verworfen += 1
+            return False
         if self.summe is None:
             self._referenz_setzen(f)
         elif f.shape != self.summe.shape:
@@ -202,8 +206,14 @@ class LiveStack:
                 if (s.quadr.shape != s.summe.shape or s.gewicht.shape != s.summe.shape
                         or s.ref_grau.shape != s.summe.shape[:2]):
                     raise ValueError("unpassende Array-Dimensionen")
-                if any(not np.isfinite(a).all() for a in (s.summe, s.quadr, s.gewicht)):
+                if any(not np.isfinite(a).all() for a in
+                       (s.summe, s.quadr, s.gewicht, s.ref_grau)):
                     raise ValueError("ungueltige Summen/Gewichte")
+                if (s.summe.size == 0 or s.n < 0 or s.verworfen < 0
+                        or np.any(s.gewicht < 0) or np.any(s.quadr < 0)
+                        or not np.isfinite(s.ref_pegel) or not np.isfinite(s.kappa)
+                        or s.kappa <= 0 or s.min_fuer_verwurf < 1):
+                    raise ValueError("ungueltige Statistik oder Referenz")
                 return s
         except Exception as e:
             log("    Live: gespeicherter Zustand nicht lesbar (%s)" % e)

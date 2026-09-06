@@ -41,6 +41,35 @@ def _stille(*a, **k):
 
 
 class TestLiveStack(unittest.TestCase):
+    def test_invalid_pixels_do_not_poison_running_stack(self):
+        s = livestack.LiveStack(registrieren=False, gewichten=False, log=_stille)
+        good = np.full((12, 12, 3), .2, np.float32)
+        bad = good.copy()
+        bad[3, 4, 0] = np.nan
+        self.assertFalse(s.hinzufuegen(bad))
+        self.assertIsNone(s.summe)
+        self.assertTrue(s.hinzufuegen(good))
+        before = s.ergebnis().copy()
+        self.assertFalse(s.hinzufuegen(bad))
+        self.assertEqual(s.n, 1)
+        np.testing.assert_array_equal(s.ergebnis(), before)
+
+    def test_corrupt_checkpoint_statistics_are_rejected(self):
+        s = livestack.LiveStack(registrieren=False, gewichten=False, log=_stille)
+        s.hinzufuegen(np.full((12, 12, 3), .2, np.float32))
+        with tempfile.TemporaryDirectory() as folder:
+            path = os.path.join(folder, "state.npz")
+            s.speichern(path)
+            with np.load(path, allow_pickle=False) as archive:
+                original = {key: archive[key].copy() for key in archive.files}
+            for key, value in (("ref_pegel", np.nan), ("kappa", np.inf),
+                               ("n", -1), ("gewicht", -np.ones_like(s.gewicht)),
+                               ("ref_grau", np.full_like(s.ref_grau, np.nan))):
+                data = dict(original)
+                data[key] = value
+                np.savez(path, **data)
+                self.assertIsNone(livestack.LiveStack.laden(path, log=_stille), key)
+
 
     def setUp(self):
         self.d = tempfile.mkdtemp(prefix="fp_live_")
