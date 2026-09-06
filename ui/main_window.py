@@ -2525,7 +2525,12 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
 
     def open_equipment(self):
         from ui.equipment_dialog import EquipmentDialog
-        EquipmentDialog(self).exec()
+        dialog = EquipmentDialog(self, initial_filter=self.astro_filter.currentData())
+        if dialog.exec() == QDialog.Accepted:
+            index = self.astro_filter.findData(dialog.filter.currentData())
+            if index >= 0:
+                self.astro_filter.setCurrentIndex(index)
+                self._save_settings()
 
     def open_pixelmath(self):
         """Evaluate native image expressions on explicitly selected linear files."""

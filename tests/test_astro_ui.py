@@ -105,3 +105,27 @@ class AstroUI(unittest.TestCase):
             dialog.deleteLater()
             restored.deleteLater()
             type(self).app.processEvents()
+
+    def test_equipment_presets_filter_and_reducer_roundtrip(self):
+        from ui.equipment_dialog import EquipmentDialog
+        with tempfile.TemporaryDirectory() as folder, patch.dict(os.environ, {
+                "FORGEPIX_SETTINGS_FILE": str(Path(folder) / "settings.ini")}):
+            dialog = EquipmentDialog(initial_filter="dual7")
+            for combo, key in ((dialog.camera, "asi294mc"), (dialog.telescope, "rc8"),
+                               (dialog.corrector, "red_064")):
+                combo.setCurrentIndex(next(i for i in range(combo.count())
+                                          if combo.itemData(i)[0] == key))
+            self.assertIn("f/5.12", dialog.summary.text())
+            self.assertAlmostEqual(dialog.values["aperture"].value(), 203)
+            dialog.save()
+            restored = EquipmentDialog()
+            self.assertEqual(restored.camera.currentData()[0], "asi294mc")
+            self.assertEqual(restored.telescope.currentData()[0], "rc8")
+            self.assertEqual(restored.corrector.currentData()[0], "red_064")
+            self.assertEqual(restored.filter.currentData(), "dual7")
+            self.assertIn("f/5.12", restored.summary.text())
+            override = EquipmentDialog(initial_filter="ha")
+            self.assertEqual(override.filter.currentData(), "ha")
+            for widget in (dialog, restored, override):
+                widget.deleteLater()
+            type(self).app.processEvents()

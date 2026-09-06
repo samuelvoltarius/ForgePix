@@ -129,3 +129,9 @@ C:\Users\alf_a\Documents\Codex\2026-09-05\che-2\work\forgepix-py312\Scripts\pyth
 Run from F:\forgepix: `python -m unittest discover -s tests -q`.
 For headless screenshots, register C:/Windows/Fonts/segoeui.ttf with QFontDatabase;
 the Windows offscreen plugin otherwise rendered missing glyph boxes in this setup.
+
+## Equipment catalogue and filter persistence (2026-09-06)
+- Equipment dialog now selects and restores camera, telescope, corrector and filter alongside editable geometry. The accepted filter is transferred to the Astro processing control and saved; Cancel does not change the processing filter.
+- Added generic 0.64x reducer; ASI294MC Pro + RC203/1624 computes f/5.12 while aperture stays 203 mm.
+- Added manufacturer telescope presets for Sky-Watcher Esprit 100ED and Celestron EdgeHD 8. Camera presets already include ZWO, ToupTek Astro and QHY; filters include named and generic profiles. This is a curated catalogue, not exhaustive hardware coverage or measured sensor/transmission calibration.
+- Validation: 5 Astro UI tests passed, including preset/filter roundtrip and reduced focal ratio.

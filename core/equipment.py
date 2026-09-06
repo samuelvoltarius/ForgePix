@@ -93,6 +93,7 @@ KORREKTOREN = [
     Korrektor("red_075", "Reducer 0.75×", 0.75, ""),
     Korrektor("red_067", "Reducer 0.67×", 0.67,
               "Verbreitet an RC- und SC-Teleskopen (z. B. GSO/TS 8\" RC)."),
+    Korrektor("red_064", "Reducer 0.64×", 0.64, ""),
     Korrektor("red_063", "Reducer 0.63×", 0.63, "Klassisch an Schmidt-Cassegrains."),
     Korrektor("barlow_2", "Barlow 2×", 2.0, "Verdoppelt die Brennweite — für Planeten."),
 ]
@@ -104,6 +105,8 @@ NACH_KORREKTOR = {k.schluessel: k for k in KORREKTOREN}
 # nur Öffnung und Brennweite, und die kann man immer von Hand eintragen.
 TELESKOPE = [
     ("manuell", "Eigene Werte eintragen", None, None),
+    ("esprit100", "Sky-Watcher Esprit 100ED (100/550)", 100.0, 550.0),
+    ("edgehd8", "Celestron EdgeHD 8 (203.2/2032)", 203.2, 2032.0),
     ("rc8", "8\" Ritchey-Chrétien f/8 (GSO/TS 203/1624)", 203.0, 1624.0),
     ("rc6", "6\" Ritchey-Chrétien f/9 (GSO/TS 154/1370)", 154.0, 1370.0),
     ("newt200f5", "8\" Newton f/5 (200/1000)", 200.0, 1000.0),
