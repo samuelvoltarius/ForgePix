@@ -619,3 +619,30 @@ uncertainty. Changed/inconsistent companions fail before publishing an AI group.
 The combined AI -> native solver -> project/reopen/export regression passes;
 tampered astrometry reports block export. The actual source recorded by the
 completed solve is used for comparison even if the GUI input field is later edited.
+
+## Exact 00aca1b native-workflow acceptance completed
+
+Frozen runtime 00aca1ba10f3c28576016eaa9e89db675d6ccd99 passed 649 local
+tests (10 skipped, 73.742 s), all three platform tests (34046933949) and all
+three builds (34046933431). The downloaded Windows EXE passed all packaged
+GUI/CLI/Drizzle/four-model/recipe/native-solver checks in 31.261 s, requiring
+DirectML for each AI operation. ZIP: 190768975 bytes, SHA256
+59695e33606ec3bba2fa1288dd39cdd09ac23476fb782e6f265518721b7dc31d.
+
+Clean exact-commit full M27 repeats: recipe 42.625 s, solver/project/export
+15.110 s with 154 fit + 78 validation stars / .426933 px RMS. The additional
+real mono/RGB Drizzle -> AI -> solve -> project and both export paths passed
+in 7.531 s; sampling companions are present and byte-identical throughout.
+Changed reports block export before destination creation. Originals unchanged.
+Artifacts and runtime attestations are in Codex outputs/ForgePix-Recipes-00aca1b,
+ForgePix-Astrometry-00aca1b and the combined ForgePix-Native-00aca1b report.
+GitHub author/committer now correctly resolve to samuelvoltarius through a
+repository-local no-reply email; old history and global Git settings were not rewritten.
+
+This verification record and NATIVE_COLOR_CALIBRATION_PLAN.md are subsequent
+documentation only. The tested package remains the exact runtime above.
+Next native work: catalogue IDs/errors/epochs and aperture diagnostics, then
+gated empirical broadband PCC; spectra and measured channel/filter responses
+are required for SPCC. Also extend recipes with native process adapters,
+mask/PixelMath preservation and batch scheduling. Existing own-AI models remain
+experimental; no model-quality upgrade or RC/product-parity claim is made.
