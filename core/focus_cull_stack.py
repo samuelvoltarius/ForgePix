@@ -1659,6 +1659,20 @@ def _autodetect_calibration(input_dir):
             for key, keys in names.items():
                 if found[key] is None and low in keys and list_images(full):
                     found[key] = full
+    # Zweiter Anlauf ueber die HEADER, wenn die Ordnersuche nichts gebracht hat. Ordnernamen
+    # sind eine Konvention, der Header ist die Wahrheit: wer seine Darks lose zwischen den
+    # Lights liegen hat oder den Ordner "Kalibrierung 2026-09" nennt, bekam bisher still eine
+    # unkalibrierte Verrechnung.
+    if not any(found.values()):
+        try:
+            from astro_input import kalibrierung_nach_header
+            aus_header = kalibrierung_nach_header(roots, log=log_print)
+            for key in ("dark", "flat", "bias"):
+                if aus_header.get(key):
+                    found[key] = aus_header[key]        # Liste von Dateien statt Ordner
+        except Exception as fehler:
+            print("  (Header-Suche nach Kalibrierbildern uebersprungen: %s)" % fehler,
+                  file=sys.stderr)
     return found["dark"], found["flat"], found["bias"]
 
 
@@ -1687,6 +1701,8 @@ def _load_astro_calibration(input_dir, args, paths):
     def master_paths(spec):
         if not spec:
             return []
+        if isinstance(spec, (list, tuple)):     # aus der Header-Suche: fertige Dateiliste
+            return [p for p in spec if os.path.isfile(p)]
         if os.path.isdir(spec):
             ims = list_images(spec)
             fits_ims = [p for p in ims if os.path.splitext(p)[1].lower() in FITS_EXTS]
