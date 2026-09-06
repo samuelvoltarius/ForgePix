@@ -22,8 +22,8 @@ except Exception:
     np = None
 
 
-def _verified_ai_files(source):
-    """Verify the complete scientific group before creating an export folder."""
+def _verified_ai_files(source, *, selected_only=False):
+    """Verify the whole export group, or just the selected file on reimport."""
     changed = tr("Ergebnisdateien wurden verändert. Bitte das bearbeitete Bild als neues Ergebnis "
                  "einlesen; die bisherigen Begleitdateien können nicht gemeinsam exportiert werden.")
     try:
@@ -49,6 +49,9 @@ def _verified_ai_files(source):
         path = (source.parent / name).resolve()
         if path.parent != source.parent:
             raise ValueError(changed)
+        if selected_only and path != source:
+            verified[name] = (path, expected.lower(), size)
+            continue
         try:
             if path.stat().st_size != size:
                 raise ValueError(changed)

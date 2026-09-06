@@ -3,6 +3,10 @@
 (Stack-Konfidenz, Befunde, „Warum?") als Mixin für MainWindow."""
 import os
 import tempfile
+import hashlib
+import json
+import math
+from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QPixmap
@@ -24,6 +28,111 @@ class ResultMixin:
         source = getattr(self, "_ai_result_path", None)
         return bool(source and self.result_path and os.path.normcase(os.path.realpath(source)) ==
                     os.path.normcase(os.path.realpath(self.result_path)))
+
+    def _restore_ai_result_context(self, path):
+        """Recover only explicitly recorded scientific files, independent of previews.
+
+        A report in the same folder is not enough: the selected file must be a
+        recorded result/layer, and the selected file must still have its original
+        hash. A failed verification leaves the current result
+        untouched instead of silently selecting the generic ADU export path.
+        """
+        selected = Path(path).resolve()
+        declared_ai = self._has_ai_result_metadata(selected)
+        invalid_report = tr("Für dieses KI-Ergebnis fehlt ein gültiger Verarbeitungsbericht. "
+                            "Bitte ein neues KI-Ergebnis erzeugen.")
+        if not declared_ai and selected.name not in {"result_32bit.tif", "result_32bit.fits",
+                                                    "stars_residual_32bit.tif", "stars_residual_32bit.fits"}:
+            return False
+        try:
+            report = json.loads((selected.parent / "ai_report.json").read_bytes())
+        except (OSError, ValueError):
+            if declared_ai:
+                raise ValueError(invalid_report) from None
+            return False
+        outputs = report.get("outputs") if isinstance(report, dict) else None
+        if (not isinstance(outputs, list) or any(not isinstance(name, str) for name in outputs)
+                or selected.name not in outputs):
+            if declared_ai:
+                raise ValueError(invalid_report)
+            return False
+        if (type(report.get("schema_version")) is not int or report["schema_version"] != 1
+                or report.get("task") not in {"denoise", "background", "deblur", "starless"}
+                or not isinstance(report.get("model_id"), str)):
+            raise ValueError(invalid_report)
+        from ui.export import _verified_ai_files
+        _verified_ai_files(selected, selected_only=True)
+
+        display = None
+        source_record = report.get("source")
+        if isinstance(source_record, dict) and isinstance(source_record.get("path"), str):
+            source = Path(source_record["path"])
+            try:
+                # A replaced source must not be presented as the original
+                # comparison, even if its timestamp was preserved.
+                if source.is_absolute() and source.is_file():
+                    with source.open("rb") as stream:
+                        digest = hashlib.file_digest(stream, "sha256").hexdigest()
+                    if digest == source_record.get("sha256"):
+                        display = self._read_ai_display_cache(source.resolve(), selected)
+                        if display is None:
+                            from ui.ai_preview import create_previews
+                            display = create_previews(source, selected)
+            except Exception:
+                # A missing source, read-only result folder, or unavailable
+                # preview does not prevent byte-preserving scientific export.
+                display = None
+        self._ai_result_path = str(selected)
+        self._ai_display = display
+        self._ai_report = report
+        self.before_path = display["source"] if display else None
+        return True
+
+    @staticmethod
+    def _has_ai_result_metadata(path):
+        """Read headers only, including renamed own results with a lost report."""
+        try:
+            if path.suffix.lower() in {".fit", ".fits", ".fts"}:
+                from astropy.io import fits
+                header = fits.getheader(path)
+                return (header.get("CREATOR") == "ForgePix"
+                        and header.get("FPDOMAIN") == "LINEAR_AI_ESTIMATE"
+                        and header.get("FPAIROLE") in {"result", "stars_residual"})
+            if path.suffix.lower() in {".tif", ".tiff"}:
+                import tifffile
+                with tifffile.TiffFile(path) as image:
+                    metadata = json.loads(image.pages[0].description or "{}")
+                return (isinstance(metadata, dict) and metadata.get("forgepix") is True
+                        and metadata.get("domain") == "LINEAR_AI_ESTIMATE"
+                        and metadata.get("role") in {"result", "stars_residual"})
+        except Exception:
+            pass
+        return False
+
+    @staticmethod
+    def _read_ai_display_cache(source, result):
+        """Use a linked display only for the same unchanged source and result."""
+        try:
+            display = json.loads((result.parent / "display.json").read_bytes())
+            for key, expected in (("source", source), ("result", result),
+                                  ("before", result.parent / "display_before.png"),
+                                  ("after", result.parent / "display_after.png")):
+                if Path(display[key]).resolve() != expected or not expected.is_file():
+                    return None
+            if (display["source_mtime_ns"] != source.stat().st_mtime_ns
+                    or display["result_mtime_ns"] != result.stat().st_mtime_ns):
+                return None
+            parameters = display["parameters"]
+            if (parameters.get("method") != "source_linked_mtf_v1"
+                    or parameters.get("display_only") is not True
+                    or parameters.get("channels_linked") is not True
+                    or any(type(parameters[key]) not in (int, float) or not math.isfinite(parameters[key])
+                           for key in ("black", "scale", "midtone"))
+                    or parameters["scale"] <= 0 or not 0 < parameters["midtone"] < 1):
+                return None
+            return display
+        except (OSError, ValueError, KeyError, TypeError, AttributeError):
+            return None
 
     def _ai_display_for_current(self):
         display = getattr(self, "_ai_display", None)

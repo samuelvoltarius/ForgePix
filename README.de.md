@@ -13,6 +13,11 @@
 > Astro und Langzeitserien**. **Lokal nutzbar, KI optional.** Nutzbar und getestet, aber jung —
 > rechne mit gelegentlichen Ecken und [melde Fehler](https://github.com/samuelvoltarius/ForgePix/issues).
 
+Der [aktuelle Funktionsstand](docs/CAPABILITY_STATUS.md) und die
+[RC-Abnahmekriterien](docs/RC_ACCEPTANCE.md) dokumentieren geprüfte Abläufe und
+offene Arbeiten. Eine Gleichwertigkeit mit Siril, PixInsight, GraXpert oder
+RC Astro bei Funktionsumfang und Bildqualität ist noch nicht nachgewiesen.
+
 ![ForgePix Module](docs/images/showcase.jpg)
 
 **Focus Stacking + Astro + Langzeitbelichtung.** Fotos rein, fertiges Bild raus — in bester
@@ -84,11 +89,43 @@ Aus einer unscharfen Fokusreihe wird ein durchgehend scharfes Bild — und du si
 Die Automatik funktioniert **komplett ohne KI** (Einstellungen aus dem gemessenen Schärfeprofil).
 **Kein Ollama, kein Server, kein Modell‑Download.** Optional ein OpenAI‑kompatibler Server
 (llama.cpp / LM Studio / vLLM) **oder ein Anbieter mit API‑Schlüssel** (OpenAI / OpenRouter).
-Die KI **berät & prüft** nur — sie bearbeitet nie Pixel. *„Die Software erklärt, warum sie
+Dieser optionale **Sprachassistent berät und prüft Einstellungen**; er verarbeitet keine Bildpixel. *„Die Software erklärt, warum sie
 diese Einstellungen gewählt hat.“* Du kannst einen **Freitext-Wunsch** angeben (z. B. „seidiges
 Wasser, Personen scharf"); der Vorschlag bekommt zusätzlich **EXIF-Eckdaten** + die **Fokus-Map**.
 Das Setup zeigt genau, was gesendet wird — einige Vorschau-Frames, das Schärfeprofil, EXIF-Eckdaten
 und dein Wunsch; keine Originaldateien, keine Standortdaten.
+
+Die separaten **lokalen KI-Bildwerkzeuge** verwenden vier selbst trainierte
+ForgePix-Modelle: Rauschen reduzieren, Hintergrund ausgleichen, Unschärfe
+reduzieren und Sterne entfernen. Nach dem Erzeugen oder Importieren eines
+linearen Ergebnisses öffnest du **Werkzeuge → Eigene KI: Rauschen, Hintergrund,
+Details und Sterne …**. Wähle einen linearen FITS- oder TIFF-Stack, Funktion und
+Wirkung und bestätige den experimentellen Einsatz. Bayer-Rohbilder müssen zuerst
+kalibriert und debayert werden; JPEG-Vorschauen werden nicht angenommen.
+Die mitgelieferten Modelle laufen lokal mit ONNX Runtime, ohne Server oder
+externes Astroprogramm.
+
+Diese Modelle sind **experimentell**, verändern Pixelwerte und können schwache
+Strukturen, Helligkeiten oder Sternformen beeinflussen. Die Automatik aktiviert
+sie nie selbstständig. Ergebnisse werden separat als Float32-FITS und TIFF
+gespeichert; Vorher und Nachher verwenden dieselbe Anzeigestreckung. Beim
+Entfernen der Sterne entsteht zusätzlich eine vorzeichenbehaftete Differenzebene für die
+Rekonstruktion. Kameraübergreifende Qualität und Photometrie sind noch nicht
+nachgewiesen. Ein zusätzliches Entrauschungstraining wurde nach einem frischen
+Prüfsatz verworfen; das mitgelieferte Modell übertrifft die ältere
+Forschungsreferenz beim gesamten Pixelfehler nicht. Details stehen in den
+[Modellbeschreibungen und Grenzen](assets/models/README.md) sowie den
+[Trainingsnachweisen](training/README.md).
+
+Derselbe ausdrücklich aktivierte Ablauf ist aus dem Quellcode möglich:
+
+```bash
+python focus_stack_gui.py --ai-restore --input linear_stack.fits --model forgepix-denoise-mono-v2 --strength 0.5 --experimental
+```
+
+Für die anderen Funktionen lauten die Modell-IDs `forgepix-background-mono-v2`,
+`forgepix-deblur-mono-v2` und `forgepix-starless-mono-v2`. Im fertigen Paket ersetzt
+das ForgePix-Programm den Aufruf `python focus_stack_gui.py`.
 
 Profis können optional **Siril verbinden** (falls installiert) — als alternative Astro‑Engine UND für
 die **echte photometrische Farbkalibrierung** (Plate‑Solve + Gaia‑DR3‑SPCC) — und an

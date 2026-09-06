@@ -2752,11 +2752,29 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
                                            "Bilder (*.tif *.tiff *.png *.jpg *.jpeg *.fit *.fits)")
         if not f:
             return
+        try:
+            is_ai = self._restore_ai_result_context(f)
+        except ValueError as exc:
+            QMessageBox.warning(self, tr("Exportieren"), str(exc))
+            return
         self.result_path = f
-        self.before_path = None
+        if not is_ai:
+            self._ai_result_path = None
+            self._ai_display = None
+            self._ai_report = None
+            self.before_path = None
         self._set_preview(f)
         self.adjust_btn.setEnabled(True); self.open_btn.setEnabled(True)
         self.openfolder_btn.setEnabled(True)
+        self.cmp_btn.setEnabled(bool(self.before_path))
+        self.export_btn.setEnabled(True); self.tools_btn.setEnabled(True)
+        for button in self.export_chips:
+            button.setEnabled(True)
+        if is_ai:
+            self._append(tr("Lokales Modell: {name} · Experimenteller Einsatz").format(
+                name=self._ai_report["model_id"]) + "\n")
+            if not self._ai_display_for_current():
+                self._append(tr("Die Vergleichsvorschau fehlt. Lineare Daten können weiterhin kopiert werden.") + "\n")
         self._append(f"\n📥 Reimportiert: {os.path.basename(f)} — bereit zum Bearbeiten/Exportieren.\n")
 
     # ---------- Fokus-Werkzeuge ----------

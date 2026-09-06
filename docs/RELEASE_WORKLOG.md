@@ -260,3 +260,34 @@ already passed for starless/deblur and the earlier tiled background path, with
 unchanged source, common previews, bit-identical Float32 FITS/TIFF and signed
 layer reconstruction within 3.73e-9. Final exact-commit GUI/CI/package evidence
 follows below. Existing RC acceptance remains open; version stays beta.
+
+## AI cross-platform fixes and reimport integrity
+
+The complete four-operation M27 GUI run on clean 4cded82 passed: 4144x2822 RGB,
+372.687 seconds total, original size/mtime/SHA256 unchanged, finite outputs,
+pixel-identical Float32 FITS/TIFF and star-layer reconstruction error 3.73e-9.
+Background uses the final whole-field residual strategy and took 4.547 seconds;
+denoise/deblur/starless took 123.750/115.750/121.859 seconds. Evidence is in Codex
+work/forgepix-ai-m27-4cded82/gui-ai-report.json. The visible amp glow/colour cast
+and bright core remain; this tests operation and integrity, not calibrated image
+quality or universal camera support.
+
+Initial CI exposed filesystem aliases on macOS (/var versus /private/var) and
+Windows (short versus long account paths). 0b9c4e1 resolves aliases consistently
+for linked previews and exports, with a symlink regression. Tests 34035515536 and
+all platform builds 34035515161 passed, including actual inference/export of all
+four bundled models through packaged executables.
+
+An independent audit found that reimport after restart lost the AI export
+context. Reimport now recognizes recorded FITS/TIFF/results/residuals, verifies
+the selected file, preserves the scientific export route and reuses a valid
+common display cache. The original comparison requires the source SHA256;
+missing sources/previews still permit byte-preserving scientific export.
+Changed results, malformed provenance and marked AI files without their report
+fail explicitly instead of entering generic ADU conversion. Full group hashes
+are checked on export. Nine reimport regressions exercise signed/physical values,
+FITS units/WCS, missing files, invalid reports, stale sources and display failure.
+Local full suite passed 485 tests (4 skips), followed by 48 focused tests (1 skip)
+including the final ninth reimport case. Exact final CI and FITS evidence follow.
+The main READMEs now distinguish the optional language assistant from our four
+local pixel models and describe experimental status and rejected refinement.

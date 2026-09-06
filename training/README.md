@@ -11,10 +11,11 @@ and reports identify the exact weights, task, licence and measured limitations.
 
 The second training experiment uses **one monochrome network per task**, applied
 independently to each colour channel. It cannot average different channels to
-game a repeated-monochrome RGB noise test. All four tasks use fixed 256px input
-tiles and an input-derived affine p0.1/p99.9 normalization, inverted after
-inference without clipping. Whole-image normalization, reflected padding and
-64px cosine tile overlap are recorded in each output report. Global channel
+game a repeated-monochrome RGB noise test. All four networks use a fixed 256px
+input and an input-derived affine p0.1/p99.9 normalization, inverted after
+inference without clipping. Background uses a whole-field view; the other three
+tasks use reflected tiles with 64px cosine overlap. The actual inference strategy
+and whole-image normalization are recorded in each output report. Global channel
 attention means changing tile context can still change results; a successful
 single-tile test alone is not a full-image quality qualification.
 

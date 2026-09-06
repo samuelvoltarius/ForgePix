@@ -13,6 +13,11 @@
 > and long‑exposure** series. **Local‑first, AI optional.** It’s usable and tested, but young —
 > expect the occasional rough edge and please [report issues](https://github.com/samuelvoltarius/ForgePix/issues).
 
+See the [current capability status](docs/CAPABILITY_STATUS.md) and
+[RC acceptance criteria](docs/RC_ACCEPTANCE.md) for verified behavior and open
+work. ForgePix has not established feature or image-quality parity with Siril,
+PixInsight, GraXpert or RC Astro.
+
 ![ForgePix modules](docs/images/showcase.jpg)
 
 **Focus Stacking + Astro + Long Exposure.** Drop your photos in, get a finished image out — in
@@ -84,10 +89,38 @@ A soft focus series becomes one fully sharp image — and you see *what* happens
 Automatic works **completely without AI** (settings derived from the measured sharpness
 profile). **No Ollama, no server, no model download.** Optionally connect an OpenAI‑compatible
 server (llama.cpp / LM Studio / vLLM) **or a provider with API key** (OpenAI / OpenRouter).
-The AI only **advises & checks** — it never touches pixels. *“The software explains why it
+This optional **language assistant advises & checks settings**; it does not process image pixels. *“The software explains why it
 chose these settings.”* You can add a **free‑text wish** (e.g. “silky water, people sharp”) and the
 suggestion also gets **EXIF basics** + the **focus map**. Setup states exactly what is sent — a few
 preview frames, the sharpness profile, EXIF basics and your wish; no original files, no location data.
+
+The separate **local AI image tools** use four ForgePix-trained models for noise
+reduction, background correction, blur reduction and star removal. After creating
+or importing a linear result, open **Tools → Local AI: noise, background, detail
+and stars …**. Choose a linear FITS or TIFF stack, select a function and strength,
+then explicitly enable experimental processing. Raw Bayer frames must first be
+calibrated and debayered; JPEG previews are not accepted. The bundled models run
+locally with ONNX Runtime and need no server or external astronomy application.
+
+These models are **experimental**, change pixel values and may alter faint
+structures, flux or star shapes. They are never enabled by automatic processing.
+Results are written separately as Float32 FITS and TIFF; before/after previews
+use the same display stretch. Star removal also saves a signed difference layer
+for reconstruction. Camera generalization and photometry are not qualified.
+An additional denoiser training run was rejected on a fresh test set; the bundled
+denoiser does not beat the earlier research baseline in aggregate pixel error.
+See the [model cards and limitations](assets/models/README.md) and
+[training evidence](training/README.md).
+
+The same opt-in processing is available from source:
+
+```bash
+python focus_stack_gui.py --ai-restore --input linear_stack.fits --model forgepix-denoise-mono-v2 --strength 0.5 --experimental
+```
+
+Use the model IDs `forgepix-background-mono-v2`, `forgepix-deblur-mono-v2` or
+`forgepix-starless-mono-v2` for the other functions. In a prebuilt package,
+replace `python focus_stack_gui.py` with the ForgePix executable.
 
 Pros can optionally **connect Siril** (if installed) — used both as an alternative astro engine and
 for **real photometric color calibration** (plate‑solve + Gaia DR3 SPCC) — and hand off to

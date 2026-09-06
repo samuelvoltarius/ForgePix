@@ -1,5 +1,6 @@
 """Run a synthetic focus stack through the packaged CLI and read its output."""
 import os
+import argparse
 import subprocess
 import sys
 import tempfile
@@ -14,8 +15,15 @@ import tifffile
 
 def main():
     root = Path(__file__).resolve().parents[1]
-    if "--source" in sys.argv:
+    parser = argparse.ArgumentParser(description=__doc__)
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--source", action="store_true", help="Test the source entry point")
+    mode.add_argument("--binary", type=Path, help="Test an extracted package executable")
+    args = parser.parse_args()
+    if args.source:
         command = [sys.executable, str(root / "focus_stack_gui.py")]
+    elif args.binary:
+        command = [str(args.binary.resolve(strict=True))]
     else:
         binary = {"win32": "dist/ForgePix/ForgePix.exe",
                   "darwin": "dist/ForgePix.app/Contents/MacOS/ForgePix"}.get(
