@@ -134,6 +134,10 @@ FILTER = [
     Filter("r", "Rot R (Mono)", "breitband", (), None, 0.20, "Farbkanal einer LRGB-Aufnahme."),
     Filter("g", "Grün G (Mono)", "breitband", (), None, 0.20, "Farbkanal einer LRGB-Aufnahme."),
     Filter("b", "Blau B (Mono)", "breitband", (), None, 0.20, "Farbkanal einer LRGB-Aufnahme."),
+    Filter("sv220_sii_oiii_7", 'SVBONY SV220 SII + OIII 7 nm (2")', "dualband",
+           ("SII", "OIII"), 7.0, 0.0,
+           "Misst Schwefel und Sauerstoff. Hα fehlt: für echtes SHO werden zusätzliche "
+           "Hα-Aufnahmen benötigt. Keine Hα/OIII-Entmischung anwenden."),
 ]
 
 NACH_SCHLUESSEL = {f.schluessel: f for f in FILTER}
@@ -154,6 +158,11 @@ def aus_header(wert):
     t = str(wert or "").strip().lower()
     if not t:
         return None
+    if "sv220" in t and "sii" in t and ("oiii" in t or "o3" in t):
+        width = re.search(r"(\d+(?:\.\d+)?)\s*nm", t)
+        if width and float(width.group(1)) == 7:
+            return hole("sv220_sii_oiii_7")
+        return None  # Model name alone does not establish the bandwidth.
 
     # 1) Markenmodelle zuerst — sie sind eindeutig und schlagen jede Heuristik
     marken = [
@@ -233,6 +242,9 @@ def palette_ehrlich(f, palette):
     """
     if f is None:
         return True, ""
+    if palette in ("sho", "foraxx") and "SII" in f.linien and "Ha" not in f.linien:
+        return False, ("%s misst SII und/oder OIII, aber kein Hα. Für echtes SHO sind "
+                       "zusätzliche Hα-Aufnahmen nötig." % f.name)
     if palette in ("sho", "foraxx") and not f.hat_sii:
         return False, ("%s lässt kein SII durch — die %s-Palette wird daher synthetisch aus Hα "
                        "erzeugt (sieht gut aus, ist aber keine SII-Messung)."

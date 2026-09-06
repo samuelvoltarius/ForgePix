@@ -75,11 +75,21 @@ class TestFilterkunde(unittest.TestCase):
         self.assertIn("SII", hinweis)
         self.assertIn("synthetisch", hinweis)
 
-    def test_sho_mit_echtem_sii_ist_ehrlich(self):
+    def test_sho_braucht_auch_ha(self):
         ok, _ = filters.palette_ehrlich(filters.hole("dual_sii_oiii"), "sho")
-        self.assertTrue(ok)
+        self.assertFalse(ok)
         ok2, _ = filters.palette_ehrlich(filters.hole("quad"), "sho")
         self.assertTrue(ok2)
+
+    def test_sv220_sii_oiii_variant(self):
+        f = filters.aus_header('SVBONY SV220 SII & OIII 7 nm Dualband 2"')
+        self.assertEqual(f.schluessel, "sv220_sii_oiii_7")
+        self.assertEqual(f.breite_nm, 7)
+        self.assertEqual(f.linien, ("SII", "OIII"))
+        self.assertFalse(f.ist_dualband)
+        self.assertFalse(filters.palette_ehrlich(f, "hoo")[0])
+        self.assertFalse(filters.palette_ehrlich(f, "sho")[0])
+        self.assertIsNone(filters.aus_header("SV220 SII OIII 3nm"))
 
     def test_hoo_braucht_beide_linien(self):
         ok, hinweis = filters.palette_ehrlich(filters.hole("uvir"), "hoo")

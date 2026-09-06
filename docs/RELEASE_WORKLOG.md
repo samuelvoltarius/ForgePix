@@ -135,3 +135,6 @@ the Windows offscreen plugin otherwise rendered missing glyph boxes in this setu
 - Added generic 0.64x reducer; ASI294MC Pro + RC203/1624 computes f/5.12 while aperture stays 203 mm.
 - Added manufacturer telescope presets for Sky-Watcher Esprit 100ED and Celestron EdgeHD 8. Camera presets already include ZWO, ToupTek Astro and QHY; filters include named and generic profiles. This is a curated catalogue, not exhaustive hardware coverage or measured sensor/transmission calibration.
 - Validation: 5 Astro UI tests passed, including preset/filter roundtrip and reduced focal ratio.
+
+## SV220 SII/OIII variant (2026-09-06)
+Added the user's SVBONY SV220 2-inch SII/OIII 7 nm as a distinct filter profile, appended to preserve existing saved combo indices. Manufacturer: https://www.svbony.com/products/7nm-oiii-sii-narrowband-filter . Recognizes explicitly labelled 7 nm FITS headers without confusing the model with H-alpha/OIII or Antlia 3 nm. Corrected SHO validation: SII/OIII alone lacks H-alpha. Saved this filter in the local user equipment and Astro settings. Native SII/OIII-specific palette processing remains separate work; this change does not claim full SHO reconstruction. Validation: 38 equipment/filter and Astro UI tests passed.
