@@ -778,5 +778,14 @@
   "Ergebnisdateien wurden verändert. Bitte das bearbeitete Bild als neues Ergebnis einlesen; die bisherigen Begleitdateien können nicht gemeinsam exportiert werden.": "Result files have changed. Import the edited image as a new result; its previous companion files cannot be exported together.",
   "Ergebnisdateien wurden während des Exports verändert. Bitte das bearbeitete Bild als neues Ergebnis einlesen.": "Result files changed during export. Import the edited image as a new result.",
   "Für dieses KI-Ergebnis fehlt ein gültiger Verarbeitungsbericht. Bitte ein neues KI-Ergebnis erzeugen.": "This AI result has no valid processing report. Generate a new AI result.",
-  "Für dieses ältere KI-Ergebnis fehlen Datei-Prüfsummen. Bitte ein neues KI-Ergebnis erzeugen, bevor lineare Dateien gemeinsam exportiert werden.": "This older AI result has no file checksums. Generate a new AI result before exporting its linear files together."
+  "Für dieses ältere KI-Ergebnis fehlen Datei-Prüfsummen. Bitte ein neues KI-Ergebnis erzeugen, bevor lineare Dateien gemeinsam exportiert werden.": "This older AI result has no file checksums. Generate a new AI result before exporting its linear files together.",
+  "Automatisch (Grafikkarte bevorzugen)": "Automatic (prefer graphics processor)",
+  "Nur Prozessor": "CPU only",
+  "Berechnung": "Processing",
+  "Automatisch verwendet ein verfügbares Grafik-Backend. Falls das nicht möglich ist, wird der Prozessor verwendet.": "Automatic uses an available graphics backend. If this is not possible, processing uses the CPU.",
+  "Rechenbackend im Ergebnisbericht nicht angegeben.": "The result report does not specify a processing backend.",
+  "0 % Wirkung: Original übernommen, kein Modell ausgeführt.": "0% strength: original preserved; no model was run.",
+  "Mit Prozessor berechnet; Grafikbeschleunigung war nicht verfügbar.": "Processed on the CPU; graphics acceleration was unavailable.",
+  "Mit Prozessor berechnet.": "Processed on the CPU.",
+  "Rechenbackend: {name}.": "Processing backend: {name}."
 }

@@ -1,5 +1,6 @@
 """Opt-in local model inference with a cancellable worker and preserved inputs."""
 from pathlib import Path
+import json
 import threading
 
 from PySide6.QtCore import QThread, Signal
@@ -22,6 +23,24 @@ TASKS = (
 )
 
 
+def _execution_feedback(execution):
+    """Describe the completed runtime record, without claiming GPU placement."""
+    if not execution:
+        return tr("Rechenbackend im Ergebnisbericht nicht angegeben.")
+    if execution.get("applied") is False:
+        return tr("0 % Wirkung: Original übernommen, kein Modell ausgeführt.")
+    provider = execution.get("provider")
+    if provider == "CPUExecutionProvider":
+        if execution.get("fallback_used"):
+            return tr("Mit Prozessor berechnet; Grafikbeschleunigung war nicht verfügbar.")
+        return tr("Mit Prozessor berechnet.")
+    names = {"CUDAExecutionProvider": "CUDA", "DmlExecutionProvider": "DirectML",
+             "CoreMLExecutionProvider": "CoreML"}
+    if provider in names:
+        return tr("Rechenbackend: {name}.").format(name=names[provider])
+    return tr("Rechenbackend im Ergebnisbericht nicht angegeben.")
+
+
 class _RestoreWorker(QThread):
     progress = Signal(int, int)
     message = Signal(str)
@@ -33,6 +52,7 @@ class _RestoreWorker(QThread):
         self.result = None
         self.error = None
         self.previews = None
+        self.execution = None
 
     def run(self):
         try:
@@ -41,6 +61,14 @@ class _RestoreWorker(QThread):
                 **self.request, cancel=self.cancel_event,
                 progress=self.progress.emit, log=lambda *parts, **_kwargs: self.message.emit(
                     " ".join(str(part) for part in parts)))
+            # Read the execution record from this completed result. A provider
+            # merely installed on the computer is not evidence of GPU work.
+            try:
+                report = json.loads((Path(self.result).parent / "ai_report.json").read_text(encoding="utf-8"))
+                if isinstance(report.get("execution"), dict):
+                    self.execution = report["execution"]
+            except (OSError, ValueError, AttributeError):
+                pass
             from ui.ai_preview import create_previews
             self.message.emit(tr("Vergleichsvorschau wird vorbereitet …"))
             self.previews = create_previews(self.request["source"], self.result, self.cancel_event)
@@ -61,6 +89,7 @@ class AIRestoreDialog(QDialog):
         self.source_path = None
         self.show_comparison = False
         self.previews = None
+        self.execution = None
         self.models = []
         self._catalogue_error = ""
         self._loaded_model_dir = ""
@@ -95,6 +124,11 @@ class AIRestoreDialog(QDialog):
         self.strength.setSuffix(" %")
         self.strength.setToolTip(tr("0 % erhält das Original, 100 % übernimmt die volle Modellwirkung."))
         form.addRow(tr("Wirkung"), self.strength)
+        self.device = QComboBox()
+        self.device.addItem(tr("Automatisch (Grafikkarte bevorzugen)"), "auto")
+        self.device.addItem(tr("Nur Prozessor"), "cpu")
+        self.device.setToolTip(tr("Automatisch verwendet ein verfügbares Grafik-Backend. Falls das nicht möglich ist, wird der Prozessor verwendet."))
+        form.addRow(tr("Berechnung"), self.device)
         self.destination = QLineEdit()
         self.destination.setPlaceholderText(tr("Neuer Ergebnisordner neben der Quelldatei"))
         self.destination_pick = QPushButton(tr("Wählen…"))
@@ -146,6 +180,7 @@ class AIRestoreDialog(QDialog):
         self.compare_button.clicked.connect(lambda: self.finish_with_result(True))
         self.result_actions = self._row(self.result_button, self.compare_button)
         self.result_actions.hide()
+        self.feedback.setToolTip("")
         layout.addWidget(self.result_actions)
         layout.addStretch()
         self.run_button = QPushButton(tr("Berechnen und speichern"))
@@ -229,7 +264,7 @@ class AIRestoreDialog(QDialog):
                                    and (not destination or Path(destination).is_dir()))
 
     def _set_busy(self, busy):
-        for widget in (self.source, self.source_pick, self.task, self.strength, self.destination,
+        for widget in (self.source, self.source_pick, self.task, self.strength, self.device, self.destination,
                        self.destination_pick, self.confirm, self.advanced_toggle, self.advanced):
             widget.setEnabled(not busy)
         self.cancel_button.setText(tr("Abbrechen") if busy else tr("Schließen"))
@@ -241,16 +276,19 @@ class AIRestoreDialog(QDialog):
             return
         self._close_when_finished = False
         self.result_path = None
+        self.execution = None
         self.source_path = self.source.text().strip()
         self.output_path.hide()
         self.result_actions.hide()
         self.progress.setRange(0, 0)
         self.progress.show()
         self.feedback.setText(tr("Modell wird geladen …"))
+        self.feedback.setToolTip("")
         request = {"source": self.source_path, "model_id": self.selected_model()["id"],
                    "output_root": self.destination.text().strip() or None,
                    "model_dir": self.model_directory.text().strip() or None,
                    "strength": self.strength.value() / 100,
+                   "device": self.device.currentData(),
                    "allow_experimental": True}
         self.worker = _RestoreWorker(request, self)
         self.worker.progress.connect(self._on_progress)
@@ -276,11 +314,16 @@ class AIRestoreDialog(QDialog):
         if worker.result:
             self.result_path = str(worker.result)
             self.previews = worker.previews
+            self.execution = worker.execution
             self.progress.setValue(100)
-            self.feedback.setText(tr("Fertig. Ergebnis separat gespeichert."))
+            message = tr("Fertig. Ergebnis separat gespeichert.")
             if worker.error:
-                self.feedback.setText(tr("Ergebnis gespeichert. Vorschau nicht verfügbar: {reason}").format(
-                    reason=worker.error))
+                message = tr("Ergebnis gespeichert. Vorschau nicht verfügbar: {reason}").format(
+                    reason=worker.error)
+            self.feedback.setText(message + "\n" + _execution_feedback(self.execution))
+            reasons = (self.execution or {}).get("fallback_reasons", [])
+            if isinstance(reasons, list):
+                self.feedback.setToolTip("\n".join(str(reason) for reason in reasons))
             self.output_path.setText(self.result_path)
             self.output_path.setToolTip(self.result_path)
             self.output_path.setCursorPosition(0)

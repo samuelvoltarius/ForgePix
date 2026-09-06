@@ -43,13 +43,15 @@ if __name__ == "__main__":
         parser.add_argument("--model", required=True)
         parser.add_argument("--output-root")
         parser.add_argument("--strength", type=float, default=.5)
+        parser.add_argument("--device", choices=("auto", "cpu", "gpu", "cuda", "directml", "coreml"),
+                            default="auto", help="Rechenbackend: automatisch bevorzugt Grafikkarte; cpu erzwingt Prozessor")
         parser.add_argument("--experimental", action="store_true",
                             help="Experimentelle Modelle ausdrücklich für diesen Lauf zulassen")
         options = parser.parse_args(sys.argv[2:])
         try:
             result = ai_restore.run_file(options.input, options.model,
                 output_root=options.output_root, strength=options.strength,
-                allow_experimental=options.experimental)
+                allow_experimental=options.experimental, device=options.device)
             print(result)
         except (ForgePixFehler, OSError, ValueError) as exc:
             parser.exit(1, str(exc) + "\n")

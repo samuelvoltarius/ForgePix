@@ -38,5 +38,14 @@
   "2 · Auswahl & Ausrichtung": "2 · Auswahl & Ausrichtung",
   "3 · Ergebnis-Optionen": "3 · Ergebnis-Optionen",
   "4 · KI (optional)": "4 · KI (optional)",
-  "Schritt ": "Schritt "
+  "Schritt ": "Schritt ",
+  "Automatisch (Grafikkarte bevorzugen)": "Automatisch (Grafikkarte bevorzugen)",
+  "Nur Prozessor": "Nur Prozessor",
+  "Berechnung": "Berechnung",
+  "Automatisch verwendet ein verfügbares Grafik-Backend. Falls das nicht möglich ist, wird der Prozessor verwendet.": "Automatisch verwendet ein verfügbares Grafik-Backend. Falls das nicht möglich ist, wird der Prozessor verwendet.",
+  "Rechenbackend im Ergebnisbericht nicht angegeben.": "Rechenbackend im Ergebnisbericht nicht angegeben.",
+  "0 % Wirkung: Original übernommen, kein Modell ausgeführt.": "0 % Wirkung: Original übernommen, kein Modell ausgeführt.",
+  "Mit Prozessor berechnet; Grafikbeschleunigung war nicht verfügbar.": "Mit Prozessor berechnet; Grafikbeschleunigung war nicht verfügbar.",
+  "Mit Prozessor berechnet.": "Mit Prozessor berechnet.",
+  "Rechenbackend: {name}.": "Rechenbackend: {name}."
 }

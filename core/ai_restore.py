@@ -144,27 +144,110 @@ def _resolve(model_id, model_dir, cancel=None):
     return _manifest(matches[0], cancel)
 
 
-def _create_session(content):
+_PROVIDERS = {"cpu": "CPUExecutionProvider", "cuda": "CUDAExecutionProvider",
+              "directml": "DmlExecutionProvider", "coreml": "CoreMLExecutionProvider"}
+
+
+class _InferenceError(ForgePixFehler):
+    """A provider failure, distinct from cancellation or invalid source pixels."""
+
+
+def _device(value):
+    if not isinstance(value, str) or value.lower() not in ("auto", "cpu", "gpu", "cuda", "directml", "coreml"):
+        raise ForgePixFehler("Unbekannte KI-Recheneinheit. Erlaubt: auto, cpu, gpu, cuda, directml, coreml.")
+    return value.lower()
+
+
+def _execution_record(device):
+    return {"requested_device": _device(device), "provider": None, "registered_providers": [],
+            "attempts": [], "fallback_used": False, "fallback_reasons": [],
+            "whole_image_restarts": 0, "gpu_execution_verified": False,
+            "placement_evidence": "Provider registration does not prove GPU node placement.",
+            "applied": False}
+
+
+def _create_session(content, *, device="auto", execution=None, log=log_print):
+    device = _device(device)
+    if execution is None:
+        execution = _execution_record(device)
     try:
         import onnxruntime as ort
     except ImportError as exc:
         raise ForgePixFehler("Die lokale KI-Laufzeit ONNX Runtime fehlt. Bitte ForgePix mit KI-Unterstützung installieren.") from exc
-    try:
-        options = ort.SessionOptions()
-        options.intra_op_num_threads = min(4, os.cpu_count() or 1)
-        options.inter_op_num_threads = 1
-        # Bytes ensure the executed graph is exactly the hash-checked content;
-        # models referring to external tensor files are not supported.
-        session = ort.InferenceSession(content, sess_options=options, providers=["CPUExecutionProvider"])
-        inputs, outputs = session.get_inputs(), session.get_outputs()
-        if (len(inputs) != 1 or len(outputs) != 1
-                or inputs[0].type != "tensor(float)" or outputs[0].type != "tensor(float)"
-                or list(inputs[0].shape) != [1, 1, TILE_SIZE, TILE_SIZE]
-                or list(outputs[0].shape) != [1, 1, TILE_SIZE, TILE_SIZE]):
-            raise ValueError("erwartet wird genau ein Float32-Ein-/Ausgang mit Form 1×1×256×256")
-        return session, inputs[0].name, outputs[0].name
-    except Exception as exc:
-        raise ForgePixFehler("Das lokale ONNX-Modell kann nicht ausgeführt werden: %s" % exc) from exc
+    available = list(ort.get_available_providers())
+    execution["available_providers"] = available
+    execution["runtime_version"] = ort.__version__
+    if device in ("auto", "gpu"):
+        candidates = ["cuda"]
+        if sys.platform == "win32":
+            candidates.append("directml")
+        elif sys.platform == "darwin":
+            candidates.append("coreml")
+        candidates = [name for name in candidates if _PROVIDERS[name] in available]
+    else:
+        candidates = [device] if _PROVIDERS[device] in available else []
+    if not candidates and device != "cpu":
+        reason = "Keine passende GPU-Laufzeit verfügbar (Anforderung: %s)." % device
+        execution["fallback_used"] = True
+        execution["fallback_reasons"].append(reason)
+        log(reason + " Verarbeitung auf CPU.")
+    if "cpu" not in candidates:
+        candidates.append("cpu")
+    for candidate in candidates:
+        provider = _PROVIDERS[candidate]
+        attempt = {"provider": provider, "status": "initializing"}
+        execution["attempts"].append(attempt)
+        session = None
+        try:
+            options = ort.SessionOptions()
+            options.intra_op_num_threads = min(4, os.cpu_count() or 1)
+            options.inter_op_num_threads = 1
+            options.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
+            provider_options = {}
+            if candidate == "cuda":
+                # Scientific comparisons use float32, not Ampere's default TF32.
+                provider_options = {"device_id": "0", "use_tf32": "0",
+                                    "cudnn_conv_algo_search": "HEURISTIC",
+                                    "cudnn_conv_use_max_workspace": "0"}
+            elif candidate == "directml":
+                # DirectML forbids parallel execution and memory pattern reuse.
+                options.enable_mem_pattern = False
+                provider_options = {"device_id": "0"}
+            elif candidate == "coreml":
+                provider_options = {"ModelFormat": "MLProgram", "MLComputeUnits": "CPUAndGPU",
+                                    "RequireStaticInputShapes": "1",
+                                    "AllowLowPrecisionAccumulationOnGPU": "0"}
+            providers = [(provider, provider_options)]
+            if candidate != "cpu":
+                providers.append(_PROVIDERS["cpu"])
+            # Execute precisely the hash-checked bytes; no external tensor files.
+            session = ort.InferenceSession(content, sess_options=options, providers=providers)
+            # ORT's own run() fallback would mix GPU tiles with later CPU tiles.
+            # ForgePix handles the failure by recomputing the complete image.
+            session.disable_fallback()
+            registered = list(session.get_providers())
+            if provider not in registered:
+                raise RuntimeError("Der angeforderte Backend-Treiber wurde nicht geladen: " + provider)
+            inputs, outputs = session.get_inputs(), session.get_outputs()
+            if (len(inputs) != 1 or len(outputs) != 1
+                    or inputs[0].type != "tensor(float)" or outputs[0].type != "tensor(float)"
+                    or list(inputs[0].shape) != [1, 1, TILE_SIZE, TILE_SIZE]
+                    or list(outputs[0].shape) != [1, 1, TILE_SIZE, TILE_SIZE]):
+                raise ValueError("erwartet wird genau ein Float32-Ein-/Ausgang mit Form 1×1×256×256")
+            attempt["status"] = "ready"
+            execution.update(provider=provider, registered_providers=registered,
+                             provider_options=provider_options)
+            log("KI-Rechenbackend: %s (Anforderung: %s)." % (provider, execution["requested_device"]))
+            return session, inputs[0].name, outputs[0].name
+        except Exception as exc:
+            session = None
+            attempt.update(status="initialization_failed", error=str(exc))
+            if candidate == "cpu":
+                raise ForgePixFehler("Das lokale ONNX-Modell kann nicht ausgeführt werden: %s" % exc) from exc
+            reason = "%s konnte nicht gestartet werden: %s" % (provider, exc)
+            execution["fallback_used"] = True
+            execution["fallback_reasons"].append(reason)
+            log(reason + ". Ein anderes Rechenbackend wird versucht.")
 
 
 def _image(image):
@@ -184,10 +267,10 @@ def _predict(session, input_name, output_name, tile, cancel):
     try:
         prediction = np.asarray(session.run([output_name], {input_name: tile})[0])
     except Exception as exc:
-        raise ForgePixFehler("KI-Inferenz fehlgeschlagen: %s" % exc) from exc
+        raise _InferenceError("KI-Inferenz fehlgeschlagen: %s" % exc) from exc
     _cancelled(cancel)
     if prediction.shape != (1, 1, TILE_SIZE, TILE_SIZE) or not np.isfinite(prediction).all():
-        raise ForgePixFehler("Das KI-Modell lieferte ungültige Pixel oder eine unpassende Bildgröße.")
+        raise _InferenceError("Das KI-Modell lieferte ungültige Pixel oder eine unpassende Bildgröße.")
     return prediction
 
 
@@ -228,12 +311,12 @@ def _global_background(image, session, input_name, output_name, offset, scale, s
     return result
 
 
-def _infer(image, content, strength, progress, cancel, task="denoise"):
+def _infer(image, content, strength, progress, cancel, task="denoise", *, device="auto", log=log_print):
     # Shared statistics across all channels, never per tile or per channel.
     low, high = np.percentile(image, [.1, 99.9])
     offset, scale = float(low), max(float(high) - float(low), 1e-6)
     info = {"method": NORMALIZATION, "offset": offset, "scale": scale,
-            "percentiles": [.1, 99.9], "clipped": False}
+            "percentiles": [.1, 99.9], "clipped": False, "execution": _execution_record(device)}
     if task == "background":
         info["inference"] = {"strategy": "global_background_residual", "applied": strength != 0,
                              "working_shape": [TILE_SIZE, TILE_SIZE], "residual_smoothing_sigma": 16,
@@ -247,10 +330,40 @@ def _infer(image, content, strength, progress, cancel, task="denoise"):
         if progress:
             progress(1, 1)
         return image.copy(), info
-    session, input_name, output_name = _create_session(content)
+    execution = info["execution"]
+    session, input_name, output_name = _create_session(content, device=device, execution=execution, log=log)
+    retry_cpu = False
+    try:
+        result = _infer_session(image, session, input_name, output_name, offset, scale,
+                                strength, progress, cancel, task)
+    except _InferenceError as exc:
+        _cancelled(cancel)
+        if execution["provider"] not in {_PROVIDERS[name] for name in ("cuda", "directml", "coreml")}:
+            raise
+        reason = "%s: %s" % (execution["provider"], exc)
+        execution["attempts"][-1].update(status="execution_failed", error=str(exc))
+        execution["fallback_used"] = True
+        execution["fallback_reasons"].append(reason)
+        execution["whole_image_restarts"] += 1
+        log(reason + ". Das vollständige Bild wird auf CPU neu berechnet.")
+        retry_cpu = True
+    if retry_cpu:
+        # Outside the except block, its exception/traceback no longer retains
+        # the failed session and partially accumulated image-sized arrays.
+        session = None
+        _cancelled(cancel)
+        session, input_name, output_name = _create_session(content, device="cpu", execution=execution, log=log)
+        result = _infer_session(image, session, input_name, output_name, offset, scale,
+                                strength, progress, cancel, task)
+    execution["applied"] = True
+    return result, info
+
+
+def _infer_session(image, session, input_name, output_name, offset, scale, strength, progress, cancel, task):
+    """One complete image attempt; no accumulated values survive a retry."""
     if task == "background":
         return _global_background(image, session, input_name, output_name, offset, scale,
-                                  strength, progress, cancel), info
+                                  strength, progress, cancel)
     h, w = image.shape[:2]
     channels = 1 if image.ndim == 2 else image.shape[-1]
     ny, nx = max(1, math.ceil(h / STRIDE)), max(1, math.ceil(w / STRIDE))
@@ -296,15 +409,15 @@ def _infer(image, content, strength, progress, cancel, task="denoise"):
             result[...] = mixed
         else:
             result[..., channel] = mixed
-    return result, info
+    return result
 
 
 def restore(image, model_id, *, model_dir=None, strength=.5, allow_experimental=False,
-            log=log_print, progress=None, cancel=None):
+            log=log_print, progress=None, cancel=None, device="auto"):
     """Restore an array without changing its channel order; return a float32 array."""
     source, manifest, content, strength = _prepare(image, model_id, model_dir, strength, allow_experimental, cancel)
     log("Lokale experimentelle KI: %s; Stärke %.0f %%" % (manifest["task"], strength * 100))
-    result, _ = _infer(source, content, strength, progress, cancel, task=manifest["task"])
+    result, _ = _infer(source, content, strength, progress, cancel, task=manifest["task"], device=device, log=log)
     _cancelled(cancel)
     return result
 
@@ -437,7 +550,7 @@ def _output_header(fits, source_header, source_metadata, manifest, role, has_cov
 
 
 def run_file(source, model_id, output_root=None, *, model_dir=None, strength=.5,
-             allow_experimental=False, log=log_print, progress=None, cancel=None):
+             allow_experimental=False, log=log_print, progress=None, cancel=None, device="auto"):
     """Write a unique result directory; return its RGB/mono result_32bit.tif path."""
     source = Path(source).resolve()
     _cancelled(cancel)
@@ -448,8 +561,9 @@ def run_file(source, model_id, output_root=None, *, model_dir=None, strength=.5,
     with source.open("rb") as stream:
         source_hash = hashlib.file_digest(stream, "sha256").hexdigest()
     log("Lokale experimentelle KI: %s; Original bleibt erhalten." % manifest["task"])
-    result, normalization = _infer(image, content, strength, progress, cancel, task=manifest["task"])
+    result, normalization = _infer(image, content, strength, progress, cancel, task=manifest["task"], device=device, log=log)
     inference = normalization.pop("inference")
+    execution = normalization.pop("execution")
     _cancelled(cancel)
     fits = require_astropy("KI-Ergebnis speichern")
     parent = Path(output_root).resolve() if output_root else source.parent
@@ -499,7 +613,7 @@ def run_file(source, model_id, output_root=None, *, model_dir=None, strength=.5,
                   "model_id": manifest["id"], "model_sha256": manifest["sha256"], "task": manifest["task"],
                   "strength": strength, "normalization": normalization, "shape": list(image.shape),
                   "range": [float(result.min()), float(result.max())], "channel_processing": "independent mono",
-                  "strategy": inference["strategy"], "inference": inference,
+                  "strategy": inference["strategy"], "inference": inference, "execution": execution,
                   "status": "experimental", "release_approved": False, "photometry_validated": False,
                   "domain": "unstretched linear brightness scale; nonlinear model operation",
                   "source_header_preserved": source_header is not None,

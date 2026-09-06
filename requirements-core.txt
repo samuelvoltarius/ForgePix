@@ -11,5 +11,8 @@ ExifRead>=3.0           # EXIF lesen ohne exiftool (Brennweite/Blende/ISO/Belich
 piexif>=1.1             # EXIF auf JPEG-Ausgaben übernehmen ohne exiftool (eingebaut, mitgeliefert)
 astropy>=5.3            # optional: FITS lesen/schreiben (Astro). Ohne astropy laufen JPG/TIFF/RAW normal.
 scipy>=1.10             # Mosaik-Optimierung und Feinregistrierung
-onnxruntime>=1.22,<2    # Eigene lokale Astro-KI; kein externer KI-Server erforderlich
+# Windows x64: eigener lokaler GPU-Pfad ohne separate CUDA/cuDNN-Installation.
+# Die Pakete teilen den Importnamen onnxruntime und dürfen nicht parallel installiert werden.
+onnxruntime-directml==1.24.4; sys_platform == "win32" and platform_machine == "AMD64"
+onnxruntime>=1.22,<2; sys_platform != "win32" or platform_machine != "AMD64"
 pyobjc-framework-Cocoa; sys_platform == "darwin"

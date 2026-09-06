@@ -5,6 +5,7 @@ import subprocess
 import sys
 import tempfile
 import hashlib
+import json
 from pathlib import Path
 
 import cv2
@@ -19,6 +20,9 @@ def main():
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--source", action="store_true", help="Test the source entry point")
     mode.add_argument("--binary", type=Path, help="Test an extracted package executable")
+    parser.add_argument("--device", choices=("auto", "cpu", "gpu", "cuda", "directml", "coreml"),
+                        default="auto", help="AI compute request for this package check")
+    parser.add_argument("--require-provider", help="Fail if an AI task silently falls back from this ORT backend")
     args = parser.parse_args()
     if args.source:
         command = [sys.executable, str(root / "focus_stack_gui.py")]
@@ -65,7 +69,7 @@ def main():
             destination = Path(d)/("ai-"+task)
             restored = subprocess.run(command + ["--ai-restore", "--input", str(scientific),
                 "--model", "forgepix-"+task+"-mono-v2", "--output-root", str(destination),
-                "--experimental"], env=env, capture_output=True, timeout=120, cwd=root)
+                "--experimental", "--device", args.device], env=env, capture_output=True, timeout=120, cwd=root)
             if restored.returncode:
                 raise RuntimeError("Packaged AI failed ("+task+"): "+restored.stderr.decode(errors="replace"))
             outputs=list(destination.glob("*/result_32bit.tif"))
@@ -74,6 +78,12 @@ def main():
             pixels=tifffile.imread(outputs[0])
             if pixels.shape != linear.shape or pixels.dtype != np.float32 or not np.isfinite(pixels).all():
                 raise RuntimeError("Invalid scientific model output: "+task)
+            report = json.loads((outputs[0].parent / "ai_report.json").read_text(encoding="utf-8"))
+            execution = report.get("execution", {})
+            provider = execution.get("provider")
+            if args.require_provider and provider != args.require_provider:
+                raise RuntimeError("Wrong packaged AI backend ("+task+"): "+str(execution))
+            print("AI backend ("+task+"): "+str(provider))
         if hashlib.sha256(scientific.read_bytes()).hexdigest() != original:
             raise RuntimeError("AI changed its source FITS")
         print("AI smoke test passed: all four bundled models export finite float32 from FITS")

@@ -20,6 +20,9 @@ import sys
 import time
 
 TASKS = ("denoise", "background", "deblur", "starless")
+DEVICES = ("auto", "cpu", "gpu", "cuda", "directml", "coreml")
+GPU_PROVIDERS = {"cuda": "CUDAExecutionProvider", "directml": "DmlExecutionProvider",
+                 "coreml": "CoreMLExecutionProvider"}
 
 
 def digest(path):
@@ -33,10 +36,14 @@ def main():
     parser.add_argument("--output", type=Path, required=True, help="New acceptance folder under an existing parent")
     parser.add_argument("--tasks", nargs="+", choices=TASKS, default=list(TASKS))
     parser.add_argument("--strength", type=float, default=.5, help="Model blend from 0 to 1, default .5")
+    parser.add_argument("--device", choices=DEVICES, default="auto",
+                        help="Select the real Auto/CPU widget. GPU names select Auto and require that backend in the execution report; physical GPU work needs separate profiling.")
     parser.add_argument("--timeout", type=int, default=600, help="Seconds per task before cooperative cancellation")
     options = parser.parse_args()
     if not math.isfinite(options.strength) or not 0 <= options.strength <= 1:
         parser.error("--strength must be a finite number from 0 to 1")
+    if options.device not in {"auto", "cpu"} and options.strength == 0:
+        parser.error("A GPU backend comparison needs --strength greater than zero")
     if options.timeout < 1:
         parser.error("--timeout must be positive")
     if len(set(options.tasks)) != len(options.tasks):
@@ -82,11 +89,13 @@ def main():
                           ("INSTRUME", "FILTER", "EXPTIME", "BAYERPAT", "FPLINEAR", "FPDOMAIN")},
         "commit": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip(),
         "worktree": subprocess.check_output(["git", "status", "--porcelain"], cwd=root, text=True).splitlines(),
-        "python": sys.version, "strength": options.strength, "timeout_seconds_per_task": options.timeout,
+        "python": sys.version, "strength": options.strength, "requested_device": options.device,
+        "timeout_seconds_per_task": options.timeout,
         "model_directory": str(ai_restore.default_model_dir()),
         "models": ai_restore.list_models(), "tasks": [], "errors": [],
         "limitations": ["This acceptance verifies execution and file integrity, not scientific model quality.",
-                        "Before and after share one source-derived display stretch; images remain model estimates."],
+                        "Before and after share one source-derived display stretch; images remain model estimates.",
+                        "GPU device names select the actual Automatic widget and require the reported backend. Provider registration alone does not verify physical GPU node placement or utilization."],
     }
 
     def save_report():
@@ -146,6 +155,22 @@ def main():
             raise ValueError("The selected GUI function did not match the executed model task")
         if core_report["strength"] != task_report["actual_strength"]:
             raise ValueError("The GUI did not forward the selected strength")
+        execution = core_report.get("execution")
+        if not isinstance(execution, dict) or execution.get("requested_device") != task_report["actual_device"]:
+            raise ValueError("The runtime did not record the device selected in the GUI")
+        if execution.get("applied") is not (task_report["actual_strength"] > 0):
+            raise ValueError("The runtime execution record does not match the requested model strength")
+        if execution["applied"]:
+            expected_provider = GPU_PROVIDERS.get(options.device)
+            if options.device == "cpu":
+                expected_provider = "CPUExecutionProvider"
+            if expected_provider and execution.get("provider") != expected_provider:
+                raise ValueError("Expected %s, but Automatic/CPU used %s" % (expected_provider, execution.get("provider")))
+            if options.device == "gpu" and execution.get("provider") not in GPU_PROVIDERS.values():
+                raise ValueError("Automatic fell back to CPU; this is not a GPU-backend comparison")
+        task_report["execution"] = execution
+        task_report["backend_selection_matches_request"] = True
+        task_report["physical_gpu_execution_verified"] = execution.get("gpu_execution_verified") is True
         task_report.update(result_path=str(output), shape=list(tiff_pixels.shape), dtype=str(tiff_pixels.dtype),
                            range=[float(tiff_pixels.min()), float(tiff_pixels.max())],
                            finite=True, fits_tiff_equal=True, core_report=core_report,
@@ -202,6 +227,13 @@ def main():
                     dialog.destination.setText(str(task_folder))
                     dialog.strength.setValue(options.strength * 100)
                     task_report["actual_strength"] = dialog.strength.value() / 100
+                    selected_device = "cpu" if options.device == "cpu" else "auto"
+                    device_index = dialog.device.findData(selected_device)
+                    if device_index < 0:
+                        raise RuntimeError("The GUI has no matching device choice")
+                    dialog.device.setCurrentIndex(device_index)
+                    task_report["actual_device"] = dialog.device.currentData()
+                    task_report["device_widget_text"] = dialog.device.currentText()
                     dialog.confirm.setChecked(True)
                     app.processEvents()
                     dialog.grab().save(str(task_folder / "configured.png"))
@@ -214,6 +246,9 @@ def main():
                     worker = dialog.worker
                     if worker is None:
                         raise RuntimeError("The GUI did not create its model worker")
+                    task_report["device_locked_while_running"] = not dialog.device.isEnabled()
+                    if not task_report["device_locked_while_running"]:
+                        raise RuntimeError("The device selector remained editable during processing")
                     task_report["worker_started"] = True
                     task_report["worker_class"] = type(worker).__name__
                     task_report["worker_request"] = worker.request
@@ -223,6 +258,8 @@ def main():
                         timer.stop()
                         task_report["processing_seconds"] = round(time.monotonic() - elapsed_start_nonlocal[0], 3)
                         task_report["feedback"] = dialog.feedback.text()
+                        task_report["backend_feedback"] = dialog.feedback.text().split("\n")[-1]
+                        task_report["dialog_execution"] = dialog.execution
                         task_report["worker_finished"] = not dialog.is_running()
                         try:
                             if task_report["timed_out"] or not dialog.result_path:

@@ -316,3 +316,30 @@ This entry changes documentation only. Version remains 1.27.1-beta, experimental
 models are not defaults, and neither photometric/camera-general AI nor RC/full
 product parity is declared. The existing hourly continuation remains active;
 next training priority is correlated-noise breadth and separate validation gates.
+
+## Automatic compute backends and grouped-noise experiment (heartbeat)
+
+The user's CPU question identified the remaining forced-CPU implementation.
+Own AI inference now selects available CUDA/Windows DirectML/macOS CoreML and
+falls back to CPU; explicit CPU is available in the beginner dialog. Provider
+errors after partial processing discard that attempt and recompute the whole
+image. Cancellation is separate. Reports record actual backend/fallback, without
+claiming physical GPU node placement from mere provider registration.
+Windows x64 requirements/package use DirectML 1.24.4 without external CUDA DLL
+installation. Packaging still includes the actual ONNX runtime/model assets.
+See GPU_ACCELERATION.md for constraints, platform scope and primary references.
+
+Initial local full suite in the isolated DirectML environment: 513 tests passed,
+7 skipped (including training dependencies unavailable locally). A separate
+RTX3060Ti probe ran all four own models on CPU and DirectML with normal, zero,
+signed/HDR and tiny inputs: finite values, max absolute backend difference below
+2.9e-6, profiling recorded DML graph execution. Warm single-tile timing is not
+a full-FITS speedup claim; exact-commit full-image comparisons and packages follow.
+
+The independently running Spark experiment uses 6,000 bounded steps, new noise
+amplitudes/scales, 24 separate synthetic/M13/M16 development groups and strict
+per-group MSE/MAE/bias/local-mean gates against the unchanged mono v2 parent.
+Final evaluator seed 9518063 was reserved before optimization. Training code
+records the actual CUDA device and source/checkpoint hashes. Models in assets
+remain unchanged; evaluation may reject this candidate and cannot silently
+replace the current model. Reports follow after this finite run completes.
