@@ -138,3 +138,8 @@ the Windows offscreen plugin otherwise rendered missing glyph boxes in this setu
 
 ## SV220 SII/OIII variant (2026-09-06)
 Added the user's SVBONY SV220 2-inch SII/OIII 7 nm as a distinct filter profile, appended to preserve existing saved combo indices. Manufacturer: https://www.svbony.com/products/7nm-oiii-sii-narrowband-filter . Recognizes explicitly labelled 7 nm FITS headers without confusing the model with H-alpha/OIII or Antlia 3 nm. Corrected SHO validation: SII/OIII alone lacks H-alpha. Saved this filter in the local user equipment and Astro settings. Native SII/OIII-specific palette processing remains separate work; this change does not claim full SHO reconstruction. Validation: 38 equipment/filter and Astro UI tests passed.
+
+## Filter-driven preview guard (heartbeat 2026-09-06)
+Checked Spark: no training/collector process active. Latest pushed tests (7244705) and previous platform builds (2169d36) passed; these are distinct commits, so the RC exact-commit build gate remains open.
+Found and fixed a further SII/OIII processing defect: filename detection or an explicit dualband flag could still route known SII/OIII data into Ha/OIII synthesis. Known filter metadata now overrides that heuristic, and the Ha/OIII renderer rejects incompatible filters. SII/OIII receives an ordinary RGB preview with an explicit processing log explanation; dedicated SII/OIII palettes remain unfinished. Linear exports are unaffected.
+Validation: full local suite 377 tests passed, 3 skipped, including filename/flag precedence and renderer guard. No model promoted and no duplicate training started. RC acceptance remains incomplete.

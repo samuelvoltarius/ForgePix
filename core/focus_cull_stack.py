@@ -2012,6 +2012,8 @@ def _dualband_view(result, palette, astro, filt=None, unmix=None):
 
     `filt` ist der erkannte Aufnahmefilter: daraus kommt der Startwert der Entmischung, und
     er sagt, ob die gewaehlte Palette ueberhaupt eine physikalische Grundlage hat."""
+    if filt is not None and not filt.ist_dualband:
+        raise ValueError("Die Hα/OIII-Palette benötigt einen Filter mit beiden Linien.")
     if unmix is None:
         unmix = filt.unmix if filt is not None else 0.20
     unmix = float(max(0.0, min(0.5, unmix)))
@@ -2022,6 +2024,13 @@ def _dualband_view(result, palette, astro, filt=None, unmix=None):
     if palette == "bicolor":
         return astro.dualband_bicolor(result, unmix)
     return astro.dualband_hoo(result, unmix)
+
+
+def _use_ha_oiii_preview(args, paths, filt):
+    """An explicit/recognized filter takes precedence over filename heuristics."""
+    if filt is not None:
+        return filt.ist_dualband
+    return bool(getattr(args, "dualband", False)) or _detect_dualband(paths)
 
 
 def _maybe_upscale(result, args):
@@ -2137,7 +2146,10 @@ def _astro_write(result, work_dir, paths, args, astro):
     # Aufbereitung NUR fürs Vorschau-Bild (lineare Exports oben bleiben faithful für PixInsight).
     # Drei Regler: Farbkalibrierung · Aufhellung · Sättigung. Reihenfolge: manuell (CLI/GUI) hat
     # Vorrang, sonst schlägt die KI vor (wenn Server da), sonst Standardwerte.
-    dualband = bool(getattr(args, "dualband", False)) or _detect_dualband(paths)
+    dualband = _use_ha_oiii_preview(args, paths, _filt)
+    if _filt is not None and "SII" in _filt.linien and "Ha" not in _filt.linien:
+        print("  SII/OIII: RGB-Vorschau der aufgenommenen Kanäle; keine Hα/OIII- "
+              "oder SHO-Rekonstruktion. Lineare Exporte bleiben erhalten.")
     man_color = float(getattr(args, "astro_color", -1.0))
     man_bright = float(getattr(args, "astro_bright", -1.0))
     man_sat = float(getattr(args, "astro_saturation", -1.0))

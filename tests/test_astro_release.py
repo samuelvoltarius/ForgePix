@@ -16,6 +16,19 @@ from constants import imwrite
 
 
 class AstroRelease(unittest.TestCase):
+    def test_known_filter_overrides_dualband_filename_and_flag(self):
+        import filters
+        from unittest.mock import patch
+        args = SimpleNamespace(dualband=True)
+        sii = filters.hole("sv220_sii_oiii_7")
+        with patch.object(pipeline, "_detect_dualband", return_value=True) as detect:
+            self.assertFalse(pipeline._use_ha_oiii_preview(args, ["HaOIII.fit"], sii))
+            self.assertFalse(pipeline._use_ha_oiii_preview(args, [], filters.hole("uvir")))
+            self.assertTrue(pipeline._use_ha_oiii_preview(args, [], filters.hole("dual7")))
+            detect.assert_not_called()
+        with self.assertRaises(ValueError):
+            pipeline._dualband_view(np.zeros((8, 8, 3), np.float32), "hoo", astro, sii)
+
     def test_calibration_precedes_debayer(self):
         rng = np.random.default_rng(7)
         flat = rng.uniform(.3, .7, (40, 40)).astype(np.float32)
