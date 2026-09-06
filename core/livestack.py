@@ -169,10 +169,10 @@ class LiveStack:
         return True
 
     def ergebnis(self):
-        """Der aktuelle Stapel als float32-BGR in [0..1], oder None."""
+        """Der aktuelle lineare Float-Stapel ohne Clipping, oder None."""
         if self.summe is None or self.n == 0:
             return None
-        return np.clip(self.summe / np.maximum(self.gewicht, 1e-9), 0, 1)
+        return self.summe / np.maximum(self.gewicht, 1e-9)
 
     def vorschau_schreiben(self, pfad, strecken=True, skala=0.5):
         """Zwischenstand als JPG — das ist der Sinn des Ganzen: beim Aufnehmen zusehen."""

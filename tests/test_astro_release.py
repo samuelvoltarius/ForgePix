@@ -190,6 +190,6 @@ class AstroRelease(unittest.TestCase):
         light = np.full((8, 8), 10, np.uint16)
         dark = np.full_like(light, 20)
         result = astro.calibrate(light, dark=dark)
-        np.testing.assert_array_equal(result, 0)
+        np.testing.assert_array_equal(result, -10)
         np.testing.assert_array_equal(light, 10)
         np.testing.assert_array_equal(dark, 20)

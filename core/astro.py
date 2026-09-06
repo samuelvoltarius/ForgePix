@@ -168,6 +168,11 @@ def read_calibrated(path, dark=None, flat=None):
 
 
 def calibrate(f, dark=None, flat=None):
+    """Dark-Abzug und Flat-Division auf vorzeichenbehafteten linearen Werten.
+
+    Negative Rauschwerte dürfen vor der Integration nicht abgeschnitten werden:
+    das würde den Mittelwert des dunklen Himmels systematisch anheben.
+    """
     f = np.asarray(f, dtype=np.float32)
     if f.size == 0 or not np.isfinite(f).all():
         raise ForgePixFehler("Die Aufnahme enthaelt ungueltige Pixelwerte.")
@@ -177,16 +182,25 @@ def calibrate(f, dark=None, flat=None):
                                  % (name, master.shape, f.shape))
         if master is not None and not np.isfinite(master).all():
             raise ForgePixFehler("%s-Master enthaelt ungueltige Pixelwerte." % name)
-    out = f
+    out = f.copy()
     if dark is not None:
         out = out - dark
     if flat is not None:
         mean = float(np.mean(flat, dtype=np.float64))
         if mean <= 0:
             raise ForgePixFehler("Das Flat-Master ist leer oder zu dunkel. Bitte ein gueltiges Flat verwenden.")
+        if np.any(flat <= 0):
+            raise ForgePixFehler("Das Flat-Master enthält nichtpositive Pixel. Bitte die "
+                                 "Flat-/Bias-/Darkflat-Kalibrierung prüfen; durch diese Pixel "
+                                 "kann nicht geteilt werden.")
         fn = flat / mean
-        out = out / np.clip(fn, 0.2, None)
-    return np.clip(out, 0, None)
+        with np.errstate(over="ignore", divide="ignore", invalid="ignore"):
+            out = out / fn
+    with np.errstate(over="ignore", invalid="ignore"):
+        out = np.asarray(out, np.float32)
+    if not np.isfinite(out).all():
+        raise ForgePixFehler("Die Kalibrierung erzeugt ungültige Werte. Bitte Dark und Flat prüfen.")
+    return out
 
 
 def _gray(f):
@@ -194,16 +208,40 @@ def _gray(f):
 
 
 def cosmetic_correct(f, strength=3.0):
-    """Hot-/Cold-Pixel entfernen (kosmetische Korrektur): einzelne Ausreißer ggü. dem lokalen
-    Median ersetzen. Beseitigt helle/dunkle Einzelpixel (Sensor-Defekte/Cosmics) ohne Sterne
-    anzutasten. Klassisch, kein ML."""
-    u16 = (np.clip(f, 0, 1) * 65535).astype(np.uint16)
-    med = cv2.medianBlur(u16, 3).astype(np.float32) / 65535.0
-    diff = f - med
-    sigma = float(np.std(diff)) + 1e-6
-    mask = np.abs(diff) > strength * sigma
-    out = f.copy()
-    out[mask] = med[mask]
+    """Isolierte Ausreißer in Float32 korrigieren, aufgelöste Sternkerne schützen.
+
+    Nachbar-Signal schützt Hot-Kandidaten mit räumlicher Struktur. Ein einzelner
+    unterabgetasteter Stern ist ohne Defektkarte nicht sicher vom Hotpixel zu
+    unterscheiden. Auf bereits debayerte oder Mono-Daten anwenden, nicht rohe CFA.
+    """
+    a = np.asarray(f, np.float32)
+    if a.ndim not in (2, 3) or not a.size or not np.isfinite(a).all():
+        raise ForgePixFehler("Die Hotpixel-Korrektur benötigt gültige Bildwerte.")
+    if not np.isfinite(strength) or strength < 0:
+        raise ForgePixFehler("Die Stärke der Hotpixel-Korrektur muss mindestens 0 sein.")
+    out = a.copy()
+    if strength == 0:
+        return out
+    planes = a[..., None] if a.ndim == 2 else a
+    target = out[..., None] if out.ndim == 2 else out
+    kernel = np.full((3, 3), 1 / 8, np.float32)
+    kernel[1, 1] = 0
+    for channel in range(planes.shape[-1]):
+        plane = np.ascontiguousarray(planes[..., channel])
+        median3 = cv2.medianBlur(plane, 3)
+        median5 = cv2.medianBlur(plane, 5)
+        diff = plane - median3
+        center = float(np.median(diff))
+        sigma = max(float(np.median(np.abs(diff - center))) * 1.4826,
+                    float(np.max(np.abs(plane))) * np.finfo(np.float32).eps, 1e-30)
+        neighbors = cv2.filter2D(plane, -1, kernel, borderType=cv2.BORDER_REFLECT_101)
+        candidates = np.abs(diff) > strength * sigma
+        adjacent = cv2.filter2D(candidates.astype(np.uint8), cv2.CV_16U,
+                                kernel * 8, borderType=cv2.BORDER_CONSTANT)
+        hot = (diff > strength * sigma) & (neighbors <= median5 + sigma)
+        cold = (diff < -strength * sigma) & (neighbors >= median5 - sigma)
+        isolated = (hot | cold) & (adjacent == 0)
+        target[..., channel][isolated] = median3[isolated]
     return out
 
 
@@ -346,7 +384,7 @@ def fix_banding(f, strength=1.0, vertical=False, protect_sigma=3.0):
         out = np.transpose(out, (1, 0, 2))
     if einzeln:
         out = out[..., 0]
-    return np.clip(out, 0, None)
+    return out
 
 def _star_centroids(g, max_stars=200):
     """Sternzentren (sub-pixel) als Punktwolke: Hintergrund abziehen, **rauschadaptive Schwelle
