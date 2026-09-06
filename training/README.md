@@ -139,6 +139,12 @@ Reports: `training/reports/denoise-anchored-v4-001-*.json`. The next experiment
 should explicitly optimize pixel MAE alongside MSE and preserve the original
 read/shot/replay solution, retaining all existing non-regression gates.
 
+The bounded follow-up is specified in [DENOISE_V5_PLAN.md](DENOISE_V5_PLAN.md):
+one additional MAE term, its weight fixed using training batches only, unchanged
+splits/gates and the still-reserved final seed 9671507. This is a prepared plan,
+not a completed training run or replacement model. It also specifies independent
+preservation tests before further background/deblur/starless training.
+
 Reproduce in a CUDA PyTorch environment, with a new run directory:
 
     python -m training.refine_denoise_v4 --parent runs/restoration-v2-001/denoise/checkpoint.pt --scenes datasets/scene-bank-v2 --output runs/NEW-V4-RUN --steps 6000

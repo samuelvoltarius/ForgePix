@@ -679,3 +679,27 @@ calibration workflow, aperture correction, qualified covariance, new AI model or
 RC/parity approval is delivered. See NATIVE_PHOTOMETRY.md. Next are the gated
 empirical broadband fit and guided UI, genuine instrument-response data for SPCC,
 native recipe adapters and separately measured improvements to the four AI tracks.
+
+## Exact 5f5a6b6 P0 acceptance completed
+
+Frozen runtime 5f5a6b6c80e1e6cf24992e94e727a008e1349710 passed 697 local
+tests (10 skipped, 79.054 s), all three platform tests (34049232716) and all
+three builds with package smoke (34049232268). The downloaded Windows EXE
+passed GUI/CLI/CFA Drizzle/four DirectML models/recipe/solver/photometry checks
+in 35.270 s. Its ZIP is 190813161 bytes, SHA256
+3a8e11272cfe7f8ccbe44aba4a16ca5794cdbac04cb5f97fb19ab820f24ae3d3.
+
+On the same clean commit, actual full M27 CLI diagnostics took 16.688 s,
+17.500 s including independent readback: 6279 catalogue rows, 2630 field
+positions, 2248 diagnostic measurements, zero fit approvals. All CSV values
+and exact decimal IDs agree with JSON; all overlapping JSON exclusion counts
+were verified. FITS/catalogue SHA256 and mtime plus physical pixel bytes stayed
+unchanged. Missing epoch, saturation, coverage, filter and variance remain
+explicit. CSV currently omits exclusion reasons; full diagnostics are in JSON.
+
+Evidence, a FITS-derived spatial preview, source/code proofs and reproducer:
+Codex outputs/ForgePix-Photometry-5f5a6b6/Pruefbericht.md. Package and its
+verification are in outputs/ForgePix-5f5a6b6-Windows. Subsequent changes here
+are documentation only. The new DENOISE_V5_PLAN specifies the next bounded
+Spark experiment and preservation tests for the other three tasks; no new
+training was started and all four shipped models remain experimental.

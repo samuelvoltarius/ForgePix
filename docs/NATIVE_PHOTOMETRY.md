@@ -1,7 +1,8 @@
 # Native catalogue photometry diagnostics
 
 ForgePix can measure stellar aperture fluxes against a local Gaia DR3/GSPC field.
-This first implementation writes measurements and exclusions to JSON and CSV.
+This first implementation writes measurements to JSON and CSV; the full
+exclusion reasons and assumptions are in the JSON report. The CSV is a subset.
 It does not alter an image, fit colour terms, apply white balance, or qualify a
 PCC/SPCC result. The existing position-only Gaia NPZ remains a separate format.
 
