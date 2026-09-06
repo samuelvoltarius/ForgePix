@@ -3,6 +3,7 @@ import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 import sys
 import unittest
+import tempfile
 from pathlib import Path
 from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "core"))
@@ -58,6 +59,31 @@ class AstroUI(unittest.TestCase):
                         for c in range(col, col + cols):
                             self.assertNotIn((r, c), occupied, "Astro controls overlap")
                             occupied.add((r, c))
+            finally:
+                window.deleteLater()
+                type(self).app.processEvents()
+
+    def test_real_fits_start_resolves_series_before_processing(self):
+        import numpy as np
+        from astropy.io import fits
+        with tempfile.TemporaryDirectory() as folder, \
+             patch.object(MainWindow, "_restore_settings"), \
+             patch.object(MainWindow, "_save_settings"), \
+             patch("ui.main_window._UpdateChecker.start"):
+            series = Path(folder) / "M27"
+            series.mkdir()
+            fits.writeto(series / "Light.fit", np.ones((20, 20), np.float32))
+            window = MainWindow()
+            try:
+                window._choose_module(1)
+                window.in_edit.setText(folder)
+                class Resolved(Exception):
+                    pass
+                with patch.object(window, "_guess_and_apply_module", side_effect=Resolved) as detect:
+                    with self.assertRaises(Resolved):
+                        window.run(auto=True)
+                    detect.assert_called_once_with(str(series))
+                self.assertEqual(window.in_edit.text(), str(series))
             finally:
                 window.deleteLater()
                 type(self).app.processEvents()

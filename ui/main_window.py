@@ -2002,7 +2002,7 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
                         return
                     inp = series[labels.index(selected)][0]
                 self.in_edit.setText(inp)
-                self._guess_from_folder(inp)
+                self._guess_and_apply_module(inp)
         # Vorab-Check: genug Bilder vorhanden? (Astro/Langzeit/Mosaik brauchen ≥2)
         try:
             import focus_cull_stack as F

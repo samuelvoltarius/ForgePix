@@ -2,6 +2,15 @@
 
 ## 2026-09-06 active RC fixes
 
+Actual M27 GUI run exposed a missing `_guess_from_folder` method in the FITS start
+path. Replaced with existing `_guess_and_apply_module`; added regression coverage
+for nested real FITS selection. Repeated GUI run in work/m27-rc-gui uses 34 FITS,
+retains 31, registers all 31; inspect gui.log and final products before claiming
+the complete run passed. This was not covered by the earlier startup-only smoke.
+
+Real HST scene adaptation has completed on Spark; see training/README.md. Adapted
+denoiser regressed against its parent on held-out object patches and was rejected.
+
 Fixed overlapping Astro grid cells (advanced group versus image style, style
 selector versus details toggle, duplicate filter help). Beginner mode now keeps
 calibration, filter and session controls while technical options remain in Pro.

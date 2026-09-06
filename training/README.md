@@ -1,5 +1,21 @@
 # ForgePix model development
 
+## Real-scene adaptation result (2026-09-06)
+
+`data-env/bin/python -m training.train_fits` was executed on the Spark.
+114 fully valid 128px training patches from five object groups and 47 validation
+patches from M13 were used. M16 yielded no patches under the current strict
+criteria. Original FITS science/coverage planes were preserved; clipping and
+non-finite regions were rejected. Patch coordinates, normalization and source
+hashes are saved per run. This tests added Gaussian noise on real scene content;
+it does not provide independent real-noise clean targets or colour-camera coverage.
+
+Run `fits-adaptation-20260906-075100`: 1,500 steps in 27.5 seconds. Validation MSE:
+identity 2.2492e-4, parent 2.7394e-5, adapted 3.4472e-5. The adaptation is WORSE
+than its parent and must not replace it. Neither model is release-qualified.
+Next work requires more representative validation objects, independent exposure
+pairs and scientific preservation metrics, not merely more training iterations.
+
 ## Public FITS seed data
 
 Expanded acquisition: `python -m training.collect_archive` on the Spark, using
