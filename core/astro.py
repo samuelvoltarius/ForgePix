@@ -1876,7 +1876,8 @@ def _star_desat(out, ha_n, oiii_n, strength=0.92):
     return np.clip(out * (1 - strength * mask) + gray * (strength * mask), 0, 1)
 
 
-def remove_stars(bgr, sensitivity=5.0, max_size=600, min_size=4, iterations=2, log=log_print):
+def remove_stars(bgr, sensitivity=5.0, max_size=600, min_size=4, iterations=2, log=log_print,
+                 full_mask=False):
     """A6 — Klassisches (nicht-ML) Star-Removal: liefert ein (teilweise) STERNLOSES Nebelbild plus
     die Sternmaske. Reines OpenCV/NumPy.
 
@@ -1886,7 +1887,7 @@ def remove_stars(bgr, sensitivity=5.0, max_size=600, min_size=4, iterations=2, l
          (so bleiben ausgedehnte Nebelstrukturen außen vor).
       2. Maske leicht aufweiten (Sternhöfe mitnehmen).
       3. Sternkerne iterativ entfernen: morphologische Grauwert-Öffnung "schrumpft" helle Punkte,
-         und der Bereich unter der Maske wird per Inpainting (Telea) aus der Nebel-Umgebung gefüllt.
+         und der Bereich unter der Maske wird in float32 aus der Nebel-Umgebung gefüllt.
          Mehrere Iterationen knabbern größere Sterne weiter ab.
 
     EHRLICHE GRENZEN: Funktioniert gut für KLEINE bis MITTLERE Sterne. GROSSE, gesättigte Sterne mit
@@ -1908,6 +1909,8 @@ def remove_stars(bgr, sensitivity=5.0, max_size=600, min_size=4, iterations=2, l
     if bgr is None:
         return bgr, None
     f = bgr.astype(np.float32)
+    if f.size == 0 or not np.isfinite(f).all():
+        raise ForgePixFehler("Sternentfernung: leere oder ungueltige Bilddaten.")
     g = _gray(f)
     g = g / (float(g.max()) + 1e-6)
 
@@ -1940,32 +1943,40 @@ def remove_stars(bgr, sensitivity=5.0, max_size=600, min_size=4, iterations=2, l
     out = f.copy()
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
     grow = mask.copy()
+    used_mask = mask.copy()
     for _ in range(max(1, int(iterations))):
-        u8 = (np.clip(out, 0, 1) * 255).astype(np.uint8)
         # morphologische Grauwert-Öffnung drückt isolierte helle Punkte herunter
-        opened = cv2.morphologyEx(u8, cv2.MORPH_OPEN, kernel)
+        opened = cv2.morphologyEx(out, cv2.MORPH_OPEN, kernel)
         sel = grow.astype(bool)
         if out.ndim == 3:
             for c in range(out.shape[2]):
-                oc = out[..., c]; opc = opened[..., c].astype(np.float32) / 255.0
+                oc = out[..., c]; opc = opened[..., c]
                 oc[sel] = np.minimum(oc[sel], opc[sel])
         else:
-            opc = opened.astype(np.float32) / 255.0
+            opc = opened
             out[sel] = np.minimum(out[sel], opc[sel])
-        # Telea-Inpainting füllt die Sternorte aus der Nebel-/Hintergrund-Nachbarschaft
-        u8 = (np.clip(out, 0, 1) * 255).astype(np.uint8)
-        inpainted = cv2.inpaint(u8, grow, 3, cv2.INPAINT_TELEA).astype(np.float32) / 255.0
+        # OpenCV supports float inpainting per plane. NS avoids Telea's
+        # integer-scale intensity increments on normalized floating data.
+        if out.ndim == 3:
+            inpainted = np.stack([cv2.inpaint(np.ascontiguousarray(out[..., c]), grow,
+                                             3, cv2.INPAINT_NS)
+                                  for c in range(out.shape[2])], axis=-1)
+        else:
+            inpainted = cv2.inpaint(out, grow, 3, cv2.INPAINT_NS)
         if inpainted.ndim == 2 and out.ndim == 3:
             inpainted = inpainted[..., None]
         m3 = grow.astype(np.float32)
         m3 = m3[..., None] if out.ndim == 3 else m3
         out = out * (1 - m3) + inpainted * m3
+        used_mask |= grow
         grow = cv2.dilate(grow, kernel, iterations=1)    # nächste Runde greift etwas weiter
 
-    starless = np.clip(out, 0, 1).astype(np.float32)
+    starless = out.astype(np.float32)
     log(f"    Star-Removal: {int(mask.sum())} Sternpixel maskiert, {iterations} Iter. "
         f"(klein/mittel ok; große Halos nur partiell)")
-    return starless, mask.astype(np.float32)
+    # Source detection mask remains stable for star-centroid/flux consumers;
+    # layer editing can request the complete interpolation footprint.
+    return starless, (used_mask if full_mask else mask).astype(np.float32)
 
 
 def _moffat_kern(radius, fwhm, beta=2.5):

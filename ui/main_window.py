@@ -2512,6 +2512,10 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
     def _run_tool_async(self, title, fn, on_ok):
         """Lang laufendes Extern-Tool im Hintergrund-Thread ausführen (GUI friert nicht ein).
         `fn(log)` läuft im Worker; `on_ok(out)` wird bei Erfolg im GUI-Thread aufgerufen."""
+        active = getattr(self, "_tool_worker", None)
+        if active is not None and active.isRunning():
+            self._append(tr("Die Bildverarbeitung läuft noch. Bitte den Abschluss abwarten.") + "\n")
+            return
         busy = QDialog(self); busy.setWindowTitle(title)
         bl = QVBoxLayout(busy)
         lbl = QLabel(tr("Läuft … Details erscheinen im Log."))
@@ -2609,57 +2613,39 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
                              lambda out: self._adopt_result(out, f))
 
     def _run_starless_workflow(self, linear=None):
-        """Voller Starless-Workflow (GraXpert-Gradient → Palette/Strecken → StarNet → Nebel
-        verstärken → Sterne per Screen zurück). Erklärt jeden Schritt im Log."""
-        try:
-            import tools_engine
-            import starless
-        except Exception as e:
-            QMessageBox.warning(self, tr("Starless-Workflow"), f"{e}"); return
+        """Native classical separation with reconstructable float layers."""
+        import star_layers
         f = linear or self._best_export_file(bits=32)
         if not f or not os.path.isfile(f):
             QMessageBox.information(self, tr("Starless-Workflow"), tr("Erst ein Astro-Ergebnis erzeugen."))
             return
-        sn = self.starnet_path.text().strip() or None
-        if not tools_engine.find_starnet(sn):
-            self._tool_missing_hint("starnet", f)
-            return
-        dual = self._filter_ist_dualband()
-        palette = self.astro_palette.currentData() if dual else None
-        work = os.path.join(os.path.dirname(f), "starless")
-        self._append(tr("\n⭐ Starless-Workflow startet … (StarNet rechnet ~½–1 min)\n"))
-        gx = self.graxpert_path.text().strip() or None
-        cc = self.cosmicclarity_path.text().strip() or None
-
-        def job(log):
-            return starless.run(f, palette, work, broadband=not dual,
-                                graxpert_path=gx, starnet_path=sn,
-                                cosmicclarity_path=cc, log=log)
+        self._append(tr("Eigene Sternentfernung: kleine Sterne; große Halos bleiben teilweise erhalten.") + "\n")
 
         def ok(out):
             self._adopt_result(out, f)
-            # Regler scharfschalten: Nebel-/Stern-Stärke ab jetzt sofort nachregelbar
-            self._starless_dir = work
-            for s in (self.starless_neb, self.starless_stars):
-                s.blockSignals(True); s.setValue(1.0); s.setEnabled(True); s.blockSignals(False)
-            self._append(f"\n✅ Starless-Workflow fertig: {os.path.basename(out)}\n"
-                         + tr("   Tipp: die Regler Starless Nebel/Sterne (links) passen die Stärke sofort an.\n"))
+            self._starless_dir = os.path.dirname(os.path.dirname(out))
+            for spin in (self.starless_neb, self.starless_stars):
+                spin.blockSignals(True)
+                spin.setValue(1.0)
+                spin.setEnabled(True)
+                spin.blockSignals(False)
+            self._append(tr("Stern- und Nebelebene als 32-Bit-TIFF gespeichert. Stärke links einstellen.") + "\n")
 
-        self._run_tool_async(tr("Starless-Workflow"), job, ok)
+        self._run_tool_async(tr("Starless-Workflow"), lambda log: star_layers.run(f, log=log), ok)
 
     def _recombine_starless(self):
-        """Nebel-Boost + Stern-Stärke aus den gecachten Ebenen sofort neu mischen (kein neues StarNet)."""
+        """Mix the saved native float layers in a background worker."""
         if not getattr(self, "_starless_dir", None):
             return
-        try:
-            import starless
-            out = starless.recombine(self._starless_dir,
-                                     neb_amt=self.starless_neb.value(),
-                                     star_amt=self.starless_stars.value())
-            self.result_path = out
-            self._set_preview(out)
-        except Exception as e:
-            self._append(f"(Starless-Vorschau: {e})\n")
+        import star_layers
+        work = self._starless_dir
+        nebula, stars = self.starless_neb.value(), self.starless_stars.value()
+
+        def ok(out):
+            self._adopt_result(out, os.path.join(work, "nebula_32bit.tif"))
+
+        self._run_tool_async(tr("Starless-Workflow"),
+                             lambda log: star_layers.recombine(work, nebula, stars), ok)
 
     def _run_external_tool(self, which):
         """GraXpert/StarNet++ headless auf das lineare Ergebnis anwenden und automatisch
@@ -3152,6 +3138,11 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
 
     # ---------- Einstellungen merken ----------
     def closeEvent(self, e):
+        active = getattr(self, "_tool_worker", None)
+        if active is not None and active.isRunning():
+            self._append(tr("Die Bildverarbeitung läuft noch. Bitte den Abschluss abwarten.") + "\n")
+            e.ignore()
+            return
         if (self.proc and self.proc.state() != QProcess.NotRunning
                 and getattr(self, "_live_stop_file", None)):
             self.stop()

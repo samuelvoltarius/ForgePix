@@ -43,6 +43,24 @@ class AstroUI(unittest.TestCase):
                 cls = type(self)
                 cls.app.processEvents()
 
+    def test_running_image_worker_prevents_destruction_and_overlap(self):
+        from types import SimpleNamespace
+        from PySide6.QtGui import QCloseEvent
+        with patch.object(MainWindow, "_restore_settings"), \
+             patch.object(MainWindow, "_save_settings"), \
+             patch("ui.main_window._UpdateChecker.start"):
+            window = MainWindow()
+            window._tool_worker = SimpleNamespace(isRunning=lambda: True)
+            event = QCloseEvent()
+            window.closeEvent(event)
+            self.assertFalse(event.isAccepted())
+            with patch("ui.main_window._ToolWorker") as worker:
+                window._run_tool_async("test", lambda log: None, lambda out: None)
+                worker.assert_not_called()
+            window._tool_worker = None
+            window.deleteLater()
+            type(self).app.processEvents()
+
     def test_beginner_controls_and_nonoverlapping_expert_layout(self):
         with patch.object(MainWindow, "_restore_settings"), \
              patch.object(MainWindow, "_save_settings"), \

@@ -703,5 +703,8 @@
   "Gaia-Sternpositionen: Weißabgleich (Online-Katalog)": "Gaia star positions: white balance (online catalogue)",
   "Weitere Verarbeitungseinstellungen": "More processing settings",
   "Der Aufnahmefilter bestimmt, welche Emissionslinien überhaupt ankommen. Hα/OIII und SII/OIII sind verschiedene Varianten. Für echtes SHO werden getrennte Messungen von SII, Hα und OIII benötigt; ein einzelner Dual-Band-Filter reicht dafür nicht.": "The capture filter determines which emission lines are recorded. Ha/OIII and SII/OIII are different variants. True SHO requires separate SII, Ha and OIII measurements; a single dual-band filter is insufficient.",
-  "Streckung": "Stretch"
+  "Streckung": "Stretch",
+  "Eigene Sternentfernung: kleine Sterne; große Halos bleiben teilweise erhalten.": "Native star removal: small stars; large halos remain partially visible.",
+  "Stern- und Nebelebene als 32-Bit-TIFF gespeichert. Stärke links einstellen.": "Star and nebula layers saved as 32-bit TIFF. Adjust their strengths on the left.",
+  "Die Bildverarbeitung läuft noch. Bitte den Abschluss abwarten.": "Image processing is still running. Please wait for it to finish."
 }
