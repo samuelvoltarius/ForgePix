@@ -414,7 +414,7 @@ def _companions(result):
             raise ProjectError("Ungültiger Verweis auf die Bildabdeckung.")
         files.append(result.parent / name)
     for name in ("processing_report.json", "drizzle_report.json", "channels.json", "layers.json", "mix.json",
-                 "astrometry_report.json"):
+                 "astrometry_report.json", "observation_report.json"):
         path = result.parent / name
         if path.is_file():
             files.append(path)

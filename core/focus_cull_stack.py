@@ -1843,6 +1843,13 @@ def run_astro(input_dir, work_dir, args):
         extras.append(f"Drizzle {drizzle}×")
     drizzle_true = getattr(args, "astro_drizzle_true", False)
     drizzle_info = None
+    stack_info = None
+    import observation_metadata
+    metadata_reference = astro._ref_path(paths, _bestref)
+    input_observation = (observation_metadata.build_metadata(paths, metadata_reference,
+        combination="drizzle_weighted_mean" if drizzle_true else args.astro_method,
+        output_bin=int(getattr(args, "astro_bin", 1) or 1), drizzle_scale=drizzle)
+        if all(os.path.splitext(p)[1].lower() in FITS_EXTS for p in paths) else None)
     if drizzle_true:
         extras.append(f"echtes Drizzle (pixfrac {getattr(args, 'astro_pixfrac', 0.7)})")
     phase("register")
@@ -1920,12 +1927,19 @@ def run_astro(input_dir, work_dir, args):
                     _gewicht = True
             else:
                 _zeiten = None
-            result = astro.stack(aligned, method=args.astro_method, kappa=args.astro_kappa, normalize=True,
+            result, stack_info = astro.stack(aligned, method=args.astro_method, kappa=args.astro_kappa, normalize=True,
                                  local_norm=getattr(args, "astro_local_norm", False),
-                                 weight=_gewicht, belichtungen=_zeiten, preview_cb=_preview_cb)
+                                 weight=_gewicht, belichtungen=_zeiten, preview_cb=_preview_cb,
+                                 return_info=True)
     binf = int(getattr(args, "astro_bin", 1) or 1)
     if binf > 1:
         result = astro.bin_image(result, binf)
+        if stack_info is not None:
+            h, w = result.shape[:2]
+            coverage = stack_info["coverage"][:h * binf, :w * binf]
+            stack_info["coverage"] = coverage.reshape(h, binf, w, binf).all(axis=(1, 3))
+            stack_info["report"].update(post_binning=binf,
+                coverage_fraction=float(stack_info["coverage"].mean()))
         if drizzle_info is not None:
             h, w = result.shape[:2]
             channels = drizzle_info["coverage_channels"][:h * binf, :w * binf]
@@ -1946,8 +1960,26 @@ def run_astro(input_dir, work_dir, args):
         print(f"  {binf}×-Binning → {result.shape[1]}×{result.shape[0]} (besseres SNR, rundere Sterne)")
     used_paths = (drizzle_info["report"]["source_files"] if drizzle_info is not None
                   else [paths[int(os.path.basename(p)[4:8])] for p in aligned])
-    out = (_astro_write(result, work_dir, used_paths, args, astro, drizzle_info=drizzle_info)
-           if drizzle_info is not None else _astro_write(result, work_dir, used_paths, args, astro))
+    if input_observation is not None:
+        observation_metadata.verify_sources(input_observation)
+    reference_path = (drizzle_info["report"]["reference"] if drizzle_info is not None
+                      else astro._ref_path(paths, _bestref))
+    observation = (observation_metadata.build_metadata(used_paths, reference_path,
+        combination="drizzle_weighted_mean" if drizzle_info is not None else args.astro_method,
+        output_bin=binf, drizzle_scale=drizzle)
+        if all(os.path.splitext(p)[1].lower() in FITS_EXTS for p in [*used_paths, reference_path]) else None)
+    processing = {"native_registration": True,
+        "comet_recentered": bool(not drizzle_true and _komet_erg is not None),
+        "normalization": "none" if drizzle_true else "local_background" if getattr(args, "astro_local_norm", False) else "additive_background",
+        "exposure_rescaled": bool(not drizzle_true and stack_info is not None and _zeiten is not None),
+        "snr_weighted": bool(not drizzle_true and stack_info is not None and _gewicht),
+        "calibration_validation": getattr(args, "calibration_report", {}),
+        "cosmetic_correction": bool(cosmetic),
+        "banding_correction": float(getattr(args, "astro_banding", 0.0) or 0.0)}
+    if observation is not None:
+        observation["processing"] = processing
+    out = _astro_write(result, work_dir, used_paths, args, astro,
+        drizzle_info=drizzle_info, stack_info=stack_info, observation=observation)
     from constants import VERSION
     report = {"version": VERSION, "input_frames": len(original_paths),
               "quality_kept": len(paths), "registered_frames": len(used_paths),
@@ -1963,6 +1995,9 @@ def run_astro(input_dir, work_dir, args):
         report["warnings"].append("Drizzle uses an area-weighted mean without sigma/cosmic-ray rejection.")
         if not drizzle_info["coverage"].all():
             report["warnings"].append("Uncovered channel samples remain zero placeholders; use coverage and drizzle weights.")
+    if stack_info is not None:
+        report["sampling"] = stack_info["report"]
+    report["observation_report"] = "observation_report.json"
     with open(os.path.join(out, "processing_report.json"), "w", encoding="utf-8") as f:
         json.dump(report, f, ensure_ascii=False, indent=2)
     print("  Ergebnis: %d von %d Aufnahmen, %.1f Minuten Gesamtbelichtung." %
@@ -2098,7 +2133,8 @@ def _maybe_upscale(result, args):
         return result
 
 
-def _astro_write(result, work_dir, paths, args, astro, *, drizzle_info=None):
+def _astro_write(result, work_dir, paths, args, astro, *, drizzle_info=None,
+                 stack_info=None, observation=None):
     """Astro-Ergebnis schreiben: optional Hintergrund-Extraktion, dann 16-bit-Linear +
     32-bit-Linear (GraXpert/StarNet/PixInsight) + gestreckte Vorschau-JPG."""
     if drizzle_info is not None:
@@ -2109,6 +2145,14 @@ def _astro_write(result, work_dir, paths, args, astro, *, drizzle_info=None):
                 getattr(args, "astro_deconv", False), getattr(args, "astro_synthstar", False),
                 float(getattr(args, "astro_denoise", 0.0) or 0.0) > 0)):
             raise ForgePixFehler("Der Drizzle-Stack enthält Abdeckungslücken. Hintergrundkorrektur, Dekonvolution, Sternkorrektur und Entrauschen für diesen Lauf deaktivieren; erst auf vollständig bedeckte Bereiche zuschneiden.")
+    if stack_info is not None:
+        coverage = np.asarray(stack_info["coverage"])
+        if (coverage.shape != result.shape[:2] or not np.isin(coverage, (0, 1)).all()):
+            raise ForgePixFehler("Die Stack-Abdeckungsmaske passt nicht zum Ergebnis.")
+        if not coverage.all() and any((getattr(args, "bg_extract", False),
+                getattr(args, "astro_deconv", False), getattr(args, "astro_synthstar", False),
+                float(getattr(args, "astro_denoise", 0.0) or 0.0) > 0)):
+            raise ForgePixFehler("Der Stack enthält Abdeckungslücken. Zuerst den linearen Stack speichern und auf vollständig bedeckte Bereiche zuschneiden, bevor Hintergrundkorrektur, Dekonvolution oder Entrauschen angewendet wird.")
     _filt = aufnahmefilter(args, paths)
     if _filt is not None and getattr(args, "dualband", False):
         import filters as _flt
@@ -2168,23 +2212,76 @@ def _astro_write(result, work_dir, paths, args, astro, *, drizzle_info=None):
         import tempfile
         stack_dir = tempfile.mkdtemp(prefix="stack-", dir=work_dir)
     base = os.path.splitext(os.path.basename(paths[0]))[0]
-    drizzle_header = None
+    from astropy.io import fits
+    import observation_metadata
+    if observation is None and drizzle_info is not None:
+        source_files = drizzle_info["report"]["source_files"]
+        reference = drizzle_info["report"]["reference"]
+        if all(os.path.splitext(p)[1].lower() in FITS_EXTS for p in [*source_files, reference]):
+            observation = observation_metadata.build_metadata(source_files, reference,
+                combination="drizzle_weighted_mean",
+                output_bin=drizzle_info["report"].get("post_binning", 1),
+                drizzle_scale=drizzle_info["report"]["scale"])
+    science_header = fits.Header({"CREATOR": "ForgePix", "IMAGETYP": "MASTER LIGHT"})
+    if observation is not None:
+        observation_metadata.verify_sources(observation)
+        science_header = observation_metadata.apply_to_header(science_header, observation)
+    linear_evidence = []
+    for source in observation.get("sources", []) if observation is not None else []:
+        cards = source["metadata"]
+        def card(key):
+            value = cards.get(key, {})
+            return None if value.get("duplicate") else value.get("value")
+        if card("FPLINEAR") is False:
+            linear_evidence.append("declared_nonlinear")
+        elif "AI" in str(card("FPDOMAIN") or "").upper():
+            linear_evidence.append("derived_ai_input")
+        elif card("FPLINEAR") is True:
+            linear_evidence.append("explicit_linear_header")
+        elif (card("BAYERPAT") in ("RGGB", "BGGR", "GBRG", "GRBG")
+              and str(card("IMAGETYP") or card("IMAGETYPE") or "").strip().upper() in ("LIGHT", "LIGHT FRAME")
+              and isinstance(card("BITPIX"), int) and card("BITPIX") > 0):
+            linear_evidence.append("raw_sensor_light_header_assumption")
+        else:
+            linear_evidence.append("unknown")
+    if "declared_nonlinear" in linear_evidence:
+        science_header["FPLINEAR"] = False
+    elif linear_evidence and all(item in ("explicit_linear_header", "raw_sensor_light_header_assumption")
+                                 for item in linear_evidence):
+        science_header["FPLINEAR"] = True
+    postprocessing = {key: bool(getattr(args, key, False)) for key in
+                     ("bg_extract", "astro_deconv", "astro_synthstar")}
+    postprocessing["astro_denoise"] = float(getattr(args, "astro_denoise", 0.0) or 0.0)
+    science_header["FPPROC"] = (any(postprocessing.values()), "Post-integration pixel correction requested")
+    science_header.add_history("ForgePix native export before display stretch; physical output units not inferred.")
+    observation_report = (dict(observation) if observation is not None else {
+        "format": "ForgePixObservationMetadataUnavailable", "schema_version": 1,
+        "reason": "No verified actual FITS contributors and reference supplied."})
+    observation_report["post_integration_corrections"] = postprocessing
+    observation_report["output_units"] = "unknown; original integer input may have been normalized by dtype maximum"
+    observation_report["pixel_gain_saturation_variance_qualified"] = False
+    observation_report["display_stretch_applied_to_science_export"] = False
+    observation_report["input_linearity_evidence"] = linear_evidence
+    with open(os.path.join(stack_dir, "observation_report.json"), "x", encoding="utf-8") as stream:
+        json.dump(observation_report, stream, indent=2, ensure_ascii=False, allow_nan=False)
+    if stack_info is not None:
+        import tifffile
+        science_header["FPCOV"] = "coverage.tif"
+        science_header.add_history("Coverage: accepted support in every channel after rejection and output binning.")
+        tifffile.imwrite(os.path.join(stack_dir, "coverage.tif"), coverage.astype(np.uint8), metadata=None)
     if drizzle_info is not None:
         import tifffile
-        from astropy.io import fits
         result = result.copy()
         result[~coverage_channels] = 0
-        drizzle_header = fits.Header({"CREATOR": "ForgePix", "IMAGETYP": "MASTER LIGHT",
-            "FPLINEAR": True, "FPCOV": "coverage.tif", "FPDRZWGT": "drizzle_weights.tif",
+        science_header.update({"CREATOR": "ForgePix", "IMAGETYP": "MASTER LIGHT",
+            "FPCOV": "coverage.tif", "FPDRZWGT": "drizzle_weights.tif",
             "FPDRZCOV": "coverage_channels.tif", "FPDRZKER": "SQUARE",
             "FPDRZSCL": drizzle_info["report"]["scale"], "FPDRZPFR": drizzle_info["report"]["pixfrac"],
             "FPDRZCFA": drizzle_info["report"]["cfa_preserved"],
             "FPPIXARE": drizzle_info["report"]["output_pixel_area"]})
-        drizzle_header.add_history("Square-drop weighted mean; missing samples require coverage/weight masks.")
-        drizzle_header.add_history("Brightness per reference pixel area; aperture sums need FPPIXARE.")
-        for key, value in drizzle_info["report"].get("reference_metadata", {}).items():
-            drizzle_header[key] = value
-        drizzle_header["NCOMBINE"] = len(drizzle_info["report"]["source_files"])
+        science_header.add_history("Square-drop weighted mean; missing samples require coverage/weight masks.")
+        science_header.add_history("Brightness per reference pixel area; aperture sums need FPPIXARE.")
+        science_header["NCOMBINE"] = len(drizzle_info["report"]["source_files"])
         drizzle_info["report"]["export_channel_order"] = "RGB"
         tifffile.imwrite(os.path.join(stack_dir, "coverage.tif"), drizzle_info["coverage"].astype(np.uint8), metadata=None)
         tifffile.imwrite(os.path.join(stack_dir, "coverage_channels.tif"), coverage_channels[..., ::-1].astype(np.uint8),
@@ -2208,11 +2305,14 @@ def _astro_write(result, work_dir, paths, args, astro, *, drizzle_info=None):
     try:
         import tifffile
         out32 = os.path.join(stack_dir, f"{args.prefix}{base}_astro_linear_32bit.tif")
-        tiff_options = ({"metadata": None, "description": json.dumps({"forgepix": True, "linear": True,
-                            "FPCOV": "coverage.tif", "FPDRZWGT": "drizzle_weights.tif",
-                            "FPDRZCOV": "coverage_channels.tif", "FPPIXARE": drizzle_info["report"]["output_pixel_area"],
-                            "fits_header": drizzle_header.tostring(sep="\n", endcard=False, padding=False)})}
-                            if drizzle_header is not None else {})
+        tiff_metadata = {"forgepix": True,
+            "fits_header": science_header.tostring(sep="\n", endcard=False, padding=False)}
+        if "FPLINEAR" in science_header:
+            tiff_metadata["linear"] = science_header["FPLINEAR"]
+        for key in ("FPCOV", "FPDRZWGT", "FPDRZCOV", "FPPIXARE"):
+            if key in science_header:
+                tiff_metadata[key] = science_header[key]
+        tiff_options = {"metadata": None, "description": json.dumps(tiff_metadata)}
         tifffile.imwrite(out32, cv2.cvtColor(result.astype(np.float32), cv2.COLOR_BGR2RGB),
                          photometric="rgb", **tiff_options)
         print(f"  32-bit Linear (GraXpert/StarNet++/PixInsight): {out32}")
@@ -2224,7 +2324,7 @@ def _astro_write(result, work_dir, paths, args, astro, *, drizzle_info=None):
             rgb = cv2.cvtColor(result.astype(np.float32), cv2.COLOR_BGR2RGB)
             data = np.moveaxis(rgb, -1, 0)            # (H,W,C) -> (C,H,W) FITS-Konvention
             outf = os.path.join(stack_dir, f"{args.prefix}{base}_astro_linear.fits")
-            hdu = fits.PrimaryHDU(data.astype(np.float32), header=drizzle_header)
+            hdu = fits.PrimaryHDU(data.astype(np.float32), header=science_header)
             hdu.header["BSCALE"] = 1.0
             hdu.header["IMAGETYP"] = "MASTER LIGHT"
             hdu.header["CREATOR"] = "ForgePix"

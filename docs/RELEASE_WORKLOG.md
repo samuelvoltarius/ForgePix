@@ -703,3 +703,61 @@ verification are in outputs/ForgePix-5f5a6b6-Windows. Subsequent changes here
 are documentation only. The new DENOISE_V5_PLAN specifies the next bounded
 Spark experiment and preservation tests for the other three tasks; no new
 training was started and all four shipped models remain experimental.
+
+## Native stack acquisition metadata and bounded V5 experiment
+
+Ordinary and CFA Drizzle exports now derive acquisition evidence from the actual
+used FITS lights and geometric reference. Common fields require complete agreement;
+raw noise limits and camera gain do not become processed-image noise parameters.
+Documented exposure midpoint averages use continuous TAI arithmetic, with separate
+UTC/TCB representations and an explicit false exact-per-pixel-weighting flag.
+Output search sampling accounts for camera pixel convention, software binning and
+Drizzle scale. No source WCS, current equipment filter or unknown Float-FITS
+linearity is invented. A JSON report accompanies matching FITS/Float32-TIFF headers
+and project/export snapshots. See NATIVE_OBSERVATION_METADATA.md.
+
+All six ordinary integrators additionally return actual common accepted support,
+including rejection and binning; binary coverage does not imply variance or an
+exposure map. Existing partial-coverage restrictions remain visible for AI/solver
+and post-integration corrections. Package smoke now includes the ordinary FITS
+export as well as CFA Drizzle. Local current-source suite: 720 tests, 14 skipped,
+81.888 s (four added Torch tests instead ran successfully on Spark).
+
+V5 completed exactly 6,000 CUDA steps on GB10 in 554.94 s optimization plus 23.64 s
+development evaluation. Its sole MAE-term coefficient was calibrated on 96 original
+training batches with exact sequence/RNG proof. All 648 development gates were
+independently recounted. The 0.8896675315 geometric MSE ratio does not compensate
+for 17 MAE, three MSE and one local-mean failures, so the candidate is rejected.
+All 27 bias gates pass. Sources/data/parent stayed unchanged; no final evaluation,
+ONNX export or bundled weights changed. Final seed 9671507 remains unused and the
+total optimization history is now 42,000 steps. Complete V5 records are in training/
+reports; the finite training lock was released and no unrelated Spark jobs changed.
+
+The user's darktable/Siril-script review also identified two concrete native
+numerical defects. Wavelet operations previously clipped neutral signed/HDR
+floating images to [0,255]; floats are now unbounded, Float64 stays Float64 and
+neutral processing is an exact independent copy. Integer photographic outputs
+were independently checked byte-for-byte against the previous implementation.
+Nine new science fixtures and three existing caller tests passed.
+
+Identical three/seven-frame Float32 inputs exposed catastrophic cancellation in
+Sigma/Winsor moments: valid values were rejected, then an empty refinement became
+a zero model. Stable Float64 Welford moments and final accumulation correct this
+without changing kappa; empty refinements retain their previous bounds. Signed/HDR,
+low-variance and genuine rejection cases have independent reference comparisons.
+
+Research is recorded in DARKTABLE_RESEARCH.md and SIRIL_SCRIPT_RESEARCH.md. The
+five inspected contributor scripts have individual GPL notices; the Siril
+RC-Astro file is a wrapper, not freely reusable proprietary model weights.
+No foreign code, script runtime or licence change was introduced. Next classical
+work connects the existing native background/MTF/GHS operators through versioned
+recipes, shared masks and domain-aware preview, followed by per-session manifests.
+
+After both numerical fixes, the final local full suite passed 734 tests with 14
+skipped (79.971 s): 720 passed here, with all six separate Torch/CUDA training
+checks already passed on Spark. The source package smoke also exercised ordinary
+and CFA exports plus all four DirectML models; the final immutable package repeat
+will additionally exercise the corrected default Sigma path.
+
+Exact immutable runtime, platform-build and real M27 acceptance will be recorded
+after verification. This development remains Beta, not an RC or parity claim.

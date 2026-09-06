@@ -69,7 +69,10 @@ def main():
         for index in range(3):
             path = raw_directory / ("Light-%d.fits" % index)
             fits.writeto(path, raw, fits.Header({"BAYERPAT": "RGGB", "EXPTIME": 300,
-                                                "IMAGETYP": "LIGHT", "FILTER": "SII/OIII"}))
+                "IMAGETYP": "LIGHT", "FILTER": "SII/OIII", "FPLINEAR": True,
+                "DATE-BEG": f"2025-01-01T00:{index * 10:02d}:00", "RA": 300., "DEC": 20.,
+                "FOCALLEN": 1000., "XPIXSZ": 5., "YPIXSZ": 5., "XBINNING": 1, "YBINNING": 1,
+                "GAIN": 131, "EGAIN": .88}))
             raw_hashes[path] = hashlib.sha256(path.read_bytes()).hexdigest()
         drizzle_work = Path(d) / "drizzle-work"
         reconstructed = subprocess.run(command + ["--cli", "--input", str(raw_directory),
@@ -87,6 +90,12 @@ def main():
         science_path = next(records[0].parent.glob("*_astro_linear.fits"))
         cube = np.moveaxis(fits.getdata(science_path, memmap=False), 0, -1)
         header = fits.getheader(science_path)
+        if (header.get("NCOMBINE") != 3 or header.get("FPTOTEXP") != 900
+                or not header.get("DATE-AVG", "").startswith("2025-01-01T00:12:30")
+                or header.get("FPETEXAC") is not False or "EGAIN" in header or "GAIN" in header
+                or abs(header.get("PIXSCALE", 0) - np.degrees(np.arctan(5 / 1e6)) * 1800) > 1e-10
+                or not (science_path.parent / "observation_report.json").is_file()):
+            raise RuntimeError("Packaged stack lost its actual time/reference metadata")
         coverage = tifffile.imread(records[0].parent / header["FPDRZCOV"]).astype(bool)
         weights = tifffile.imread(records[0].parent / header["FPDRZWGT"])
         if (cube.shape != (80, 96, 3) or not np.isfinite(cube).all()
@@ -98,6 +107,25 @@ def main():
             if hashlib.sha256(path.read_bytes()).hexdigest() != expected:
                 raise RuntimeError("Drizzle changed its raw source FITS")
         print("Native CFA Drizzle smoke passed: signed/HDR FITS and explicit missing-color coverage")
+        normal_work = Path(d) / "normal-astro-work"
+        normal = subprocess.run(command + ["--cli", "--input", str(raw_directory),
+            "--work", str(normal_work), "--astro", "--no-register", "--no-astro-qc",
+            "--astro-method", "sigma", "--no-astro-stretch", "--fits-out"],
+            env=env, capture_output=True, timeout=180, cwd=root)
+        if normal.returncode:
+            raise RuntimeError("Packaged normal astro stack failed: " + normal.stderr.decode(errors="replace"))
+        normal_fits = next(normal_work.rglob("*_astro_linear.fits"))
+        normal_header = fits.getheader(normal_fits)
+        normal_coverage = tifffile.imread(normal_fits.parent / normal_header["FPCOV"])
+        if (normal_header.get("NCOMBINE") != 3 or normal_header.get("DATE-AVG") != header["DATE-AVG"]
+                or normal_header.get("FPLINEAR") is not True or not normal_coverage.all()
+                or abs(normal_header.get("PIXSCALE", 0) - 2 * header["PIXSCALE"]) > 1e-10
+                or not (normal_fits.parent / "observation_report.json").is_file()):
+            raise RuntimeError("Packaged normal stack lost observation metadata or accepted coverage")
+        for path, expected in raw_hashes.items():
+            if hashlib.sha256(path.read_bytes()).hexdigest() != expected:
+                raise RuntimeError("Normal integration changed its raw source FITS")
+        print("Native stack metadata smoke passed: actual contributors, times, reference hints and coverage")
         # Run every shipped model through the packaged entry point, so an
         # omitted ONNX DLL or data file cannot pass a mere GUI startup check.
         y, x = np.mgrid[:71, :83]

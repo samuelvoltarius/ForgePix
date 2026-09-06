@@ -307,6 +307,7 @@ class NativeDrizzlePipeline(unittest.TestCase):
         np.testing.assert_array_equal(science[channels == 0], 0)
         self.assertEqual(header["FILTER"], "SII/OIII")
         self.assertEqual(header["NCOMBINE"], 1)
+        self.assertNotIn("FPLINEAR", header)  # Float FITS did not declare its input domain.
         self.assertNotIn("BAYERPAT", header)
         self.assertEqual(header["FPPIXARE"], 1)
         tiff = next(output.glob("*_astro_linear_32bit.tif"))

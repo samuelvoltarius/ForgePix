@@ -1122,9 +1122,13 @@ def _bg_sigma(f, coverage=None):
 
 
 def stack(paths, method="sigma", kappa=2.5, normalize=True, local_norm=False,
-          weight=False, sigma_iters=2, belichtungen=None, log=log_print, preview_cb=None):
+          weight=False, sigma_iters=2, belichtungen=None, log=log_print, preview_cb=None,
+          *, return_info=False):
     """Speicherschonendes Stacken über die Platte (zweistufig bei sigma/winsor).
-    Gibt float32-Ergebnis [0..1] (BGR) zurück.
+    Gibt das unclipped float32-Ergebnis (BGR) zurück. Mit return_info=True zusätzlich
+    die tatsächliche Abdeckung nach Rejection: ein Pixel gilt nur als belegt,
+    wenn jeder Farbkanal mindestens einen akzeptierten Beitrag hat. Diese Maske
+    ist weder eine Varianz noch eine effektive Belichtungszeit.
 
     A4 — `weight=True`: jeder Frame geht mit Gewicht 1/σ_bg² ein (σ_bg = robuste Hintergrund-
     Streuung, s. `_bg_sigma`). Rauschärmere/transparentere Subs zählen mehr → besseres SNR bei
@@ -1207,6 +1211,19 @@ def stack(paths, method="sigma", kappa=2.5, normalize=True, local_norm=False,
             raise ForgePixFehler("Stacking: unpassende Bildgroesse oder ungueltige Pixelwerte: %s" % p)
         return f
 
+    def finish(result, supported):
+        if not return_info:
+            return result
+        coverage = np.asarray(supported, dtype=bool)
+        if coverage.ndim == 3:
+            coverage = coverage.all(axis=2)
+        coverage = coverage.copy()
+        return result, {"coverage": coverage, "report": {
+            "method": method, "coverage_fraction": float(coverage.mean()),
+            "coverage_semantics": "accepted contribution in every output channel",
+            "variance_available": False,
+            "per_pixel_exposure_available": False}}
+
     # additive Normalisierung + SNR-Sigma in EINEM Vorab-Pass (vorher zwei getrennte
     # Volldurchläufe über alle Dateien). σ_bg ist gegen den späteren Skalar-Offset invariant
     # (konstante Verschiebung ändert weder Ränge noch Streuung), darf also vom rohen Frame kommen.
@@ -1286,19 +1303,22 @@ def stack(paths, method="sigma", kappa=2.5, normalize=True, local_norm=False,
         if method == "median":
             # Median braucht alle Werte -> in Kacheln über die Höhe, speicherschonend
             res = np.empty(shape, np.float32)
+            coverage_out = np.zeros(shape[:2], bool) if return_info else None
             rows = max(1, 2_000_000 // (shape[1] * shape[2]))  # ~Zeilen pro Kachel
             for y in range(0, shape[0], rows):
                 # rows_of(): memmap-Zeilenlesen (E1) inkl. Normalisierung — lokale
                 # Normalisierung läuft über den rd()-Fallback (braucht das Vollbild)
                 band = np.stack([rows_of(i, p, y, y + rows) for i, p in enumerate(paths)])
                 covered = np.stack([valid(p)[y:y + rows] for p in paths])[..., None]
+                if return_info:
+                    coverage_out[y:y + rows] = covered.any(axis=0)[..., 0]
                 import warnings
                 with warnings.catch_warnings():
                     warnings.simplefilter("ignore", RuntimeWarning)
                     res[y:y + rows] = np.nan_to_num(np.nanmedian(
                         np.where(covered, band, np.nan), axis=0), nan=0.0)
                 log(f"    median Zeilen {y}/{shape[0]}")
-            return res
+            return finish(res, coverage_out)
         acc = np.zeros(shape, np.float32) if method == "average" else None
         wacc = np.zeros(shape[:2] + (1,), np.float32)
         mx = np.full(shape, -np.inf, np.float32) if method == "max" else None
@@ -1314,8 +1334,9 @@ def stack(paths, method="sigma", kappa=2.5, normalize=True, local_norm=False,
                 preview_cb(np.clip((acc / np.maximum(wacc, 1e-6)) if method == "average"
                                    else np.where(np.isfinite(mx), mx, 0), 0, 1),
                            i + 1, n)
-        return (acc / np.maximum(wacc, 1e-6) if method == "average"
-                else np.where(np.isfinite(mx), mx, 0)).astype(np.float32)
+        result = (acc / np.maximum(wacc, 1e-6) if method == "average"
+                  else np.where(np.isfinite(mx), mx, 0)).astype(np.float32)
+        return finish(result, wacc > 0 if method == "average" else np.isfinite(mx))
 
     if method == "linearfit":
         # Linear-Fit-Clipping (PixInsight-Stil): pro Pixel die sortierten Werte über die Frames
@@ -1323,6 +1344,7 @@ def stack(paths, method="sigma", kappa=2.5, normalize=True, local_norm=False,
         # Flugzeuge, kosmische Treffer, Hotpixel) jenseits kappa·sigma verwerfen. Robuster als
         # Sigma-Clipping bei WENIGEN Subs und systematisch ungleicher Transparenz/Helligkeit.
         res = np.empty(shape, np.float32)
+        coverage_out = np.zeros(shape[:2], bool) if return_info else None
         rows = max(1, 2_000_000 // (shape[1] * shape[2]))
         x = np.arange(n, dtype=np.float32)
         xm = x.mean(); xv = float(((x - xm) ** 2).sum()) + 1e-9
@@ -1347,22 +1369,37 @@ def stack(paths, method="sigma", kappa=2.5, normalize=True, local_norm=False,
                 mask = supported & (np.abs(resid) <= kappa * sig)
             w_ = mask.astype(np.float32)
             res[y:y + rows] = (v * w_).sum(axis=0) / np.clip(w_.sum(axis=0), 1.0, None)
+            if return_info:
+                coverage_out[y:y + rows] = (w_.sum(axis=0) > 0).all(axis=2)
             log(f"    linearfit-Rejection Zeilen {y}/{shape[0]}")
-        return res
+        return finish(res, coverage_out)
 
-    # sigma / winsor: Pass 1 Mittel+Std, Pass 2 Rejection
-    s = np.zeros(shape, np.float32); s2 = np.zeros(shape, np.float32)
-    sample_count = np.zeros(shape[:2] + (1,), np.float32)
-    for i, p in enumerate(paths):
-        f = rd(i, p)
-        covered = valid(p)[..., None]
-        s += np.where(covered, f, 0); s2 += np.where(covered, f * f, 0)
-        sample_count += covered
-        log(f"    Statistik {i + 1}/{n}")
-    count = np.maximum(sample_count, 1)
-    mean = s / count
-    std = np.sqrt(np.maximum(s2 / count - mean * mean, 0))
+    # Sigma/Winsor: Welford moments in Float64, including the products. Raw
+    # Float32 E[x²]-E[x]² can report zero scatter around a rounded mean that
+    # differs from every identical input sample, rejecting the complete set.
+    def moments(bounds=None, announce=False):
+        mean = np.zeros(shape, np.float64)
+        m2 = np.zeros(shape, np.float64)
+        count = np.zeros(shape, np.uint32)
+        for i, p in enumerate(paths):
+            f = rd(i, p).astype(np.float64)
+            included = valid(p)[..., None]
+            if bounds is not None:
+                included = included & (f >= bounds[0]) & (f <= bounds[1])
+            count += included
+            delta = f - mean
+            mean += np.where(included, delta / np.maximum(count, 1), 0)
+            m2 += np.where(included, delta * (f - mean), 0)
+            if announce:
+                log(f"    Statistik {i + 1}/{n}")
+        m2 /= np.maximum(count, 1)
+        np.maximum(m2, 0, out=m2)
+        np.sqrt(m2, out=m2)
+        return mean, m2, count > 0
+
+    mean, std, has_samples = moments(announce=True)
     lo = mean - kappa * std; hi = mean + kappa * std
+    del mean, std, has_samples
 
     if method in ("sigma", "winsor"):
         # A4 — iteratives Sigma: Schwellen 1–2× aus den GECLIPPTEN Werten nachschätzen, damit die
@@ -1376,20 +1413,16 @@ def stack(paths, method="sigma", kappa=2.5, normalize=True, local_norm=False,
         # fast so viel wie beim simplen Mittelwert (19.6 %), obwohl winsor ein Rejection-
         # Verfahren sein soll. Mit der Nachschaetzung: 43x genauer bei einem Ausreisser.
         for _ in range(max(0, int(sigma_iters) - 1)):
-            s = np.zeros(shape, np.float32); s2 = np.zeros(shape, np.float32)
-            cnt = np.zeros(shape, np.float32)
-            for i, p in enumerate(paths):
-                f = rd(i, p)
-                m = ((f >= lo) & (f <= hi) & valid(p)[..., None]).astype(np.float32)
-                s += f * m; s2 += f * f * m; cnt += m
-            cn = np.clip(cnt, 1.0, None)
-            mean = s / cn
-            std = np.sqrt(np.maximum(s2 / cn - mean * mean, 0))
-            lo = mean - kappa * std; hi = mean + kappa * std
+            mean, std, has_samples = moments((lo, hi))
+            # No accepted samples means no new estimate, not a zero-valued
+            # sky model. Retain prior bounds; Sigma may still reject all data.
+            lo = np.where(has_samples, mean - kappa * std, lo)
+            hi = np.where(has_samples, mean + kappa * std, hi)
+            del mean, std, has_samples
 
-    acc = np.zeros(shape, np.float32); cnt = np.zeros(shape, np.float32)
+    acc = np.zeros(shape, np.float64); cnt = np.zeros(shape, np.float64)
     for i, p in enumerate(paths):
-        f = rd(i, p)
+        f = rd(i, p).astype(np.float64)
         covered = valid(p)[..., None]
         if method == "winsor":
             f = np.clip(f, lo, hi)
@@ -1399,8 +1432,8 @@ def stack(paths, method="sigma", kappa=2.5, normalize=True, local_norm=False,
             acc += np.where(m, f * w[i], 0); cnt += m * w[i]
         log(f"    {method}-Rejection {i + 1}/{n}")
         if preview_cb and (i % _pv_every == 0 or i == n - 1):
-            preview_cb(np.clip(acc / np.clip(cnt, 1e-6, None), 0, 1), i + 1, n)
-    return acc / np.clip(cnt, 1e-6, None)
+            preview_cb(np.clip(acc / np.clip(cnt, 1e-6, None), 0, 1).astype(np.float32), i + 1, n)
+    return finish((acc / np.clip(cnt, 1e-6, None)).astype(np.float32), cnt > 0)
 
 
 def bin_image(f, factor=2):
