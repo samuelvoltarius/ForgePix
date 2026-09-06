@@ -23,7 +23,7 @@ from PySide6.QtWidgets import (
     QGroupBox, QLabel, QLineEdit, QPushButton, QFileDialog, QPlainTextEdit,
     QDoubleSpinBox, QSpinBox, QCheckBox, QMessageBox, QSplitter, QFrame, QComboBox,
     QScrollArea, QProgressBar, QToolButton, QDialog, QSlider, QStackedWidget,
-    QMenu, QInputDialog,
+    QMenu, QInputDialog, QSizePolicy,
 )
 
 try:
@@ -298,7 +298,7 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         self.auto_btn.setStyleSheet("font-size:14px;")
         self.auto_btn.clicked.connect(lambda: self.run(auto=True))
         p1.addWidget(self.auto_btn)
-        hint = QLabel(tr("Ein Klick genügt. Für mehr Kontrolle mit „Weiter →“ durch die Schritte."))
+        hint = QLabel(tr("Für weitere Einstellungen oben in den Profi-Modus wechseln."))
         hint.setObjectName("hint"); hint.setWordWrap(True)
         p1.addWidget(hint)
 
@@ -589,7 +589,7 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
                               "ankommen. Danach richtet sich die Ha/OIII-Entmischung — und ob "
                               "eine Palette echt ist: ein Dual-Band-Filter lässt kein SII durch, "
                               "eine SHO-Darstellung daraus ist synthetisch."), 17, 3)
-        ar.addWidget(QLabel(tr("Bildstil")), 22, 0); ar.addWidget(self.astro_stil, 22, 1, 1, 2)
+        ar.addWidget(QLabel(tr("Bildstil")), 22, 0); ar.addWidget(self.astro_stil, 22, 1)
         ar.addWidget(help_btn("Setzt alle Feinwerte darunter auf eine erprobte Kombination. "
                               "„Nebel betonen“ holt Farbe und dezentere Sterne (die häufigste "
                               "Beschwerde: Sterne zu hell, Nebel zu schwach — beides hat "
@@ -676,11 +676,6 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         ]
         for _w in self._astro_erweitert_widgets:
             _w.setVisible(False)
-        ar.addWidget(help_btn("Aufnahme-Filter wählen (oder wird aus dem FITS-Header erkannt). "
-                              "Dual-Band/Schmalband (Ha+OIII), z. B. SVBony SV220 oder L-eXtreme: Hα "
-                              "(rot) und OIII (teal) werden GETRENNT und als HOO neu kombiniert (rote "
-                              "Hα-Nebel + tealfarbene OIII-Bereiche). Kein Filter/Breitband: "
-                              "Farbkalibrierung + Grün-Entfernung."), 17, 3)
         ar.addWidget(QLabel(tr("Palette")), 18, 0); ar.addWidget(self.astro_palette, 18, 1, 1, 2)
         ar.addWidget(help_btn("Nur bei Dual-Band. HOO = datentreu (Hα rot, OIII teal). "
                               "SHO synthetisch = Hubble-Look (gold + blau) — das SII wird aus Hα "
@@ -763,7 +758,7 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         ag.addWidget(self.astro_starless, 20, 0, 1, 2)
         ag.addWidget(help_btn("Zusätzlich ein klassisch sternloses Nebelbild erzeugen (morphologisch, ohne "
                               "StarNet) — für getrennte Nebel-Bearbeitung. Kleine/mittlere Sterne ok."), 20, 2)
-        ar.addWidget(adv, 22, 0, 1, 4)
+        ar.addWidget(adv, 35, 0, 1, 4)
         # Vorschau-Aufbereitung: Auto (KI/Standard) oder manuelle Regler
         ar.addWidget(self.astro_auto, 14, 0, 1, 3)
         ar.addWidget(help_btn("Steuert NUR das angezeigte/exportierte Vorschau-JPG (die linearen "
@@ -781,6 +776,18 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
                             "Flats 15–30 · Bias 30+. Optional als Ordner/Datei angeben."))
         as_info.setWordWrap(True); as_info.setStyleSheet("color:#9aa09a;font-size:11px;")
         ar.addWidget(as_info, 21, 0, 1, 4)
+        self._astro_expert_widgets = []
+        for index in range(ar.count()):
+            item = ar.itemAt(index)
+            row, _, _, _ = ar.getItemPosition(index)
+            widget = item.widget()
+            if widget is not None and row not in {6, 7, 8, 17, 19, 21}:
+                self._astro_expert_widgets.append(widget)
+        for combo in g_astro.findChildren(QComboBox):
+            combo.setMinimumWidth(0)
+            combo.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
+        for label in g_astro.findChildren(QLabel):
+            label.setWordWrap(True)
         p1.addWidget(g_astro)
 
         # Hybrid — Mosaik (Mond/Sonne) ODER Fokus+Astro
@@ -1525,6 +1532,10 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         makro = self._is_makro()
         self._set_step(0)
         self.astro_group.setVisible(astro)
+        for widget in self._astro_expert_widgets:
+            widget.setVisible(pro)
+        if pro:
+            self._erweitert_umschalten(self.astro_erweitert.isChecked())
         self.mosaic_group.setVisible(hybrid)
         self.longexp_group.setVisible(longexp)
         self.hdr_group.setVisible(hdr)
@@ -1542,7 +1553,7 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         self.suggest_btn.setVisible(nav)  # KI-Vorschlag nur im Profi-Makro-Fluss
         self.run_btn.setVisible(pro)
         if not pro:
-            self.auto_btn.setText(tr("⚡  Loslegen — Ordner wählen, dann Automatik"))
+            self.auto_btn.setText(tr("Automatisch verarbeiten"))
         elif astro:
             self.auto_btn.setText(tr("🌌  Astro stacken"))
         elif hybrid:
@@ -3137,6 +3148,11 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
 
 
 def main():
+    smoke = "--smoke-gui" in sys.argv
+    smoke_directory = tempfile.TemporaryDirectory(prefix="forgepix-gui-smoke-") if smoke else None
+    if smoke:
+        os.environ["FORGEPIX_SETTINGS_FILE"] = os.path.join(smoke_directory.name, "settings.ini")
+        app_settings().setValue("check_updates", "0")
     app = QApplication(sys.argv)
     # Sprache aus den Einstellungen laden, BEVOR die Oberfläche gebaut wird
     set_language(app_settings().value("language", "de"))
@@ -3157,7 +3173,13 @@ def main():
         pass
     w = MainWindow()
     w.show()
-    sys.exit(app.exec())
+    if smoke:
+        w._choose_module(1)
+        QTimer.singleShot(500, w.close)
+    code = app.exec()
+    if smoke_directory:
+        smoke_directory.cleanup()
+    sys.exit(code)
 
 
 if __name__ == "__main__":

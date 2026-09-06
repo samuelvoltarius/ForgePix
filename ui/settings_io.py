@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
 """ui/settings_io.py — Laden/Speichern der Einstellungen (QSettings) als Mixin für MainWindow."""
 from PySide6.QtCore import QSettings
+import os
 
 
 def app_settings():
     """Zentrale QSettings-Factory — EINE Stelle für Org-/App-Namen statt elf
     verstreuter `QSettings("ServeOne", "ForgePix")`-Kopien (Tippfehler-Schutz)."""
+    isolated = os.environ.get("FORGEPIX_SETTINGS_FILE")
+    if isolated:
+        return QSettings(isolated, QSettings.IniFormat)
     return QSettings("ServeOne", "ForgePix")
 
 

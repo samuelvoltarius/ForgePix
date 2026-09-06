@@ -28,6 +28,11 @@ def main():
             frame[:, i * 40:(i + 1) * 40] = base[:, i * 40:(i + 1) * 40]
             cv2.imencode(".png", frame)[1].tofile(str(source / ("f%d.png" % i)))
         env = dict(os.environ, QT_QPA_PLATFORM="offscreen")
+        gui = subprocess.run(command + ["--smoke-gui"], env=env,
+                             capture_output=True, timeout=30, cwd=root)
+        if gui.returncode:
+            raise RuntimeError("Packaged GUI failed: " + gui.stderr.decode(errors="replace"))
+        print("GUI smoke test passed: Astro workspace opened and closed")
         result = subprocess.run(command + ["--cli", "--input", str(source), "--work", str(work)],
                                 env=env, capture_output=True, timeout=180, cwd=root)
         if result.returncode:

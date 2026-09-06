@@ -36,3 +36,28 @@ class AstroUI(unittest.TestCase):
                 window.deleteLater()
                 cls = type(self)
                 cls.app.processEvents()
+
+    def test_beginner_controls_and_nonoverlapping_expert_layout(self):
+        with patch.object(MainWindow, "_restore_settings"), \
+             patch.object(MainWindow, "_save_settings"), \
+             patch("ui.main_window._UpdateChecker.start"):
+            window = MainWindow()
+            try:
+                window._choose_module(1)
+                window.mode_box.setCurrentIndex(0)
+                self.assertTrue(window.astro_method.isHidden())
+                self.assertFalse(window.astro_dark.isHidden())
+                self.assertFalse(window.astro_filter.isHidden())
+                window.mode_box.setCurrentIndex(1)
+                self.assertFalse(window.astro_method.isHidden())
+                layout = window.astro_group.layout()
+                occupied = set()
+                for index in range(layout.count()):
+                    row, col, rows, cols = layout.getItemPosition(index)
+                    for r in range(row, row + rows):
+                        for c in range(col, col + cols):
+                            self.assertNotIn((r, c), occupied, "Astro controls overlap")
+                            occupied.add((r, c))
+            finally:
+                window.deleteLater()
+                type(self).app.processEvents()

@@ -1,5 +1,19 @@
 # Active ForgePix release work
 
+## 2026-09-06 active RC fixes
+
+Fixed overlapping Astro grid cells (advanced group versus image style, style
+selector versus details toggle, duplicate filter help). Beginner mode now keeps
+calibration, filter and session controls while technical options remain in Pro.
+Combo boxes can shrink and labels wrap instead of forcing clipped horizontal
+layouts. Added a regression test for mode switching and non-overlapping cells.
+
+The existing packaged smoke harness now launches `--smoke-gui` before CLI
+processing. It opens/closes the Astro workspace with temporary INI settings and
+updates disabled, leaving user settings untouched. Source GUI/CLI smoke passed.
+Full local suite before the final smoke-entry change: 370 tests, 3 skipped.
+Re-run full suite and exact-commit platform builds before accepting this gate.
+
 Updated 2026-09-05. This file is the working acceptance record. Older comparison
 documents that say every Siril/PixInsight gap is closed are not release evidence.
 
