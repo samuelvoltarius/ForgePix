@@ -109,6 +109,45 @@ read/shot performance. Do not relax these gates or reuse the inspected seed as
 an untouched final test. Faster GPU inference is separate from model-quality
 improvement.
 
+## Conservative mean-anchored refinement (v4, 6,000 steps)
+
+`refine_denoise_v4` addresses the v3 regressions with 50% replay of the original
+v2 distribution, extra read/shot/identity examples, a lower 1e-5 learning rate,
+and explicit weak-signal/local-mean losses. A frozen original parent plus a
+quarter-strength trainable correction preserves the parent's spatial mean for
+each 256px network input. This approximately doubles network work. It does not
+guarantee preserved means after weighted full-image overlap or correct absolute
+sky brightness; the unchanged parent may already have bias.
+
+The Spark GB10 / CUDA 12.8 run completed all 6,000 steps. Optimizer work took
+544.0 seconds; development validation including the initial parent measurement
+took 24.0 seconds. There are 27 separately gated groups of 16 scenes, including
+the original-distribution replay mixture. The 563 training and 288 validation
+patches retain the same object/source separation and original observational noise.
+
+The candidate is **rejected before final testing**. Its geometric group MSE
+ratio is 0.89097 and every image-bias gate passes, but 17 MAE, four MSE and one
+local-mean gate fail. In particular, synthetic shot-dominated MSE increases
+5.97% and M13 original-replay MSE 9.97%. These are development results, not a
+new independent quality claim. No ONNX export or app model update is performed.
+The reserved final seed **9671507 remains unused**. The selector checks all
+development gates before consuming that seed; a failed candidate cannot be
+rescued by picking results from the final test. Even a final synthetic pass
+would still require large-field/tile-phase and real-camera preservation gates.
+
+Reports: `training/reports/denoise-anchored-v4-001-*.json`. The next experiment
+should explicitly optimize pixel MAE alongside MSE and preserve the original
+read/shot/replay solution, retaining all existing non-regression gates.
+
+Reproduce in a CUDA PyTorch environment, with a new run directory:
+
+    python -m training.refine_denoise_v4 --parent runs/restoration-v2-001/denoise/checkpoint.pt --scenes datasets/scene-bank-v2 --output runs/NEW-V4-RUN --steps 6000
+    python -m training.evaluate_denoise_v4 --run runs/NEW-V4-RUN --parent runs/restoration-v2-001/denoise/checkpoint.pt
+
+The exact original run is frozen by source/data/checkpoint hashes and the plan
+written before optimization. Reusing its seed for a reproduction does not make
+the development cases independent of the already inspected experiment.
+
 ## Real-scene adaptation result (2026-09-06)
 
 `data-env/bin/python -m training.train_fits` was executed on the Spark.

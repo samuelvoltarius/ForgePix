@@ -1,0 +1,20 @@
+{
+  "completed_utc": "2026-09-06T14:52:43.670986+00:00",
+  "plan_written_utc": "2026-09-06T14:42:32.770699+00:00",
+  "training_process_completed": true,
+  "training_lock_exists": false,
+  "files": {
+    "training/refine_denoise_v4.py": "da301409653b2bf51b81487762176a258aa6b666552522e15a55cee28900edc3",
+    "training/evaluate_denoise_v4.py": "f45e924090ca2e0087323f9613eb1a110e44063d17377907a9a318b6692ab59b",
+    "training/train_restoration.py": "eec0e96ffc8a7c8773b95a81c498483f06b3af966ba145909f91ab6183b8305e",
+    "training/refine_noise_groups.py": "df582533953804c907044e433144db4c1ddf40726dbb5d8147bc0db4707ace66",
+    "training/evaluate_models.py": "2253078f5a0f5328eccdbf4a070e9941893c902a888264dc92289319557fa556",
+    "runs/denoise-anchored-v4-001/plan.json": "277ceae9d967511c9f5f3354d38fc1bebdbee900a8ba99ade419c6f44a6291eb",
+    "runs/denoise-anchored-v4-001/research_candidate.pt": "d2e00bca2043b7cf493f278c9ff430f396f1281190019fd72ace2d05615c8186",
+    "runs/denoise-anchored-v4-001/selected_parent.pt": "e2c5b901b8761908edb9cd23d3d49ee4302b8b357a5dfad4a57eca446857e417"
+  },
+  "final_seed_consumed": false,
+  "final_evaluation_exists": false,
+  "onnx_export_exists": false,
+  "bundled_models_changed": false
+}

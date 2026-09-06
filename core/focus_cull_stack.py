@@ -1289,16 +1289,15 @@ def main():
     ap.add_argument("--astro-cosmetic", action="store_true",
                     help="Astro: Hot-/Cold-Pixel vor dem Stacken entfernen (kosmetische Korrektur)")
     ap.add_argument("--astro-drizzle", type=int, choices=[1, 2], default=1,
-                    help="Astro: 2 = doppelt hochskaliert integrieren (feineres Sampling, „Drizzle-lite“)")
+                    help="Astro-Ausgaberaster: 1 = Originalgröße (auch für CFA-Drizzle), 2 = doppelte Kantenlänge. Ohne --astro-drizzle-true wird nur interpoliert.")
     ap.add_argument("--astro-drizzle-true", action="store_true",
-                    help="Astro: ECHTES Drizzle (flusserhaltendes Droppen mit pixfrac statt nur "
-                         "Hochskalieren) — braucht --astro-drizzle 2 und gediterte Subs")
+                    help="Native Quadrat-Drop-Rekonstruktion mit Gewichten und Abdeckungsmasken. "
+                         "Bayer-Samples bleiben erhalten; für CFA zunächst --astro-drizzle 1 und gut geditherte Subs verwenden.")
     ap.add_argument("--astro-pixfrac", type=float, default=0.7,
-                    help="Drop-Größe fürs echte Drizzle 0.1..1 (kleiner = schärfer, braucht mehr Frames)")
+                    help="Relative Drop-Kantenlänge für Drizzle: größer als 0 bis 1. Kleinere Drops benötigen mehr Ditherpositionen für vollständige Abdeckung.")
     ap.add_argument("--astro-pcc", action="store_true",
-                    help="Breitband: photometrischer Farbabgleich (PCC-lite) — neutralisiert die "
-                         "mittlere Farbe vieler ungesättigter Sterne (robuster als Quantil-Weißpunkt; "
-                         "kein Online-Katalog)")
+                    help="Breitband-Vorschau: nativer Stern-Weißabgleich mit lokalem Hintergrundabzug. "
+                         "Nimmt die mittlere Sternfarbe als neutral an; keine Katalog-Farbkalibrierung.")
     ap.add_argument("--astro-tps", action="store_true",
                     help="TPS-Feinregistrierung: korrigiert nach der globalen Ausrichtung die lokale "
                          "Restverzeichnung (Feldkrümmung bei Weitwinkel/Refraktor) per Thin-Plate-Spline")
@@ -1313,11 +1312,10 @@ def main():
                          "ohne StarNet) — für getrennte Nebel-Bearbeitung")
     ap.add_argument("--astro-pcc-backend",
                     choices=["auto", "lokal", "siril", "gaia", "lite"], default="auto",
-                    help="PCC-Backend: auto=eigener lokaler Gaia-Auszug→Siril-SPCC→"
-                         "astroquery-Gaia→Lite (Fallback-Kette); lokal=nur der eigene Auszug "
-                         "(OHNE Netz, gemessen rund hundertmal schneller als eine Serverabfrage); "
-                         "siril=nur Siril-SPCC (Gaia DR3); gaia=eigener astroquery-Gaia-Pfad; "
-                         "lite=stern-basiert ohne Katalog (immer offline). Nur mit --astro-pcc.")
+                    help="Farbabgleich: auto/lite=nativer Stern-Weißabgleich ohne Netz oder "
+                         "Fremdprogramme; lokal/gaia=Weißabgleich an Gaia-Sternpositionen mit "
+                         "externem Solver (keine Katalog-Farbkalibrierung); "
+                         "siril=ausdrücklich externe Siril-SPCC. Nur für die Vorschau mit --astro-pcc.")
     ap.add_argument("--gaia-feld-laden", default=None, metavar="RA,DEC[,RADIUS]",
                     help="Einmalig MIT Netz: dieses Himmelsfeld aus Gaia DR3 in den eigenen "
                          "lokalen Katalog aufnehmen (Grad; Radius standardmaessig 1.0). Danach "
@@ -1843,7 +1841,8 @@ def run_astro(input_dir, work_dir, args):
         extras.append("Hot-Pixel-Korrektur")
     if drizzle > 1:
         extras.append(f"Drizzle {drizzle}×")
-    drizzle_true = getattr(args, "astro_drizzle_true", False) and drizzle > 1
+    drizzle_true = getattr(args, "astro_drizzle_true", False)
+    drizzle_info = None
     if drizzle_true:
         extras.append(f"echtes Drizzle (pixfrac {getattr(args, 'astro_pixfrac', 0.7)})")
     phase("register")
@@ -1865,12 +1864,16 @@ def run_astro(input_dir, work_dir, args):
         # Echtes Drizzle integriert Registrierung + flusserhaltendes Droppen in EINEM Schritt
         # (kein separates Resampling/Stacken) → behält die Sub-Pixel-Dither-Diversität.
         print(f"  Drizzle-Integration ({drizzle}×, pixfrac={getattr(args, 'astro_pixfrac', 0.7)}) …")
-        result = astro.drizzle_stack(paths, scale=drizzle,
+        if getattr(args, "astro_tps", False):
+            raise ForgePixFehler("Drizzle unterstützt affine Registrierung, aber noch keine TPS-Verzeichnung. TPS für diesen Lauf deaktivieren.")
+        result, drizzle_info = astro.drizzle_stack(paths, scale=drizzle,
                                      pixfrac=getattr(args, "astro_pixfrac", 0.7),
                                      dark=dark, flat=flat, cosmetic=cosmetic,
                                      detector=getattr(args, "detector", "ORB"),
                                      ref_path=_bestref,
-                                     banding=getattr(args, "astro_banding", 0.0))
+                                     banding=getattr(args, "astro_banding", 0.0),
+                                     align_mode=align_mode, do_register=not args.no_register,
+                                     return_info=True)
     else:
         aligned = astro.register_and_cache(paths, reg_dir, dark, flat,
                                            do_register=not args.no_register,
@@ -1923,19 +1926,43 @@ def run_astro(input_dir, work_dir, args):
     binf = int(getattr(args, "astro_bin", 1) or 1)
     if binf > 1:
         result = astro.bin_image(result, binf)
+        if drizzle_info is not None:
+            h, w = result.shape[:2]
+            channels = drizzle_info["coverage_channels"][:h * binf, :w * binf]
+            channels = channels.reshape(h, binf, w, binf, 3).all(axis=(1, 3))
+            drizzle_info["coverage_channels"] = channels
+            drizzle_info["coverage"] = channels.all(axis=2)
+            weights = drizzle_info["weights"][:h * binf, :w * binf]
+            drizzle_info["weights"] = weights.reshape(h, binf, w, binf, 3).sum(axis=(1, 3))
+            drizzle_info["report"].update(post_binning=binf, output_shape=list(result.shape),
+                output_pixel_area=(binf / drizzle) ** 2,
+                coverage_fraction=float(drizzle_info["coverage"].mean()),
+                channel_coverage_fraction=channels.mean(axis=(0, 1)).tolist())
+            drizzle_info["report"]["quality_status"] = ("coverage_complete_not_quality_validated"
+                if drizzle_info["coverage"].all() else "coverage_incomplete")
+            drizzle_info["report"]["warnings"] = ([] if drizzle_info["coverage"].all() else [
+                "Nach Binning nur %.2f %% vollständig farbig belegt; mehr verschiedene Ditherpositionen oder normalen Stack verwenden."
+                % (100 * drizzle_info["coverage"].mean())])
         print(f"  {binf}×-Binning → {result.shape[1]}×{result.shape[0]} (besseres SNR, rundere Sterne)")
-    used_paths = paths if drizzle_true else [paths[int(os.path.basename(p)[4:8])] for p in aligned]
-    out = _astro_write(result, work_dir, used_paths, args, astro)
+    used_paths = (drizzle_info["report"]["source_files"] if drizzle_info is not None
+                  else [paths[int(os.path.basename(p)[4:8])] for p in aligned])
+    out = (_astro_write(result, work_dir, used_paths, args, astro, drizzle_info=drizzle_info)
+           if drizzle_info is not None else _astro_write(result, work_dir, used_paths, args, astro))
     from constants import VERSION
     report = {"version": VERSION, "input_frames": len(original_paths),
               "quality_kept": len(paths), "registered_frames": len(used_paths),
               "source_files": [os.path.basename(p) for p in used_paths],
               "integration_seconds": sum(_belichtung(p) or 0 for p in used_paths),
-              "method": args.astro_method,
+              "method": "drizzle_weighted_mean" if drizzle_info is not None else args.astro_method,
               "calibration": {k: bool(getattr(args, k, None)) for k in ("dark", "flat", "bias")},
               "calibration_validation": getattr(args, "calibration_report", {}),
               "warnings": (["No dark/flat/bias calibration frames supplied"]
                            if dark is None and flat is None and bias is None else [])}
+    if drizzle_info is not None:
+        report["drizzle"] = drizzle_info["report"]
+        report["warnings"].append("Drizzle uses an area-weighted mean without sigma/cosmic-ray rejection.")
+        if not drizzle_info["coverage"].all():
+            report["warnings"].append("Uncovered channel samples remain zero placeholders; use coverage and drizzle weights.")
     with open(os.path.join(out, "processing_report.json"), "w", encoding="utf-8") as f:
         json.dump(report, f, ensure_ascii=False, indent=2)
     print("  Ergebnis: %d von %d Aufnahmen, %.1f Minuten Gesamtbelichtung." %
@@ -2071,9 +2098,17 @@ def _maybe_upscale(result, args):
         return result
 
 
-def _astro_write(result, work_dir, paths, args, astro):
+def _astro_write(result, work_dir, paths, args, astro, *, drizzle_info=None):
     """Astro-Ergebnis schreiben: optional Hintergrund-Extraktion, dann 16-bit-Linear +
     32-bit-Linear (GraXpert/StarNet/PixInsight) + gestreckte Vorschau-JPG."""
+    if drizzle_info is not None:
+        coverage_channels = np.asarray(drizzle_info["coverage_channels"], bool)
+        if coverage_channels.shape != result.shape:
+            raise ForgePixFehler("Drizzle-Abdeckungsmaske passt nicht zum Ergebnis.")
+        if not coverage_channels.all() and any((getattr(args, "bg_extract", False),
+                getattr(args, "astro_deconv", False), getattr(args, "astro_synthstar", False),
+                float(getattr(args, "astro_denoise", 0.0) or 0.0) > 0)):
+            raise ForgePixFehler("Der Drizzle-Stack enthält Abdeckungslücken. Hintergrundkorrektur, Dekonvolution, Sternkorrektur und Entrauschen für diesen Lauf deaktivieren; erst auf vollständig bedeckte Bereiche zuschneiden.")
     _filt = aufnahmefilter(args, paths)
     if _filt is not None and getattr(args, "dualband", False):
         import filters as _flt
@@ -2133,6 +2168,31 @@ def _astro_write(result, work_dir, paths, args, astro):
         import tempfile
         stack_dir = tempfile.mkdtemp(prefix="stack-", dir=work_dir)
     base = os.path.splitext(os.path.basename(paths[0]))[0]
+    drizzle_header = None
+    if drizzle_info is not None:
+        import tifffile
+        from astropy.io import fits
+        result = result.copy()
+        result[~coverage_channels] = 0
+        drizzle_header = fits.Header({"CREATOR": "ForgePix", "IMAGETYP": "MASTER LIGHT",
+            "FPLINEAR": True, "FPCOV": "coverage.tif", "FPDRZWGT": "drizzle_weights.tif",
+            "FPDRZCOV": "coverage_channels.tif", "FPDRZKER": "SQUARE",
+            "FPDRZSCL": drizzle_info["report"]["scale"], "FPDRZPFR": drizzle_info["report"]["pixfrac"],
+            "FPDRZCFA": drizzle_info["report"]["cfa_preserved"],
+            "FPPIXARE": drizzle_info["report"]["output_pixel_area"]})
+        drizzle_header.add_history("Square-drop weighted mean; missing samples require coverage/weight masks.")
+        drizzle_header.add_history("Brightness per reference pixel area; aperture sums need FPPIXARE.")
+        for key, value in drizzle_info["report"].get("reference_metadata", {}).items():
+            drizzle_header[key] = value
+        drizzle_header["NCOMBINE"] = len(drizzle_info["report"]["source_files"])
+        drizzle_info["report"]["export_channel_order"] = "RGB"
+        tifffile.imwrite(os.path.join(stack_dir, "coverage.tif"), drizzle_info["coverage"].astype(np.uint8), metadata=None)
+        tifffile.imwrite(os.path.join(stack_dir, "coverage_channels.tif"), coverage_channels[..., ::-1].astype(np.uint8),
+                         photometric="rgb", metadata=None)
+        tifffile.imwrite(os.path.join(stack_dir, "drizzle_weights.tif"), drizzle_info["weights"][..., ::-1],
+                         photometric="rgb", metadata=None)
+        with open(os.path.join(stack_dir, "drizzle_report.json"), "w", encoding="utf-8") as stream:
+            json.dump(drizzle_info["report"], stream, indent=2, ensure_ascii=False)
     lin = np.clip(result * 65535, 0, 65535).astype(np.uint16)
     imwrite(os.path.join(stack_dir, f"{args.prefix}{base}_astro_linear.tif"),
                 lin, [int(cv2.IMWRITE_TIFF_COMPRESSION), 1])
@@ -2148,8 +2208,13 @@ def _astro_write(result, work_dir, paths, args, astro):
     try:
         import tifffile
         out32 = os.path.join(stack_dir, f"{args.prefix}{base}_astro_linear_32bit.tif")
+        tiff_options = ({"metadata": None, "description": json.dumps({"forgepix": True, "linear": True,
+                            "FPCOV": "coverage.tif", "FPDRZWGT": "drizzle_weights.tif",
+                            "FPDRZCOV": "coverage_channels.tif", "FPPIXARE": drizzle_info["report"]["output_pixel_area"],
+                            "fits_header": drizzle_header.tostring(sep="\n", endcard=False, padding=False)})}
+                            if drizzle_header is not None else {})
         tifffile.imwrite(out32, cv2.cvtColor(result.astype(np.float32), cv2.COLOR_BGR2RGB),
-                         photometric="rgb")
+                         photometric="rgb", **tiff_options)
         print(f"  32-bit Linear (GraXpert/StarNet++/PixInsight): {out32}")
     except Exception as e:
         raise RuntimeError(f"32-bit-TIFF konnte nicht gespeichert werden: {e}") from e
@@ -2159,7 +2224,7 @@ def _astro_write(result, work_dir, paths, args, astro):
             rgb = cv2.cvtColor(result.astype(np.float32), cv2.COLOR_BGR2RGB)
             data = np.moveaxis(rgb, -1, 0)            # (H,W,C) -> (C,H,W) FITS-Konvention
             outf = os.path.join(stack_dir, f"{args.prefix}{base}_astro_linear.fits")
-            hdu = fits.PrimaryHDU(data.astype(np.float32))
+            hdu = fits.PrimaryHDU(data.astype(np.float32), header=drizzle_header)
             hdu.header["BSCALE"] = 1.0
             hdu.header["IMAGETYP"] = "MASTER LIGHT"
             hdu.header["CREATOR"] = "ForgePix"
@@ -2188,8 +2253,8 @@ def _astro_write(result, work_dir, paths, args, astro):
             # OIII is measured in green/blue. Broadband white balance and SCNR
             # would remove actual narrowband signal, especially with SII/OIII.
             return res.copy()
-        # Breitband-Farbe: optional echtes PCC (Siril-SPCC/Gaia/Lite-Fallback) statt einfachem
-        # Farbabgleich, + SCNR. PCC arbeitet auf den LINEAREN Daten (richtig vor dem Strecken).
+        # Preview-only color balance before stretching. Auto is native aperture-based
+        # stellar white balance; external SPCC must be explicitly selected.
         if getattr(args, "astro_pcc", False):
             try:
                 import photometric
@@ -2202,7 +2267,7 @@ def _astro_write(result, work_dir, paths, args, astro):
                                           siril_path=getattr(args, "siril_path", None),
                                           astrometry_key=(akey or None))
             except Exception as e:
-                print(f"  PCC fehlgeschlagen ({e}) → Standard-Farbabgleich", file=sys.stderr)
+                print(f"  Stern-Farbabgleich fehlgeschlagen ({e}) → einfacher Vorschau-Farbabgleich", file=sys.stderr)
                 cal = astro.color_balance(res, color_s)
         else:
             cal = astro.color_balance(res, color_s)
@@ -2236,7 +2301,7 @@ def _astro_write(result, work_dir, paths, args, astro):
             except Exception as e:
                 print(f"  (KI-Aufbereitung übersprungen: {e})", file=sys.stderr)
         # Dual-Band: Hα/OIII trennen → HOO (rot+teal), SHO (gold+blau) oder Foraxx (dynamisch).
-        # Breitband läuft über _broadband (oben) — inkl. echtem PCC-Pfad bei --astro-pcc.
+        # Breitband läuft über _broadband (oben) — inkl. gewähltem Stern-Weißabgleich bei --astro-pcc.
         # (Hier stand eine zweite _broadband-Definition, die die echte PCC-Variante überschrieb.)
         if dualband:
             base_view = _dualband_view(result, getattr(args, "palette", "hoo"), astro,

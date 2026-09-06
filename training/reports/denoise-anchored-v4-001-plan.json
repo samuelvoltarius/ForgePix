@@ -1,0 +1,451 @@
+{
+  "schema_version": 1,
+  "task": "denoise",
+  "status": "experimental",
+  "release_approved": false,
+  "planned_steps": 6000,
+  "batch": 4,
+  "learning_rate": 1e-05,
+  "final_learning_rate": 1e-06,
+  "training_seed": 609064,
+  "development_seed": 830125,
+  "reserved_final_seed": 9671507,
+  "reserved_final_scenes": 128,
+  "previous_consumed_final_seeds": [
+    9237401,
+    9374209,
+    9518063
+  ],
+  "final_evaluation_rule": "Do not consume the reserved final seed unless a changed checkpoint passes every development gate. A failed development candidate cannot be selected by final-test results.",
+  "device": {
+    "type": "cuda",
+    "name": "NVIDIA GB10",
+    "cuda_version": "12.8",
+    "torch_version": "2.12.0.dev20260407+cu128",
+    "cudnn_version": 92000
+  },
+  "resources": {
+    "free_disk_bytes": 207014408192,
+    "cuda_free_bytes": 8298614784,
+    "cuda_total_bytes": 130596048896,
+    "mem_available_kib": 28671240,
+    "unrelated_jobs_modified": false
+  },
+  "parent_checkpoint_sha256": "e2c5b901b8761908edb9cd23d3d49ee4302b8b357a5dfad4a57eca446857e417",
+  "training_source_sha256": "da301409653b2bf51b81487762176a258aa6b666552522e15a55cee28900edc3",
+  "original_generator_source_sha256": "eec0e96ffc8a7c8773b95a81c498483f06b3af966ba145909f91ab6183b8305e",
+  "noise_groups_source_sha256": "df582533953804c907044e433144db4c1ddf40726dbb5d8147bc0db4707ace66",
+  "final_evaluator_source_sha256": "2253078f5a0f5328eccdbf4a070e9941893c902a888264dc92289319557fa556",
+  "provenance": {
+    "manifest_sha256": "6eb9e4ec5b11ab09f822bb83f3b5e788b261f4d29bc5101a274c81013918ca92",
+    "train_sha256": "865c0191533ccc96d7054b0803d46e820a6a96fa8440d88af45d79ce058485b2",
+    "validation_sha256": "5ea9370dc32152974c87d4d0fe056dc585bf5a2b1402f64e99e84d7b18a73003",
+    "counts": {
+      "train": 563,
+      "validation": 288,
+      "test": 0
+    },
+    "objects": {
+      "train": [
+        "M101",
+        "M42",
+        "M8",
+        "M82",
+        "NGC7009"
+      ],
+      "validation": [
+        "M13",
+        "M16"
+      ]
+    },
+    "source_noise_retained": true,
+    "independent_exposure_pairs": false,
+    "source_files": [
+      {
+        "uri": "mast:HST/product/hst_10918_01_acs_wfc_f555w_j9o401_drc.fits",
+        "sha256": "70ced98f0858ffb48e96506ef96d4d1327282d1f44aa5ea6bf8df181908a2422",
+        "split": "train",
+        "group": "M101",
+        "rights": "PUBLIC",
+        "policy": "https://archive.stsci.edu/publishing/data-use"
+      },
+      {
+        "uri": "mast:HST/product/hst_10918_01_wfpc2_pc_f450w_u9o401_drz.fits",
+        "sha256": "fe59b56e0a54f8651ea42c608e62b7717082fd121468b7686e867707ecdf6340",
+        "split": "train",
+        "group": "M101",
+        "rights": "PUBLIC",
+        "policy": "https://archive.stsci.edu/publishing/data-use"
+      },
+      {
+        "uri": "mast:HST/product/hst_10918_01_wfpc2_pc_f814w_u9o401_drz.fits",
+        "sha256": "03dc4c1110d2b65f99bb7d0f430bbef4027c05156d0c921e9403358def95a0ac",
+        "split": "train",
+        "group": "M101",
+        "rights": "PUBLIC",
+        "policy": "https://archive.stsci.edu/publishing/data-use"
+      },
+      {
+        "uri": "mast:HST/product/hst_11635_03_wfc3_uvis_f469n_ib3p03_drc.fits",
+        "sha256": "2afdf2fc1e086428ee841e1215d2a86aee237dac69df0aebd22f795716bf0e14",
+        "split": "train",
+        "group": "M101",
+        "rights": "PUBLIC",
+        "policy": "https://archive.stsci.edu/publishing/data-use"
+      },
+      {
+        "uri": "mast:HST/product/hst_13361_01_wfc3_uvis_f547m_icae01_drc.fits",
+        "sha256": "b3488f446ced0cdec47c3a4b16bcc078d0d8b0aaba7d6f770ce4d20360fe6546",
+        "split": "train",
+        "group": "M101",
+        "rights": "PUBLIC",
+        "policy": "https://archive.stsci.edu/publishing/data-use"
+      },
+      {
+        "uri": "mast:HST/product/hst_13361_01_wfc3_uvis_f657n_icae01_drc.fits",
+        "sha256": "c539b3ddf3998c2d13549ff80dd70f3f79e5ce173fda9bc3e8d1181e43151dcc",
+        "split": "train",
+        "group": "M101",
+        "rights": "PUBLIC",
+        "policy": "https://archive.stsci.edu/publishing/data-use"
+      },
+      {
+        "uri": "mast:HST/product/hst_10349_30_acs_wfc_f435w_j95430_drc.fits",
+        "sha256": "7bd548be3e8fd69991b9584a74b71e1790e6f41bf8b9dad63eb318cb523f6a91",
+        "split": "validation",
+        "group": "M13",
+        "rights": "PUBLIC",
+        "policy": "https://archive.stsci.edu/publishing/data-use"
+      },
+      {
+        "uri": "mast:HST/product/hst_10349_30_acs_wfc_f625w_j95430_drc.fits",
+        "sha256": "ad4fe5254d5cdd89a196d41dc696cf4e8fc9302aae4175fefab33084e3ce59d5",
+        "split": "validation",
+        "group": "M13",
+        "rights": "PUBLIC",
+        "policy": "https://archive.stsci.edu/publishing/data-use"
+      },
+      {
+        "uri": "mast:HST/product/hst_10349_30_acs_wfc_f658n_j95430_drc.fits",
+        "sha256": "d42ffddcdde8fb4b82f57809b538ddf4a1148bdf44bd21d8f766952cb307e271",
+        "split": "validation",
+        "group": "M13",
+        "rights": "PUBLIC",
+        "policy": "https://archive.stsci.edu/publishing/data-use"
+      },
+      {
+        "uri": "mast:HST/product/hst_10775_57_acs_wfc_f606w_j9l957_drc.fits",
+        "sha256": "2e4bb3d6ae10d41b8ae838410b58524c3e95e86131485be40d96a4dbbe1b4c02",
+        "split": "validation",
+        "group": "M13",
+        "rights": "PUBLIC",
+        "policy": "https://archive.stsci.edu/publishing/data-use"
+      },
+      {
+        "uri": "mast:HST/product/hst_10775_57_acs_wfc_f814w_j9l957_drc.fits",
+        "sha256": "1e86aea387d81bdcb0065cefc0740aab027c68a6901647ae2791333840375ba0",
+        "split": "validation",
+        "group": "M13",
+        "rights": "PUBLIC",
+        "policy": "https://archive.stsci.edu/publishing/data-use"
+      },
+      {
+        "uri": "mast:HST/product/hst_11233_07_wfpc2_pc_f450w_ua2l07_drz.fits",
+        "sha256": "3b00ae8d3c32d69018871434a736e0f98e1d1f86cb42bd0fec4b8fa62d4ce051",
+        "split": "validation",
+        "group": "M13",
+        "rights": "PUBLIC",
+        "policy": "https://archive.stsci.edu/publishing/data-use"
+      },
+      {
+        "uri": "mast:HST/product/hst_10393_11_acs_wfc_f435w_j95d11_drc.fits",
+        "sha256": "ded42df72acb98a68377a01e5829d2b70afe76b15c73cc94581b405411a90a36",
+        "split": "validation",
+        "group": "M16",
+        "rights": "PUBLIC",
+        "policy": "https://archive.stsci.edu/publishing/data-use"
+      },
+      {
+        "uri": "mast:HST/product/hst_10393_11_acs_wfc_f502n_j95d11_drc.fits",
+        "sha256": "5f143b11821539d8a4fa023e0bc42f71a131636f736f58983c9119c416333e50",
+        "split": "validation",
+        "group": "M16",
+        "rights": "PUBLIC",
+        "policy": "https://archive.stsci.edu/publishing/data-use"
+      },
+      {
+        "uri": "mast:HST/product/hst_10393_11_acs_wfc_f555w_j95d11_drc.fits",
+        "sha256": "59583083f78ffeeae08e2527820fa22c739d5a66c5f923ec64f47c7e5bd07380",
+        "split": "validation",
+        "group": "M16",
+        "rights": "PUBLIC",
+        "policy": "https://archive.stsci.edu/publishing/data-use"
+      },
+      {
+        "uri": "mast:HST/product/hst_10393_11_acs_wfc_f658n_j95d11_drc.fits",
+        "sha256": "56aeffa21ba81a2c2c6e0bf216f5a14fe4bfe37fec4116336659dbdd7171abbc",
+        "split": "validation",
+        "group": "M16",
+        "rights": "PUBLIC",
+        "policy": "https://archive.stsci.edu/publishing/data-use"
+      },
+      {
+        "uri": "mast:HST/product/hst_10393_11_acs_wfc_f814w_j95d11_drc.fits",
+        "sha256": "f26056e3d30fe209f22208412316a92de76f6a0a2407fca811774fe816c560ac",
+        "split": "validation",
+        "group": "M16",
+        "rights": "PUBLIC",
+        "policy": "https://archive.stsci.edu/publishing/data-use"
+      },
+      {
+        "uri": "mast:HST/product/hst_11981_02_wfpc2_pc_f439w_uba302_drz.fits",
+        "sha256": "467d60ac1bdb8c0f706f01d6498c89f1dae5c6a7ec65477ae29f9999429da822",
+        "split": "validation",
+        "group": "M16",
+        "rights": "PUBLIC",
+        "policy": "https://archive.stsci.edu/publishing/data-use"
+      },
+      {
+        "uri": "mast:HST/product/hst_10246_06_wfpc2_pc_f439w_u93k06_drz.fits",
+        "sha256": "f03f29b23466aa15fb68d171cb5e1e89596cd2b2e7a0db255b65df170dfd32e7",
+        "split": "train",
+        "group": "M42",
+        "rights": "PUBLIC",
+        "policy": "https://archive.stsci.edu/publishing/data-use"
+      },
+      {
+        "uri": "mast:HST/product/hst_10246_06_wfpc2_pc_f814w_u93k06_drz.fits",
+        "sha256": "f8164708482cfe0cd780cfb47a6e85105e26e754e07b83490bbdfc4a16a8c6ae",
+        "split": "train",
+        "group": "M42",
+        "rights": "PUBLIC",
+        "policy": "https://archive.stsci.edu/publishing/data-use"
+      },
+      {
+        "uri": "mast:HST/product/hst_10246_07_wfpc2_pc_f656n_u93k07_drz.fits",
+        "sha256": "9d1415011e5aad10979ef6826d19a6ee86363a02d7f3f31348136d43e6a0a462",
+        "split": "train",
+        "group": "M42",
+        "rights": "PUBLIC",
+        "policy": "https://archive.stsci.edu/publishing/data-use"
+      },
+      {
+        "uri": "mast:HST/product/hst_10246_08_acs_wfc_f775w_j93k08_drc.fits",
+        "sha256": "56fc8ba47a799ea0315575fa224061abfc9e592098ff1a53f16397262d4a3699",
+        "split": "train",
+        "group": "M42",
+        "rights": "PUBLIC",
+        "policy": "https://archive.stsci.edu/publishing/data-use"
+      },
+      {
+        "uri": "mast:HST/product/hst_10246_0b_acs_wfc_f435w_j93k0b_drc.fits",
+        "sha256": "0fac119d8e09e1514408788b545bba6545bd3c1da7afc0df3c8b39054fc3f331",
+        "split": "train",
+        "group": "M42",
+        "rights": "PUBLIC",
+        "policy": "https://archive.stsci.edu/publishing/data-use"
+      },
+      {
+        "uri": "mast:HST/product/hst_10246_0c_acs_wfc_f555w_j93k0c_drc.fits",
+        "sha256": "cadb4441ac82dade68145636ff2ad9c7c2a5cb70746a2b336801ac4d0e62e3c1",
+        "split": "train",
+        "group": "M42",
+        "rights": "PUBLIC",
+        "policy": "https://archive.stsci.edu/publishing/data-use"
+      },
+      {
+        "uri": "mast:HST/product/hst_10547_08_acs_hrc_f606w_j9fh08_drz.fits",
+        "sha256": "7b3a9d3d06c8afdb91f0bb7962a91b420cec8df1e75489d38e9a2af01cd2fb21",
+        "split": "train",
+        "group": "M8",
+        "rights": "PUBLIC",
+        "policy": "https://archive.stsci.edu/publishing/data-use"
+      },
+      {
+        "uri": "mast:HST/product/hst_11981_01_wfpc2_pc_f439w_uba301_drz.fits",
+        "sha256": "84f03d409480e2f4bfc5ad7f3bec27dff5a93694287b8214062b34b787fbd4e6",
+        "split": "train",
+        "group": "M8",
+        "rights": "PUBLIC",
+        "policy": "https://archive.stsci.edu/publishing/data-use"
+      },
+      {
+        "uri": "mast:HST/product/hst_11981_01_wfpc2_pc_f487n_uba301_drz.fits",
+        "sha256": "1b8c2162dac1ff0b3d242565bc21f23ff321d43b41e3f42adfb2667bbf6bcc98",
+        "split": "train",
+        "group": "M8",
+        "rights": "PUBLIC",
+        "policy": "https://archive.stsci.edu/publishing/data-use"
+      },
+      {
+        "uri": "mast:HST/product/hst_11981_01_wfpc2_pc_f547m_uba301_drz.fits",
+        "sha256": "2d8eb5e0ccc4ee0b7417909624e4c7ab7224ea19a718e7e9629f2558691cb408",
+        "split": "train",
+        "group": "M8",
+        "rights": "PUBLIC",
+        "policy": "https://archive.stsci.edu/publishing/data-use"
+      },
+      {
+        "uri": "mast:HST/product/hst_11981_01_wfpc2_pc_f656n_uba301_drz.fits",
+        "sha256": "298b95de92f4a4f747a73b091ec86af3e09b382aac7ec379af060aaae673ea2f",
+        "split": "train",
+        "group": "M8",
+        "rights": "PUBLIC",
+        "policy": "https://archive.stsci.edu/publishing/data-use"
+      },
+      {
+        "uri": "mast:HST/product/hst_11981_01_wfpc2_pc_f675w_uba301_drz.fits",
+        "sha256": "e3698ff7965c2c1be2fcb236aaf88bc8f5114433cdf0c55dfabbefb628981765",
+        "split": "train",
+        "group": "M8",
+        "rights": "PUBLIC",
+        "policy": "https://archive.stsci.edu/publishing/data-use"
+      },
+      {
+        "uri": "mast:HST/product/hst_10272_75_acs_hrc_f814w_j8z475_drz.fits",
+        "sha256": "4650c9529ab76955943ba191c9aaa38658794df1a4800e025aa4aba7b3680d3e",
+        "split": "train",
+        "group": "M82",
+        "rights": "PUBLIC",
+        "policy": "https://archive.stsci.edu/publishing/data-use"
+      },
+      {
+        "uri": "mast:HST/product/hst_10609_06_acs_hrc_f550m_j9fb06_drz.fits",
+        "sha256": "d167e883ed73be03304b8b0883632b654140f00d20d606bb3166a1606f01c015",
+        "split": "train",
+        "group": "M82",
+        "rights": "PUBLIC",
+        "policy": "https://archive.stsci.edu/publishing/data-use"
+      },
+      {
+        "uri": "mast:HST/product/hst_10609_09_acs_hrc_f658n_j9fb09_drz.fits",
+        "sha256": "8bef7dbd40ea409a6db6ebe31b1ffa36463236f11fd05f29d5b32fe37c317741",
+        "split": "train",
+        "group": "M82",
+        "rights": "PUBLIC",
+        "policy": "https://archive.stsci.edu/publishing/data-use"
+      },
+      {
+        "uri": "mast:HST/product/hst_10609_09_acs_wfc_f660n_j9fb09_drc.fits",
+        "sha256": "523ddba92cc4dea4d5905b5bcbfb6f2c997a8ee38cad9a796f2f2891db0ed194",
+        "split": "train",
+        "group": "M82",
+        "rights": "PUBLIC",
+        "policy": "https://archive.stsci.edu/publishing/data-use"
+      },
+      {
+        "uri": "mast:HST/product/hst_10776_11_acs_wfc_f435w_j9l011_drc.fits",
+        "sha256": "e2d2753cb91e84ae404f72fd4bdb0fd7cd57d702c4fcd44d3fc18f97bb2d7439",
+        "split": "train",
+        "group": "M82",
+        "rights": "PUBLIC",
+        "policy": "https://archive.stsci.edu/publishing/data-use"
+      },
+      {
+        "uri": "mast:HST/product/hst_10776_12_acs_wfc_f555w_j9l012_drc.fits",
+        "sha256": "7f3d12243cbb4dda30e1183dfff29ba92ef243a0c2f0b5af428e05a10f9f3efe",
+        "split": "train",
+        "group": "M82",
+        "rights": "PUBLIC",
+        "policy": "https://archive.stsci.edu/publishing/data-use"
+      },
+      {
+        "uri": "mast:HST/product/hst_11122_17_wfpc2_pc_f502n_ua0117_drz.fits",
+        "sha256": "2e1680cf2a0bfb0947a5003afc7bf2ba8739fd68943b24f21f318e7dc1e8c523",
+        "split": "train",
+        "group": "NGC7009",
+        "rights": "PUBLIC",
+        "policy": "https://archive.stsci.edu/publishing/data-use"
+      },
+      {
+        "uri": "mast:HST/product/hst_11122_17_wfpc2_pc_f656n_ua0117_drz.fits",
+        "sha256": "5b3f68f0bb39a4984fa20befff9564d0644b7bb3046e0ea257c2f05ed7705c55",
+        "split": "train",
+        "group": "NGC7009",
+        "rights": "PUBLIC",
+        "policy": "https://archive.stsci.edu/publishing/data-use"
+      },
+      {
+        "uri": "mast:HST/product/hst_11122_17_wfpc2_pc_f658n_ua0117_drz.fits",
+        "sha256": "058be955da8763e8b383316049efa682502c7a42cad9e8e5272376956caddd32",
+        "split": "train",
+        "group": "NGC7009",
+        "rights": "PUBLIC",
+        "policy": "https://archive.stsci.edu/publishing/data-use"
+      },
+      {
+        "uri": "mast:HST/product/hst_6117_03_wfpc2_pc_f469n_u32e03_drz.fits",
+        "sha256": "e2472fa6dec5005b1b0ba3c60910d7dcaac4b368729bedcd74bf6e1c410fbb5f",
+        "split": "train",
+        "group": "NGC7009",
+        "rights": "PUBLIC",
+        "policy": "https://archive.stsci.edu/publishing/data-use"
+      },
+      {
+        "uri": "mast:HST/product/hst_6117_03_wfpc2_pc_f631n_u32e03_drz.fits",
+        "sha256": "a268300a321e127f59df6223b523d16be5eed6798218de50b12a169fe69639d2",
+        "split": "train",
+        "group": "NGC7009",
+        "rights": "PUBLIC",
+        "policy": "https://archive.stsci.edu/publishing/data-use"
+      },
+      {
+        "uri": "mast:HST/product/hst_6117_03_wfpc2_pc_f673n_u32e03_drz.fits",
+        "sha256": "a99677dd821848029dbca22842fec52e72dcbb25e57cfbf2eb37b7ef8087e3b6",
+        "split": "train",
+        "group": "NGC7009",
+        "rights": "PUBLIC",
+        "policy": "https://archive.stsci.edu/publishing/data-use"
+      }
+    ]
+  },
+  "schedule": [
+    "original_replay",
+    "original_replay",
+    "original_replay",
+    "original_replay",
+    "original_replay",
+    "original_replay",
+    "original_replay",
+    "original_replay",
+    "original_replay",
+    "original_replay",
+    "original_replay",
+    "original_replay",
+    "identity",
+    "identity",
+    "low_noise",
+    "low_noise",
+    "read_dominated",
+    "read_dominated",
+    "shot_dominated",
+    "shot_dominated",
+    "correlated_small",
+    "correlated_medium",
+    "correlated_large",
+    "row_noise"
+  ],
+  "alpha": 0.25,
+  "architecture": "Frozen original NAFNet plus quarter-strength trainable NAFNet difference with its per-input spatial mean removed",
+  "development_group_count": 27,
+  "development_scenes_per_group": 16,
+  "gates": {
+    "rule": "Every development group must be no worse than unchanged mono parent on every metric; original v3 numerical floors unchanged",
+    "metrics": [
+      "mse",
+      "mae",
+      "absolute_image_bias",
+      "local_mean_rms"
+    ],
+    "absolute_numerical_floors": {
+      "mse": 1e-12,
+      "mae": 1e-08,
+      "absolute_image_bias": 1e-08,
+      "local_mean_rms": 1e-08
+    },
+    "maximum_ratio": 1.0,
+    "final_rule": "Overall and each noise-class MSE, overall stellar flux absolute error, faint-structure MSE and absolute image bias must not regress against original mono parent",
+    "full_image_rule": "Before adoption separately require large-field overlap/tile-phase and scientific preservation gates; per-tile mean anchoring does not guarantee bias-free weighted full-image output"
+  },
+  "limitations": "HST targets retain observational noise; no real independent noise pairs or held-out camera qualification. The architecture approximately doubles network inference work. Per-input mean anchoring preserves the parent's mean, not true absolute sky or the mean after full-image weighted overlap. No automatic activation."
+}

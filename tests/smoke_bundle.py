@@ -57,6 +57,47 @@ def main():
         if not any(im is not None and im.size and float(im.std()) > 1 for im in images):
             raise RuntimeError("No readable, nonconstant stack output")
         print("CLI smoke test passed: readable focus stack exported")
+        # Exercise the native scientific import -> CFA Drizzle -> export path
+        # inside the package. Identical undithered inputs intentionally leave
+        # incomplete per-color coverage; they must not be inpainted or debayered.
+        raw_directory = Path(d) / "cfa"
+        raw_directory.mkdir()
+        yy, xx = np.mgrid[:40, :48]
+        raw = (-.01 + .5 * np.exp(-((xx - 23)**2 + (yy - 19)**2) / 12)).astype(np.float32)
+        raw[15, 20] = 1.4
+        raw_hashes = {}
+        for index in range(3):
+            path = raw_directory / ("Light-%d.fits" % index)
+            fits.writeto(path, raw, fits.Header({"BAYERPAT": "RGGB", "EXPTIME": 300,
+                                                "IMAGETYP": "LIGHT", "FILTER": "SII/OIII"}))
+            raw_hashes[path] = hashlib.sha256(path.read_bytes()).hexdigest()
+        drizzle_work = Path(d) / "drizzle-work"
+        reconstructed = subprocess.run(command + ["--cli", "--input", str(raw_directory),
+            "--work", str(drizzle_work), "--astro", "--astro-drizzle", "2", "--astro-drizzle-true",
+            "--no-register", "--no-astro-stretch", "--fits-out"],
+            env=env, capture_output=True, timeout=180, cwd=root)
+        if reconstructed.returncode:
+            raise RuntimeError("Packaged CFA Drizzle failed: " + reconstructed.stderr.decode(errors="replace"))
+        records = list(drizzle_work.rglob("drizzle_report.json"))
+        if len(records) != 1:
+            raise RuntimeError("Packaged Drizzle did not export its scientific coverage report")
+        record = json.loads(records[0].read_text(encoding="utf-8"))
+        if not record.get("cfa_preserved"):
+            raise RuntimeError("Packaged Drizzle lost native CFA measurements")
+        science_path = next(records[0].parent.glob("*_astro_linear.fits"))
+        cube = np.moveaxis(fits.getdata(science_path, memmap=False), 0, -1)
+        header = fits.getheader(science_path)
+        coverage = tifffile.imread(records[0].parent / header["FPDRZCOV"]).astype(bool)
+        weights = tifffile.imread(records[0].parent / header["FPDRZWGT"])
+        if (cube.shape != (80, 96, 3) or not np.isfinite(cube).all()
+                or coverage.shape != cube.shape or not np.array_equal(coverage, weights > 0)
+                or not np.all(cube[~coverage] == 0) or not np.any(~coverage)
+                or not np.any(cube[coverage] < 0) or not np.any(cube[coverage] > 1)):
+            raise RuntimeError("Packaged Drizzle violated float/CFA/coverage preservation")
+        for path, expected in raw_hashes.items():
+            if hashlib.sha256(path.read_bytes()).hexdigest() != expected:
+                raise RuntimeError("Drizzle changed its raw source FITS")
+        print("Native CFA Drizzle smoke passed: signed/HDR FITS and explicit missing-color coverage")
         # Run every shipped model through the packaged entry point, so an
         # omitted ONNX DLL or data file cannot pass a mere GUI startup check.
         y, x = np.mgrid[:71, :83]

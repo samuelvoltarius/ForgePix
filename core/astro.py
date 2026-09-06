@@ -881,75 +881,178 @@ def register_and_cache(paths, out_dir, dark=None, flat=None, do_register=True,
 
 
 def drizzle_stack(paths, scale=2, pixfrac=0.7, dark=None, flat=None, cosmetic=False,
-                  detector="ORB", ref_path=None, banding=0.0, log=log_print):
-    """ECHTES Drizzle (Variable-Pixel Linear Reconstruction, Fruchter & Hook — Punktkernel,
-    inverse Formulierung). Anders als „Drizzle-lite“ (jeden Frame einzeln hochskalieren und mitteln,
-    was die Interpolation verschmiert) wird hier das Resampling AUFGESCHOBEN: jeder Roh-Frame wird
-    über seine Sub-Pixel-Registrierung mit einem geschrumpften „Drop“ (pixfrac) direkt auf das feine
-    Ausgabegitter getropft, Fluss UND Gewicht akkumuliert. Aus geditherten Subs entsteht so echte
-    Auflösungsrückgewinnung (kleinere, schärfere Sterne) statt nur Hochskalierung.
+                  detector="ORB", ref_path=None, banding=0.0, log=log_print, *,
+                  align_mode="rotate", do_register=True, transforms=None, masks=None,
+                  cfa="auto", return_info=False, cancel=None):
+    """Exact square-drop integration, including raw Bayer samples when specified.
 
-    scale: Gitter-Faktor (2 = doppelte Kantenlänge). pixfrac: Drop-Größe 0.1..1 (kleiner = schärfer,
-    braucht aber mehr Frames für volle Abdeckung; 0.7 ist ein guter Kompromiss)."""
-    scale = int(max(2, scale))
-    pf = float(np.clip(pixfrac, 0.1, 1.0))
-    ref = read_calibrated(_ref_path(paths, ref_path), dark, flat)
-    if banding:
-        ref = fix_banding(ref, strength=banding)
-    if cosmetic:
-        ref = cosmetic_correct(ref)
-    refg = _gray(ref)
-    H, W = ref.shape[:2]
-    ch = ref.shape[2] if ref.ndim == 3 else 1
-    OH, OW = H * scale, W * scale
-    flux = np.zeros((OH, OW, ch), np.float32)
-    wsum = np.zeros((OH, OW), np.float32)
-    yy, xx = np.mgrid[0:OH, 0:OW].astype(np.float32)
-    used = 0
-    for k, p in enumerate(paths):
-        f = read_calibrated(p, dark, flat)
-        if f.shape[:2] != (H, W):
-            f = cv2.resize(f, (W, H))
-        if banding:
-            f = fix_banding(f, strength=banding)
-        if cosmetic:
-            f = cosmetic_correct(f)
-        if f.ndim == 2:
-            f = f[..., None]
-        fg = _gray(f)
-        M = _estimate_star_transform(refg, fg)
-        if M is None:
-            # Dreiecks-Matching als 2. Versuch (wie in register_and_cache), bevor ORB rät
-            M = _estimate_star_transform_robust(refg, fg)
-        if M is None:
-            M = _estimate_rotation(refg, fg, detector)
-        if M is None:
+    Float32 output uses input/reference pixel brightness units. Aperture sums
+    require the output pixel area 1/scale². Float64 sums retain signed/HDR values;
+    uncovered channel samples are zero placeholders, never interpolated. Call
+    return_info=True to retain weights, channel coverage and registration history.
+    This is a weighted mean, without rejection, WCS distortion or TPS resampling.
+    """
+    from drizzle import DrizzleAccumulator, _cancelled
+    _cancelled(cancel)
+    paths = list(paths)
+    if not paths:
+        raise ForgePixFehler("Drizzle: keine Eingabeaufnahmen.")
+    if align_mode not in ("shift", "rotate") or cfa not in ("auto", "preserve", "debayer"):
+        raise ForgePixFehler("Drizzle: unbekannter Registrierungs- oder CFA-Modus.")
+    if transforms is not None and len(transforms) != len(paths):
+        raise ForgePixFehler("Drizzle: eine Transformation pro Aufnahme ist erforderlich.")
+    if masks is not None and len(masks) != len(paths):
+        raise ForgePixFehler("Drizzle: eine Gewichtsmaske pro Aufnahme ist erforderlich.")
+    reference = _ref_path(paths, ref_path)
+    headers = {}
+    for path in paths:
+        _cancelled(cancel)
+        extension = os.path.splitext(path)[1].lower()
+        if extension in (".fit", ".fits", ".fts"):
+            headers[path] = require_astropy("Drizzle-Sensormetadaten").getheader(path)
+        elif extension in (".tif", ".tiff"):
+            import json
+            import tifffile
+            with tifffile.TiffFile(path) as file:
+                if file.pages[0].dtype == np.uint8:
+                    raise ForgePixFehler("Drizzle benötigt lineare FITS oder mindestens 16-Bit-TIFF, keine 8-Bit-Anzeigebilder.")
+                try:
+                    metadata = json.loads(file.pages[0].description or "{}")
+                except (ValueError, TypeError):
+                    metadata = {}
+            if not isinstance(metadata, dict):
+                metadata = {}
+            headers[path] = (require_astropy("TIFF-Drizzle-Metadaten").Header.fromstring(metadata["fits_header"], sep="\n")
+                             if isinstance(metadata.get("fits_header"), str) else {})
+            if metadata.get("linear") is False:
+                raise ForgePixFehler("Drizzle: dieses TIFF wurde bereits gestreckt. Lineare Aufnahmen verwenden.")
+            for key in ("FPCOV", "BAYERPAT"):
+                if key in metadata:
+                    headers[path][key] = metadata[key]
+            if headers[path].get("BAYERPAT"):
+                raise ForgePixFehler("CFA-Drizzle benötigt rohe FITS-Sensorsamples; CFA-TIFF wird noch nicht unterstützt.")
+        else:
+            raise ForgePixFehler("Drizzle benötigt lineare FITS- oder TIFF-Aufnahmen; JPEGs und andere Anzeigebilder sind keine Messdaten.")
+        if headers[path].get("FPLINEAR") is False:
+            raise ForgePixFehler("Drizzle: die Aufnahme wurde bereits gestreckt. Lineare Aufnahmen verwenden.")
+    patterns = {path: str(header.get("BAYERPAT", "")).strip().upper() for path, header in headers.items()}
+    if any(pattern and pattern not in _BAYER2CV for pattern in patterns.values()):
+        raise ForgePixFehler("Drizzle: unbekanntes CFA-Muster im FITS-Header.")
+    preserve_cfa = cfa != "debayer" and bool(patterns[reference])
+    if cfa == "preserve" and not preserve_cfa:
+        raise ForgePixFehler("CFA-Drizzle benötigt ein explizites Bayer-Muster im FITS-Header.")
+    if preserve_cfa and not all(patterns.values()):
+        raise ForgePixFehler("Drizzle: rohe CFA- und bereits debayerte/Mono-Aufnahmen nicht mischen.")
+    if not preserve_cfa and cfa != "debayer" and any(patterns.values()):
+        raise ForgePixFehler("Drizzle: die Referenz und die Serie haben unterschiedliche CFA-Datenarten.")
+    if preserve_cfa and (cosmetic or banding):
+        raise ForgePixFehler("CFA-Drizzle erhält die Sensorsamples. Hotpixel-/Banding-Korrektur hier deaktivieren; rohe Darks/Flats sind unterstützt.")
+    exposures = [float(h.get("EXPTIME", h.get("EXPOSURE", 0)) or 0) for h in headers.values()]
+    known_exposures = [value for value in exposures if value > 0]
+    if known_exposures and max(known_exposures) / min(known_exposures) > 1.01:
+        raise ForgePixFehler("Drizzle: unterschiedliche Belichtungszeiten getrennt integrieren; Belichtungsnormalisierung ist hier noch nicht implementiert.")
+
+    def prepare(path):
+        _cancelled(cancel)
+        if preserve_cfa:
+            frame = calibrate(_read_float(path, debayer=False), dark, flat)
+            if frame.ndim != 2:
+                raise ForgePixFehler("CFA-Drizzle benötigt unveränderte zweidimensionale Sensorsamples.")
+            header = headers[path]
+            offsets = [header.get(key, 0) for key in ("XBAYROFF", "YBAYROFF")]
+            if any(isinstance(v, bool) or not isinstance(v, (int, float)) or not np.isfinite(v) or int(v) != v for v in offsets):
+                raise ForgePixFehler("Drizzle: Bayer-Offsets müssen ganze Pixel sein.")
+            tile = np.array(["BGR".index(colour) for colour in patterns[path]]).reshape(2, 2)
+            tile = np.roll(tile, (-int(offsets[1]) % 2, -int(offsets[0]) % 2), axis=(0, 1))
+            colours = tile[np.arange(frame.shape[0])[:, None] % 2, np.arange(frame.shape[1])[None, :] % 2]
+            # Debayer ONLY the registration proxy. The accumulator sees raw CFA.
+            proxy = debayer_float(frame, patterns[path], *offsets)
+        else:
+            frame, colours = read_calibrated(path, dark, flat), None
+            if banding:
+                frame = fix_banding(frame, strength=banding)
+            if cosmetic:
+                frame = cosmetic_correct(frame)
+            proxy = frame
+        return frame, colours, _gray(proxy)
+
+    ref, ref_colours, refg = prepare(reference)
+    accumulator = DrizzleAccumulator(ref.shape[:2], scale=scale, pixfrac=pixfrac, channels=3, cancel=cancel)
+    used, skipped, registrations = [], [], []
+    identity = np.array([[1., 0., 0.], [0., 1., 0.]])
+    log("    Drizzle: flächengewichtetes Mittel ohne Sigma-Rejection; keine erfundenen Pixel in Abdeckungslücken.")
+    for index, path in enumerate(paths):
+        _cancelled(cancel)
+        frame, colours, gray = (ref, ref_colours, refg) if path == reference else prepare(path)
+        if frame.shape != ref.shape:
+            raise ForgePixFehler("Drizzle: Aufnahme passt nicht zur Referenzform: %s (%s statt %s)" % (path, frame.shape, ref.shape))
+        if transforms is not None:
+            matrix = transforms[index]
+        elif not do_register or path == reference:
+            matrix = identity
+        elif align_mode == "shift":
+            matrix = _estimate_star_shift(refg, gray)
+        else:
+            matrix = _estimate_star_transform(refg, gray)
+            if matrix is None:
+                matrix = _estimate_star_transform_robust(refg, gray)
+            if matrix is None:
+                matrix = _estimate_rotation(refg, gray, detector)
+        if matrix is None:
+            skipped.append(str(path))
+            log("    Drizzle: keine belastbare Registrierung, Aufnahme ausgelassen: %s" % path)
             continue
-        Ms = (scale * M).astype(np.float32)              # frame -> Ausgabegitter
-        Minv = cv2.invertAffineTransform(Ms)             # Ausgabegitter -> frame
-        xs = Minv[0, 0] * xx + Minv[0, 1] * yy + Minv[0, 2]
-        ys = Minv[1, 0] * xx + Minv[1, 1] * yy + Minv[1, 2]
-        rx = np.round(xs); ry = np.round(ys)
-        inb = (rx >= 0) & (rx < W) & (ry >= 0) & (ry < H)
-        wgt = ((np.abs(xs - rx) <= pf / 2) & (np.abs(ys - ry) <= pf / 2) & inb).astype(np.float32)
-        val = cv2.remap(f, xs, ys, interpolation=cv2.INTER_NEAREST,
-                        borderMode=cv2.BORDER_CONSTANT)
-        if val.ndim == 2:
-            val = val[..., None]
-        flux += val * wgt[..., None]
-        wsum += wgt
-        used += 1
-        log(f"    Drizzle {used}/{len(paths)} (pixfrac {pf:.2f}, {scale}×)")
-    if used == 0:
-        raise RuntimeError("Drizzle: kein Frame ausrichtbar")
-    out = flux / np.clip(wsum[..., None], 1e-6, None)
-    holes = wsum < 1e-6
-    if holes.any():                                       # nie getroffene Pixel sanft füllen
-        u8 = (np.clip(out, 0, 1) * 255).astype(np.uint8)
-        filled = cv2.inpaint(u8, holes.astype(np.uint8), 3, cv2.INPAINT_TELEA)
-        out[holes] = filled[holes].astype(np.float32) / 255.0
-        log(f"    Drizzle: {int(holes.sum())} unbedeckte Pixel gefüllt (mehr Frames/größeres pixfrac hilft)")
-    return np.clip(out, 0, 1)
+        input_weight = 1. if masks is None else masks[index]
+        coverage_name = headers[path].get("FPCOV")
+        if coverage_name:
+            from pathlib import Path
+            import tifffile
+            if not isinstance(coverage_name, str) or Path(coverage_name).name != coverage_name or "\\" in coverage_name:
+                raise ForgePixFehler("Drizzle: ungültiger Verweis auf die Eingabeabdeckung.")
+            coverage_path = Path(path).resolve().parent / coverage_name
+            if not coverage_path.is_file() or coverage_path.resolve().parent != Path(path).resolve().parent:
+                raise ForgePixFehler("Drizzle: benötigte Eingabeabdeckung fehlt oder liegt außerhalb des Bildordners.")
+            mask = tifffile.imread(coverage_path)
+            if mask.shape != frame.shape[:2] or not np.isin(mask, (0, 1)).all():
+                raise ForgePixFehler("Drizzle: ungültige Eingabeabdeckungsmaske.")
+            input_weight = np.asarray(input_weight) * mask
+        if not accumulator.add(frame, matrix, weight=input_weight, channel_map=colours):
+            skipped.append(str(path))
+            log("    Drizzle: keine gültigen Pixelbeiträge im Ausgaberaster, Aufnahme ausgelassen: %s" % path)
+            continue
+        used.append(str(path))
+        registrations.append({"source": str(path), "matrix_input_to_reference": np.asarray(matrix).tolist()})
+        log("    Drizzle %d/%d (Quadrat-Drop, pixfrac %.3f, Scale %.3f)" % (len(used), len(paths), accumulator.pixfrac, accumulator.scale))
+    if not used:
+        raise ForgePixFehler("Drizzle: kein Frame ausrichtbar.")
+    image, weights, covered_channels = accumulator.finish()
+    coverage = covered_channels.all(axis=2)
+    report = {"schema_version": 1, "kernel": "square_exact_affine_overlap", "method": "weighted_mean",
+              "scale": accumulator.scale, "pixfrac": accumulator.pixfrac, "reference": str(reference),
+              "input_shape": list(ref.shape), "output_shape": list(image.shape), "source_files": used,
+              "skipped_files": skipped, "registrations": registrations, "cfa_preserved": preserve_cfa,
+              "channel_order": "BGR", "coverage_fraction": float(coverage.mean()),
+              "quality_status": "coverage_incomplete" if not coverage.all() else "coverage_complete_not_quality_validated",
+              "channel_coverage_fraction": covered_channels.mean(axis=(0, 1)).tolist(),
+              "units": "input flux per reference pixel area; affine Jacobian corrected",
+              "output_pixel_area": 1 / accumulator.scale ** 2,
+              "weights": "sum of input weights times fractional drop overlap; not exposure counts",
+              "uncovered_samples": "zero placeholder with zero weight; never filled",
+              "accumulation_dtype": "float64", "output_dtype": "float32",
+              "reference_metadata": {key: headers[reference][key] for key in
+                  ("OBJECT", "FILTER", "INSTRUME", "TELESCOP", "EXPTIME", "GAIN", "OFFSET", "XBINNING", "YBINNING")
+                  if key in headers[reference]},
+              "limitations": ["No sigma rejection or cosmic-ray rejection", "No WCS distortion or TPS",
+                              "No exposure normalization", "Coverage does not prove recovered detail or independent noise"]}
+    report["warnings"] = []
+    if not coverage.all():
+        warning = ("Nur %.2f %% vollständig farbig belegt. Abdeckungslücken bleiben markiert; "
+                   "für CFA mehr verschiedene Ditherpositionen oder den normalen Stack verwenden." % (100 * coverage.mean()))
+        report["warnings"].append(warning)
+        log("    Drizzle: " + warning)
+    if return_info:
+        return image, {"weights": weights, "coverage_channels": covered_channels, "coverage": coverage, "report": report}
+    return image
 
 
 def _bg_sigma(f, coverage=None):
@@ -2270,39 +2373,15 @@ def color_balance(f, strength=1.0):
 
 
 def photometric_balance(f, strength=1.0, max_stars=300, log=log_print):
-    """Photometrischer Farbabgleich (PCC-lite, OHNE Online-Sternkatalog): Anders als die einfache
-    Quantil-Kalibrierung misst dies die ECHTEN Farben vieler einzelner, UNGESÄTTIGTER Sterne und
-    gleicht die Kanäle so ab, dass die mittlere Sternfarbe neutral wird (Sterne sind im Mittel ~weiß).
-    Robuster als der 99.5%-Quantil-Weißpunkt, weil gesättigte Sternkerne und gefärbter Nebel
-    ausgeschlossen werden → echte, glaubwürdige Nebelfarben statt Farbstich.
+    """Compatibility entry point for native stellar white balance, not PCC/SPCC.
 
-    Hinweis: Das ist KEIN katalogbasiertes SPCC (das bräuchte Plate-Solving + Gaia-Abfrage online);
-    es nutzt nur die statistische Weiß-Annahme der Sternpopulation im Bild — treu und reproduzierbar."""
-    if f is None or f.ndim != 3 or f.shape[2] != 3 or strength <= 0:
+    Circular stellar fluxes use a local background annulus. Unreliable fields
+    remain unchanged; signed/HDR pixels survive the fitted color transform.
+    """
+    if f is None or f.ndim != 3 or f.shape[2] != 3:
         return f
-    src = f.astype(np.float32)
-    bg = np.array([np.quantile(src[..., c], 0.30) for c in range(3)], np.float32)
-    out = np.clip(src - bg.reshape(1, 1, 3), 0, None)          # 1) Hintergrund neutralisieren
-    g = _gray(out)
-    pts = _star_centroids(g / (g.max() + 1e-6), max_stars=max_stars)
-    cols = []
-    H, W = g.shape[:2]
-    for x, y in pts:
-        xi, yi = int(round(x)), int(round(y))
-        if 2 <= xi < W - 2 and 2 <= yi < H - 2:
-            patch = out[yi - 2:yi + 3, xi - 2:xi + 3].reshape(-1, 3)
-            peak = float(patch.max())
-            if 0.02 < peak < 0.95:                            # ungesättigt UND über dem Rauschen
-                cols.append(patch.mean(0))
-    if len(cols) < 15:                                        # zu wenige Sterne → Quantil-Fallback
-        log(f"    PCC-lite: nur {len(cols)} brauchbare Sterne → Standard-Farbabgleich")
-        return color_balance(f, strength)
-    med = np.median(np.array(cols, np.float32), axis=0) + 1e-6   # mittlere Sternfarbe (BGR)
-    scale = np.clip(float(med.mean()) / med, 0.4, 2.5).astype(np.float32)
-    out = np.clip(out * scale.reshape(1, 1, 3), 0, None)      # 2) mittleren Stern → neutral
-    log(f"    PCC-lite: {len(cols)} Sterne, Kanal-Skalierung BGR={np.round(scale, 3)}")
-    s = float(min(1.0, max(0.0, strength)))
-    return out if s >= 1.0 else np.clip(src * (1 - s) + out * s, 0, None)
+    from star_color import balance
+    return balance(f, strength, max_stars, log=log)
 
 
 def neutralize_background(f, pct=25.0):

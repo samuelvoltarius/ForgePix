@@ -43,6 +43,7 @@ from ui.welcome import WelcomeMixin
 from ui.settings_io import SettingsMixin, app_settings
 from ui.export import ExportMixin
 from ui.result_view import ResultMixin
+from ui.project_workflow import ProjectMixin
 from ui.components import (CompareSlider, AdjustDialog, RetouchDialog, ControlPointDialog,
                            help_btn, _row, reveal_in_files, open_path, notify, CollapsibleSection)
 
@@ -50,7 +51,7 @@ from ui.components import (CompareSlider, AdjustDialog, RetouchDialog, ControlPo
 from ui.workers import _AnalyzeWorker, _ToolWorker, _UpdateChecker, _version_newer  # noqa: F401
 
 
-class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWindow):
+class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, ProjectMixin, QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle(tr("ForgePix — Astrofotos einfach entwickeln"))
@@ -206,7 +207,7 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         self.astrometry_key.setPlaceholderText(tr("dein Astrometry.net-API-Key (nova.astrometry.net/api)"))
         gt.addWidget(QLabel("Astrometry.net"), 4, 0); gt.addWidget(self.astrometry_key, 4, 1)
         gt.addWidget(help_btn("Optionaler API-Key von nova.astrometry.net (My Profile) für blindes "
-                              "Plate-Solving im echten PCC, wenn kein Siril/lokaler Solver da ist. "
+                              "Plate-Solving beim ausdrücklich gewählten Gaia-Weißabgleich. "
                               "Dein eigener Key — nur lokal gespeichert, nie geteilt/committet."), 4, 3)
         gt.addWidget(help_btn("Pfade zu deinen installierten Tools. Leer lassen = ForgePix sucht "
                               "selbst (PATH + übliche Orte). GraXpert/StarNet → Ein-Klick in der "
@@ -482,22 +483,28 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         self.starless_neb.valueChanged.connect(lambda _v: self._recombine_starless())
         self.starless_stars.valueChanged.connect(lambda _v: self._recombine_starless())
         self.astro_drizzle = QComboBox()
-        self.astro_drizzle.addItem(tr("Aus"), 1)
+        self.astro_drizzle.addItem(tr("Originalgröße (1×)"), 1)
         self.astro_drizzle.addItem(tr("2× (feineres Sampling)"), 2)
         # Neue Pro-Optionen (v1.21): echtes Drizzle, TPS-Feinregistrierung, PCC, GHS-Regler
-        self.astro_drizzle_true = QCheckBox(tr("Echtes Drizzle (pixfrac-Drop statt nur Hochskalieren)"))
+        self.astro_drizzle_true = QCheckBox(tr("Drizzle aus den Originalmessungen"))
         self.astro_tps = QCheckBox(tr("TPS-Feinregistrierung (lokale Restverzeichnung korrigieren)"))
         self.astro_pcc = QCheckBox(tr("Sternbasierter Farbabgleich"))
         self.astro_pcc_backend = QComboBox()
-        self.astro_pcc_backend.addItem(tr("Automatische Auswahl (kann externe Programme verwenden)"),
+        self.astro_pcc_backend.addItem(tr("Automatisch: nativer Stern-Weißabgleich"),
                                        "auto")
         self.astro_pcc_backend.addItem(tr("Gaia-Sternpositionen: Weißabgleich (lokaler Katalog)"), "lokal")
-        self.astro_pcc_backend.addItem(tr("Siril-SPCC (Gaia DR3)"), "siril")
+        self.astro_pcc_backend.addItem(tr("Siril-SPCC (extern, Gaia DR3)"), "siril")
         self.astro_pcc_backend.addItem(tr("Gaia-Sternpositionen: Weißabgleich (Online-Katalog)"), "gaia")
-        self.astro_pcc_backend.addItem(tr("Lite (stern-basiert, offline)"), "lite")
+        self.astro_pcc_backend.addItem(tr("Nativer Stern-Weißabgleich (offline)"), "lite")
         self.astro_oscsensor = QLineEdit()
         self.astro_oscsensor.setPlaceholderText(tr("optional: OSC-Sensorname wie in Siril (z. B. Sony IMX294)"))
-        self.astro_narrowband = QCheckBox(tr("Schmalband-SPCC (Dual-Band)"))
+        self.astro_narrowband = QCheckBox(tr("Siril: Schmalband-Modus"))
+        def _color_backend_controls():
+            external_spcc = self.astro_pcc_backend.currentData() == "siril"
+            self.astro_oscsensor.setEnabled(external_spcc)
+            self.astro_narrowband.setEnabled(external_spcc)
+        self.astro_pcc_backend.currentIndexChanged.connect(_color_backend_controls)
+        _color_backend_controls()
         self.astro_deconv = QCheckBox(tr("Dekonvolution (Richardson-Lucy, PSF aus Sternen)"))
         self.astro_deconv_iter = QSpinBox(); self.astro_deconv_iter.setRange(3, 50)
         self.astro_deconv_iter.setValue(15)
@@ -719,14 +726,17 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
                               "überabgetasteten Daten (große Sterne/FWHM)."), 6, 3)
         # — Registrierung & Drizzle —
         _subhead(tr("Registrierung & Drizzle"), 7)
-        ag.addWidget(QLabel(tr("Drizzle")), 8, 0); ag.addWidget(self.astro_drizzle, 8, 1, 1, 2)
-        ag.addWidget(help_btn("Drizzle 2× = doppelt hochskaliert integrieren (feineres Sampling bei "
-                              "unterabgetasteten Daten; „Drizzle-lite“)."), 8, 3)
+        ag.addWidget(QLabel(tr("Ausgabegröße")), 8, 0); ag.addWidget(self.astro_drizzle, 8, 1, 1, 2)
+        ag.addWidget(help_btn("1× behält die Originalgröße bei und ist der Ausgangspunkt für Bayer-Drizzle. "
+                              "2× benötigt mehr Ditherpositionen und Speicher. Aktiviere die "
+                              "Drizzle-Rekonstruktion darunter, um Originalmessungen zu integrieren. "
+                              "Ohne diese Option wird eine Vergrößerung interpoliert."), 8, 3)
         ag.addWidget(self.astro_drizzle_true, 9, 0, 1, 3)
-        ag.addWidget(help_btn("Echtes Drizzle (Variable-Pixel Linear Reconstruction): tropft jeden "
-                              "Sub mit geschrumpftem Drop (pixfrac) flusserhaltend aufs feine Gitter "
-                              "→ echte Auflösungsrückgewinnung aus geditherten Subs. Braucht Drizzle 2× "
-                              "und gediterte Aufnahmen."), 9, 3)
+        ag.addWidget(help_btn("Verteilt die Originalmessungen flächenanteilig auf das neue Raster. "
+                              "Bei Bayer-FITS bleiben die einzelnen Farb-Sensormessungen erhalten. "
+                              "Gut verteilte Ditherpositionen sind nötig; fehlende Pixel bleiben "
+                              "in der Abdeckung sichtbar. CFA-Drizzle unterstützt derzeit keine "
+                              "zusätzliche kosmetische oder Banding-Korrektur. Mehr Speicher wird benötigt."), 9, 3)
         ag.addWidget(self.astro_tps, 10, 0, 1, 3)
         ag.addWidget(help_btn("Thin-Plate-Spline-Feinregistrierung: korrigiert nach der globalen "
                               "Ausrichtung die RESTVERZEICHNUNG (Feldkrümmung bei Weitwinkel/Refraktor) "
@@ -737,12 +747,14 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         ag.addWidget(self.astro_ghs_d, 12, 1); ag.addWidget(self.astro_ghs_b, 12, 2)
         ag.addWidget(self.astro_ghs_sp, 12, 3)
         # — Farbkalibrierung (PCC) —
-        _subhead(tr("Farbkalibrierung (PCC)"), 13)
+        _subhead(tr("Farbabgleich für die Vorschau"), 13)
         ag.addWidget(self.astro_pcc, 14, 0, 1, 2)
         ag.addWidget(self.astro_pcc_backend, 14, 2, 1, 1)
-        ag.addWidget(help_btn("Echte photometrische Farbkalibrierung. Auto: Siril-SPCC (Plate-Solve + "
-                              "Gaia DR3) → eigener Gaia-Pfad (astroquery) → Lite (stern-basiert, offline). "
-                              "Siril braucht Netz/Gaia-Katalog; Lite läuft immer."), 14, 3)
+        ag.addWidget(help_btn("Auto misst Sternfarben mit lokalem Hintergrundabzug direkt in ForgePix. "
+                              "Der mittlere Stern wird als neutral angenommen; das ist keine "
+                              "Katalog-Farbkalibrierung. Gaia wählt nur Sternpositionen. "
+                              "Siril-SPCC ist eine ausdrücklich wählbare externe Funktion. "
+                              "Bekannte Schmalbanddaten behalten ihre Linienfarben."), 14, 3)
         ag.addWidget(self.astro_oscsensor, 15, 0, 1, 3)
         ag.addWidget(self.astro_narrowband, 15, 3)
         # — Schärfung & Rauschen —
@@ -1367,6 +1379,7 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
 
         self.result_path = None
         self.before_path = None
+        self._setup_projects()
         self._restore_settings()
         self._set_step(0)
         self._set_task()
@@ -1817,7 +1830,7 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
                 args += ["--astro-pcc", "--astro-pcc-backend", self.astro_pcc_backend.currentData()]
                 if self.astro_oscsensor.text().strip():
                     args += ["--astro-oscsensor", self.astro_oscsensor.text().strip()]
-                if self.astro_narrowband.isChecked():
+                if self.astro_narrowband.isChecked() and self.astro_pcc_backend.currentData() == "siril":
                     args += ["--astro-narrowband"]
                 if self.astrometry_key.text().strip():
                     args += ["--astrometry-key", self.astrometry_key.text().strip()]
@@ -1844,7 +1857,7 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
                 args += ["--astro-komet"]
             if self.astro_cosmetic.isChecked():
                 args += ["--astro-cosmetic"]
-            if self.astro_drizzle.currentData() and int(self.astro_drizzle.currentData()) > 1:
+            if self.astro_drizzle_true.isChecked() or int(self.astro_drizzle.currentData()) > 1:
                 args += ["--astro-drizzle", str(self.astro_drizzle.currentData())]
                 if self.astro_drizzle_true.isChecked():
                     args += ["--astro-drizzle-true"]
@@ -2531,6 +2544,7 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
         self._set_preview(out)
         self.cmp_btn.setEnabled(True); self.adjust_btn.setEnabled(True)
         self.open_btn.setEnabled(True); self.openfolder_btn.setEnabled(True)
+        self._record_project_result(getattr(self, "_project_step_label", None) or tr("Bildbearbeitung"))
 
     def _run_tool_async(self, title, fn, on_ok):
         """Lang laufendes Extern-Tool im Hintergrund-Thread ausführen (GUI friert nicht ein).
@@ -2547,7 +2561,11 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
 
         def ok(out):
             busy.accept()
-            on_ok(out)
+            self._project_step_label = title
+            try:
+                on_ok(out)
+            finally:
+                self._project_step_label = None
 
         def fail(msg):
             busy.accept()
@@ -2776,6 +2794,7 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
             if not self._ai_display_for_current():
                 self._append(tr("Die Vergleichsvorschau fehlt. Lineare Daten können weiterhin kopiert werden.") + "\n")
         self._append(f"\n📥 Reimportiert: {os.path.basename(f)} — bereit zum Bearbeiten/Exportieren.\n")
+        self._record_project_result(tr("Ergebnis eingelesen"))
 
     # ---------- Fokus-Werkzeuge ----------
     def analyze_series(self):
@@ -3225,6 +3244,9 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, QMainWin
 
     # ---------- Einstellungen merken ----------
     def closeEvent(self, e):
+        if getattr(self, "_project_worker", None) is not None:
+            e.ignore()
+            return
         restore_dialog = getattr(self, "_ai_restore_dialog", None)
         if restore_dialog is not None and restore_dialog.is_running():
             # Let cooperative cancellation finish before Qt destroys the dialog

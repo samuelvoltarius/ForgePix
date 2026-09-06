@@ -166,6 +166,9 @@ class ResultMixin:
         """Beliebiges Bild (auch 16-bit TIFF) zu 8-bit-PNG für die Anzeige."""
         if not src or not os.path.isfile(src):
             return None
+        project_preview = getattr(self, "_project_preview_for", lambda _path: None)(src)
+        if project_preview:
+            return project_preview
         display = self._ai_display_for_current()
         if self._is_ai_result_current() and display is None:
             # Never mix an old linked after-preview with a newly stretched
@@ -293,6 +296,7 @@ class ResultMixin:
         self.retouch_btn.setEnabled(retouch_ok)
         self._build_filmstrip(res)
         self._show_quality()
+        self._record_project_result(tr("Stack-Ergebnis"))
 
     def _set_view(self, mode):
         """Mittleres Bild umschalten: Ergebnis · Fokus-Map · Geister-Karte."""
@@ -373,6 +377,25 @@ class ResultMixin:
                 d = _json.load(open(rep)); kept = d.get("kept"); total = d.get("total")
         except Exception:
             pass
+        # Scientific integration counts and channel support come from the actual
+        # integration report, rather than the generic photographic cull report.
+        drizzle = None
+        try:
+            import json as _json
+            processing_path = os.path.join(os.path.dirname(self.result_path), "processing_report.json")
+            if os.path.isfile(processing_path):
+                with open(processing_path, encoding="utf-8") as stream:
+                    processing = _json.load(stream)
+                used, inputs = processing.get("registered_frames"), processing.get("input_frames")
+                if type(used) is int and type(inputs) is int and 0 <= used <= inputs:
+                    kept, total = used, inputs
+                detail = processing.get("drizzle")
+                if isinstance(detail, dict):
+                    fraction = detail.get("coverage_fraction")
+                    if type(fraction) in (int, float) and 0 <= fraction <= 1:
+                        drizzle = float(fraction)
+        except (OSError, ValueError, TypeError, AttributeError):
+            pass
         if q:
             findings = " · ".join(q.get("findings", []))
             self._append(f"\n🏅 Stack-Qualität: {q.get('score')}/100 — {findings}\n")
@@ -388,6 +411,14 @@ class ResultMixin:
         if kept is not None and total:
             html.append(f"<b>{kept}</b> " + tr("von") + f" <b>{total}</b> " + tr("Fotos verwendet")
                         + f" <span style='color:#9aa09a'>({total - kept} " + tr("aussortiert") + ")</span><br><br>")
+        if drizzle is not None:
+            color = "#d4a72c" if drizzle < .99 else "#58a6ff"
+            html.append("<b style='color:" + color + "'>" +
+                        tr("Drizzle: {percent} % vollständig farbig belegt").format(percent=f"{drizzle * 100:.3f}") +
+                        "</b><br>")
+            if drizzle < 1:
+                html.append(tr("Nicht belegte Farbkanäle bleiben markiert. Bei größeren Lücken mehr "
+                               "Ditherpositionen oder den normalen Stack verwenden.") + "<br><br>")
         if q and q.get("findings"):
             html.append("<b>" + tr("Befunde") + ":</b><ul style='margin:4px 0 0 -18px'>")
             for f in q["findings"]:

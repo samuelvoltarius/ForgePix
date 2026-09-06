@@ -1,0 +1,176 @@
+{
+  "schema_version": 1,
+  "release_approved": false,
+  "bundled_weights_changed": false,
+  "parent_checkpoint_sha256": "e2c5b901b8761908edb9cd23d3d49ee4302b8b357a5dfad4a57eca446857e417",
+  "device": {
+    "type": "cuda",
+    "name": "NVIDIA GB10",
+    "cuda_version": "12.8",
+    "torch_version": "2.12.0.dev20260407+cu128",
+    "cudnn_version": 92000
+  },
+  "reserved_final_seed": 9671507,
+  "final_seed_consumed": false,
+  "decision": "reject_development_candidate_retain_original_parent",
+  "final_evaluation_performed": false,
+  "development_failures": [
+    {
+      "group": "synthetic/read_dominated",
+      "metric": "mae",
+      "candidate": 0.0013872835552319884,
+      "parent": 0.0012219022028148174,
+      "limit": 0.0012219122028148174
+    },
+    {
+      "group": "synthetic/shot_dominated",
+      "metric": "mse",
+      "candidate": 6.895981186971767e-06,
+      "parent": 6.50750553177204e-06,
+      "limit": 6.50750653177204e-06
+    },
+    {
+      "group": "synthetic/shot_dominated",
+      "metric": "mae",
+      "candidate": 0.0013884023064747453,
+      "parent": 0.0012013958767056465,
+      "limit": 0.0012014058767056465
+    },
+    {
+      "group": "synthetic/correlated_small",
+      "metric": "mae",
+      "candidate": 0.0012070804368704557,
+      "parent": 0.0010843802010640502,
+      "limit": 0.0010843902010640501
+    },
+    {
+      "group": "synthetic/correlated_medium",
+      "metric": "mse",
+      "candidate": 1.8557086150394753e-05,
+      "parent": 1.8537732103141025e-05,
+      "limit": 1.8537733103141024e-05
+    },
+    {
+      "group": "synthetic/correlated_medium",
+      "metric": "mae",
+      "candidate": 0.0025435835123062134,
+      "parent": 0.0024868743494153023,
+      "limit": 0.0024868843494153022
+    },
+    {
+      "group": "synthetic/correlated_large",
+      "metric": "mae",
+      "candidate": 0.002230984391644597,
+      "parent": 0.002220981987193227,
+      "limit": 0.0022209919871932268
+    },
+    {
+      "group": "synthetic/correlated_large",
+      "metric": "local_mean_rms",
+      "candidate": 0.0017009988659992814,
+      "parent": 0.0016981192165985703,
+      "limit": 0.0016981292165985703
+    },
+    {
+      "group": "synthetic/row_noise",
+      "metric": "mae",
+      "candidate": 0.0015312510076910257,
+      "parent": 0.0014502054546028376,
+      "limit": 0.0014502154546028375
+    },
+    {
+      "group": "synthetic/original_replay",
+      "metric": "mse",
+      "candidate": 4.899434316030238e-06,
+      "parent": 4.773448836203897e-06,
+      "limit": 4.773449836203898e-06
+    },
+    {
+      "group": "synthetic/original_replay",
+      "metric": "mae",
+      "candidate": 0.0011880170786753297,
+      "parent": 0.0010760088916867971,
+      "limit": 0.001076018891686797
+    },
+    {
+      "group": "M13/read_dominated",
+      "metric": "mae",
+      "candidate": 0.0012878384441137314,
+      "parent": 0.0010986733250319958,
+      "limit": 0.0010986833250319957
+    },
+    {
+      "group": "M13/shot_dominated",
+      "metric": "mae",
+      "candidate": 0.0007603372796438634,
+      "parent": 0.0007265780586749315,
+      "limit": 0.0007265880586749316
+    },
+    {
+      "group": "M13/correlated_small",
+      "metric": "mae",
+      "candidate": 0.0018788558663800359,
+      "parent": 0.001774599077180028,
+      "limit": 0.001774609077180028
+    },
+    {
+      "group": "M13/correlated_medium",
+      "metric": "mae",
+      "candidate": 0.0019786639604717493,
+      "parent": 0.0019363198662176728,
+      "limit": 0.0019363298662176728
+    },
+    {
+      "group": "M13/row_noise",
+      "metric": "mae",
+      "candidate": 0.0015041530132293701,
+      "parent": 0.0014288771199062467,
+      "limit": 0.0014288871199062466
+    },
+    {
+      "group": "M13/original_replay",
+      "metric": "mse",
+      "candidate": 6.466413651651237e-06,
+      "parent": 5.880155185877811e-06,
+      "limit": 5.880156185877811e-06
+    },
+    {
+      "group": "M13/original_replay",
+      "metric": "mae",
+      "candidate": 0.0012826047604903579,
+      "parent": 0.001160834333859384,
+      "limit": 0.001160844333859384
+    },
+    {
+      "group": "M16/read_dominated",
+      "metric": "mae",
+      "candidate": 0.001993925543501973,
+      "parent": 0.001933955936692655,
+      "limit": 0.001933965936692655
+    },
+    {
+      "group": "M16/shot_dominated",
+      "metric": "mae",
+      "candidate": 0.0016868540551513433,
+      "parent": 0.0016293794615194201,
+      "limit": 0.00162938946151942
+    },
+    {
+      "group": "M16/correlated_small",
+      "metric": "mae",
+      "candidate": 0.0022744841407984495,
+      "parent": 0.0022718857508152723,
+      "limit": 0.0022718957508152723
+    },
+    {
+      "group": "M16/original_replay",
+      "metric": "mae",
+      "candidate": 0.001281148404814303,
+      "parent": 0.0011701929615810513,
+      "limit": 0.0011702029615810513
+    }
+  ],
+  "limitations": "HST targets retain observational noise; no real independent noise pairs or held-out camera qualification. The architecture approximately doubles network inference work. Per-input mean anchoring preserves the parent's mean, not true absolute sky or the mean after full-image weighted overlap. No automatic activation.",
+  "selector_source_sha256": "f45e924090ca2e0087323f9613eb1a110e44063d17377907a9a318b6692ab59b",
+  "reason": "No changed checkpoint passed all fixed development gates. The final test seed remains untouched; no export or deployment is justified."
+}

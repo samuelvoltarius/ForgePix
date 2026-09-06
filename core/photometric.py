@@ -1,21 +1,11 @@
 #!/usr/bin/env python3
-"""
-photometric.py — ECHTE photometrische Farbkalibrierung (PCC/SPCC) für ForgePix.
+"""Native stellar white balance with explicitly selected optional legacy bridges.
 
-Dreistufig, mit sauberem Fallback (nie ein harter Fehler — schlimmstenfalls die eingebaute
-stern-basierte Lite-Kalibrierung):
-
-  1. Siril-SPCC (bevorzugt): ruft ein installiertes Siril headless auf. Siril macht Plate-Solving
-     UND die Spektrophotometrische Farbkalibrierung gegen den **Gaia-DR3-Katalog** — der seriöse,
-     bewährte Weg. Funktioniert ohne weitere Python-Abhängigkeiten.
-  2. Eigener Gaia-Pfad: Plate-Solving (ASTAP / astrometry.net solve-field) + Gaia-DR3-Abfrage
-     (astroquery) + Kanal-Abgleich über die Katalog-Sternfarben. Greift nur, wenn ein Solver UND
-     astroquery installiert sind (sonst übersprungen) — voll integriert, MIT-konform.
-  3. PCC-lite (immer verfügbar): stern-basierter neutraler Weißabgleich aus dem Bild selbst
-     (astro.photometric_balance) — kein Katalog, aber robust und ohne Netz.
-
-Wichtig: KI ist für die Photometrie selbst NICHT geeignet — PCC ist eine Messung (Sternfarben gegen
-Katalog), kein Ermessen. Hier wird ausschließlich echte Katalog-Photometrie genutzt.
+Auto/lite use ForgePix aperture measurements, without solvers or network.
+Gaia paths select star positions but do not model catalog colors; they are not
+catalog-color PCC. Only the explicitly selected Siril bridge delegates SPCC.
+A statistical neutral stellar population is an assumption, not a measured
+spectral reference. Narrowband data must not use that broadband assumption.
 """
 import os
 import shutil
@@ -40,11 +30,12 @@ def siril_available(explicit=None):
 
 
 def _write_linear_fits(bgr, path, hints=None):
-    """ForgePix-Linearbild (BGR float [0..1]) als 32-bit-RGB-FITS schreiben, mit den
+    """ForgePix-Linearbild (BGR float, signed/HDR erhalten) als 32-bit-RGB-FITS schreiben, mit den
     Astrometrie-Schlüsseln (RA/DEC/Brennweite/Pixelgröße/Sensor) im Header, damit Siril
     plate-solven kann. Gibt den Pfad zurück."""
     from astropy.io import fits
-    rgb = cv2.cvtColor(np.clip(bgr, 0, 1).astype(np.float32), cv2.COLOR_BGR2RGB)
+    from star_color import _image
+    rgb = _image(bgr)[..., ::-1]
     cube = np.ascontiguousarray(np.transpose(rgb, (2, 0, 1)))   # (3,H,W) Plane-Reihenfolge R,G,B
     hdu = fits.PrimaryHDU(cube.astype(np.float32))
     h = hints or {}
@@ -63,9 +54,9 @@ def _write_linear_fits(bgr, path, hints=None):
 
 
 def _read_fits_bgr(path):
-    """Siril-Ergebnis-FITS (RGB-Cube) als BGR float [0..1] lesen — gemeinsamer Helper mit
-    fester Normierung (siril_engine.read_fits_bgr), statt dreier leicht verschiedener Kopien."""
-    return np.clip(siril_engine.read_fits_bgr(path), 0, 1)
+    """Read a linear FITS cube without clipping signed or high values."""
+    import astro
+    return astro._read_float(path)
 
 
 def _platesolve_cmd(hints):
@@ -124,11 +115,13 @@ def siril_spcc(bgr, hints=None, oscsensor=None, oscfilter=None, osclpf=None,
             if os.path.isfile(cand):
                 res = cand
                 break
-        if res is None:
+        if proc.returncode != 0 or res is None:
             tail = "\n".join(((proc.stdout or "") + "\n" + (proc.stderr or "")).splitlines()[-6:])
             raise RuntimeError(f"Siril-SPCC lieferte kein Ergebnis (rc={proc.returncode}). "
                                "Log-Ende:\n" + tail)
         out = _read_fits_bgr(res)
+        if out.shape != np.asarray(bgr).shape or not np.isfinite(out).all():
+            raise RuntimeError("Siril-SPCC lieferte ein ungültiges oder anders großes Bild")
         log("  Siril-SPCC: fertig (Gaia DR3).")
         return out
     finally:
@@ -271,11 +264,11 @@ def _solve_wcs_astrometry(gray, api_key, work, log=log_print):
 
 
 def gaia_pcc(bgr, hints=None, siril_path=None, astrometry_key=None, log=log_print):
-    """Eigener Pfad (MIT-konform): Plate-Solve → WCS → Gaia-DR3-Kegelsuche (astroquery) →
-    Katalogsterne über WCS den Bildsternen zuordnen → Kanäle so abgleichen, dass die mittlere
-    Sternfarbe zur Gaia-Photometrie passt. Solver-Reihenfolge: Siril (lokal) → Astrometry.net-Online
-    (wenn API-Key) → ASTAP/astrometry.net-lokal. Wirft RuntimeError, wenn astroquery/Solver fehlen oder
-    der Solve/das Netz scheitert (Orchestrator fällt auf PCC-lite zurück)."""
+    """White balance at Gaia-selected positions using an explicitly selected solver.
+
+    Catalog colors are not used; this is not catalog PCC or SPCC. Network and
+    external solvers are required by this optional legacy route.
+    """
     try:
         from astroquery.gaia import Gaia
         from astropy.wcs import WCS               # noqa: F401
@@ -301,30 +294,25 @@ def gaia_pcc(bgr, hints=None, siril_path=None, astrometry_key=None, log=log_prin
         H, W = gray.shape
         sky = wcs.pixel_to_world_values(W / 2.0, H / 2.0)
         radius = 0.6
-        log(f"  Gaia-PCC: Feld gelöst (Zentrum {float(sky[0]):.3f},{float(sky[1]):.3f}), frage Gaia DR3 ab …")
+        log(f"  Gaia-Positionen / Weißabgleich: Feld gelöst (Zentrum {float(sky[0]):.3f},{float(sky[1]):.3f}), frage Gaia DR3 ab …")
         job = Gaia.launch_job(
             "SELECT TOP 800 ra, dec, phot_g_mean_mag, bp_rp FROM gaiadr3.gaia_source "
             f"WHERE 1=CONTAINS(POINT('ICRS',ra,dec),CIRCLE('ICRS',{float(sky[0])},{float(sky[1])},{radius})) "
             "AND bp_rp IS NOT NULL AND phot_g_mean_mag < 16 ORDER BY phot_g_mean_mag ASC")
         cat = job.get_results()
         scale = _fit_channel_gains(bgr, cat, wcs, log)
-        out = np.clip(bgr.astype(np.float32) * scale.reshape(1, 1, 3), 0, None)
-        log(f"  Gaia-PCC: Kanal-Skalierung BGR={np.round(scale, 3)} aus {len(cat)} Katalogsternen")
+        out = bgr.astype(np.float32) * scale.reshape(1, 1, 3)
+        log(f"  Gaia-Positionen / Weißabgleich: Kanal-Skalierung BGR={np.round(scale, 3)} aus {len(cat)} Katalogsternen")
         return out
     finally:
         shutil.rmtree(work, ignore_errors=True)
 
 
 def lokal_pcc(bgr, hints=None, siril_path=None, katalog_pfad=None, log=log_print):
-    """Farbkalibrierung gegen den EIGENEN, lokal abgelegten Gaia-Auszug — ohne Internet.
+    """White balance using positions in a local Gaia excerpt, with external solving.
 
-    Derselbe Weg wie `gaia_pcc`, nur dass die Katalogsterne nicht von einem Server kommen,
-    sondern aus `core/gaia_lokal`. Wer sein Feld einmal mit Netz nachgeladen hat, kalibriert
-    danach am Teleskop ohne Verbindung — und in Bruchteilen einer Sekunde statt in Sekunden.
-
-    EHRLICHE EINSCHRAENKUNG: das Plate-Solving braucht weiterhin einen Solver. Siril und ASTAP
-    loesen mit ihren eigenen lokalen Katalogen offline; der Astrometry.net-Weg ueber das Netz
-    tut es nicht. Ohne loesbares Feld gibt es auch mit lokalem Sternkatalog keine Kalibrierung.
+    This route does not predict colors from Gaia photometry and is not native
+    astrometry or catalog-color calibration. The catalog query itself is offline.
     """
     import gaia_lokal
     from astropy.io import fits
@@ -360,8 +348,8 @@ def lokal_pcc(bgr, hints=None, siril_path=None, katalog_pfad=None, log=log_print
         cat = {"ra": treffer["ra"], "dec": treffer["dec"],
                "phot_g_mean_mag": treffer["g_mag"], "bp_rp": treffer["bp_rp"]}
         scale = _fit_channel_gains(bgr, cat, wcs, log)
-        out = np.clip(bgr.astype(np.float32) * scale.reshape(1, 1, 3), 0, None)
-        log("  PCC lokal: Kanal-Skalierung BGR=%s aus %d Katalogsternen (offline)"
+        out = bgr.astype(np.float32) * scale.reshape(1, 1, 3)
+        log("  Lokale Gaia-Positionen / Weißabgleich: Kanal-Skalierung BGR=%s aus %d Katalogsternen (offline)"
             % (np.round(scale, 3), n))
         return out
     finally:
@@ -389,57 +377,46 @@ def _solve_wcs_external(kind, solver, lpath, work, hints, log):
 
 
 def _fit_channel_gains(bgr, cat, wcs, log):
-    """Katalogsterne (Gaia ra/dec, bp_rp) über WCS auf Bildpixel projizieren und dort die
-    gemessene Sternfarbe abgreifen (direkt am projizierten Ort — ein separates Matching gegen
-    erkannte Bildsterne findet nicht statt und wurde daher entfernt).
-    Liefert eine BGR-Kanal-Skalierung, die die mittlere gemessene Sternfarbe neutral/erwartungstreu macht."""
-    H, W = bgr.shape[:2]
+    """Compatibility helper: aperture fluxes at catalog positions, not catalog colors."""
+    from star_color import balance
     px, py = wcs.world_to_pixel_values(np.asarray(cat["ra"]), np.asarray(cat["dec"]))
-    meas = []
-    for x, y in zip(px, py):
-        xi, yi = int(round(float(x))), int(round(float(y)))
-        if 3 <= xi < W - 3 and 3 <= yi < H - 3:
-            patch = bgr[yi - 2:yi + 3, xi - 2:xi + 3].reshape(-1, 3)
-            peak = float(patch.max())
-            if 0.02 < peak < 0.95:
-                meas.append(patch.mean(0))
-    if len(meas) < 10:
-        raise RuntimeError(f"zu wenige Katalog-Matches ({len(meas)})")
-    med = np.median(np.array(meas, np.float32), axis=0) + 1e-6
-    return np.clip(float(med.mean()) / med, 0.4, 2.5).astype(np.float32)
+    _, info = balance(bgr, positions=np.column_stack([px, py]), neutralize=False,
+                      log=log, return_info=True)
+    if not info["applied"]:
+        raise RuntimeError("zu wenige verlässliche Sternfarben für einen Weißabgleich")
+    return np.asarray(info["gains_bgr"], dtype=np.float32)
 
-
-# ---------------------------------------------------------- Orchestrator ----
 
 def run_pcc(linear_bgr, hints=None, prefer="auto", oscsensor=None, narrowband=False,
             siril_path=None, astrometry_key=None, log=log_print):
-    """Photometrische Farbkalibrierung mit dreistufigem Fallback. Gibt IMMER ein kalibriertes
-    Bild zurück (schlimmstenfalls PCC-lite). prefer: 'auto'|'siril'|'gaia'|'lite'.
-    astrometry_key: optionaler Astrometry.net-API-Key (vom User), für blindes Online-Plate-Solving
-    im Gaia-Pfad, wenn kein lokaler Solver/Siril vorhanden ist. Wird NICHT gespeichert/geloggt."""
-    import astro
-    # Der lokale Katalog kommt in der automatischen Kette ZUERST: er braucht kein Netz und ist
-    # gemessen rund hundertmal schneller als eine Serverabfrage. Fehlt er oder deckt er das
-    # Feld nicht ab, geht es wie bisher weiter.
-    order = {"siril": ["siril", "lite"], "gaia": ["gaia", "lite"],
-             "lokal": ["lokal", "lite"],
-             "lite": ["lite"]}.get(prefer, ["lokal", "siril", "gaia", "lite"])
-    for stage in order:
-        try:
-            if stage == "siril" and siril_available(siril_path):
-                return siril_spcc(linear_bgr, hints=hints, oscsensor=oscsensor,
-                                  narrowband=narrowband, siril_path=siril_path, log=log)
-            if stage == "lokal":
-                return lokal_pcc(linear_bgr, hints=hints, siril_path=siril_path, log=log)
-            if stage == "gaia":
-                return gaia_pcc(linear_bgr, hints=hints, siril_path=siril_path,
-                                astrometry_key=astrometry_key, log=log)
-            if stage == "lite":
-                log("  PCC: stern-basierte Lite-Kalibrierung (kein Siril/Gaia-Pfad verfügbar).")
-                return astro.photometric_balance(linear_bgr, 1.0, log=log)
-        except Exception as e:
-            log(f"  PCC: Stufe '{stage}' übersprungen ({e})")
-    return astro.photometric_balance(linear_bgr, 1.0, log=log)
+    """Compatibility API. Auto/lite are native; other bridges require explicit choice.
+
+    A failed external route is reported before trying native white balance.
+    Neither the native nor Gaia-position route is catalog-color calibration.
+    """
+    from star_color import balance, _image
+    source = _image(linear_bgr)
+    if prefer not in {"auto", "lite", "siril", "gaia", "lokal"}:
+        raise ValueError("Unbekannte Methode für den Farbabgleich: %s" % prefer)
+    if narrowband and prefer != "siril":
+        log("  Schmalband: Stern-Weißabgleich übersprungen; aufgenommene Linienfarben bleiben erhalten.")
+        return source.copy()
+    try:
+        if prefer == "siril":
+            return siril_spcc(source, hints=hints, oscsensor=oscsensor,
+                              narrowband=narrowband, siril_path=siril_path, log=log)
+        if prefer == "lokal":
+            return lokal_pcc(source, hints=hints, siril_path=siril_path, log=log)
+        if prefer == "gaia":
+            return gaia_pcc(source, hints=hints, siril_path=siril_path,
+                            astrometry_key=astrometry_key, log=log)
+    except Exception as error:
+        log("  Externer Farbabgleich '%s' fehlgeschlagen (%s)." % (prefer, error))
+        if narrowband:
+            log("  Schmalbandfarben bleiben unverändert; kein Breitband-Ersatz.")
+            return source.copy()
+        log("  Ersatz: nativer Stern-Weißabgleich, keine Katalog-Farbkalibrierung.")
+    return balance(source, log=log)
 
 
 def _sex2deg(val, hours=False):

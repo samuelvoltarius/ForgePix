@@ -16,6 +16,67 @@ class AstroUI(unittest.TestCase):
     def setUpClass(cls):
         cls.app = QApplication.instance() or QApplication([])
 
+    def test_native_color_choice_does_not_send_disabled_siril_narrowband_flag(self):
+        with patch.object(MainWindow, "_restore_settings"), \
+             patch.object(MainWindow, "_save_settings"), \
+             patch("ui.main_window._UpdateChecker.start"):
+            window = MainWindow()
+            try:
+                window.astro_group.setChecked(True)
+                window.astro_pcc.setChecked(True)
+                window.astro_pcc_backend.setCurrentIndex(window.astro_pcc_backend.findData("siril"))
+                window.astro_narrowband.setChecked(True)
+                self.assertTrue(window.astro_oscsensor.isEnabled())
+                self.assertIn("--astro-narrowband", window._common_args("."))
+                window.astro_pcc_backend.setCurrentIndex(window.astro_pcc_backend.findData("auto"))
+                self.assertFalse(window.astro_oscsensor.isEnabled())
+                self.assertFalse(window.astro_narrowband.isEnabled())
+                args = window._common_args(".")
+                self.assertNotIn("--astro-narrowband", args)
+                self.assertEqual(args[args.index("--astro-pcc-backend") + 1], "auto")
+            finally:
+                window.deleteLater()
+                type(self).app.processEvents()
+
+    def test_cfa_drizzle_can_use_original_size(self):
+        with patch.object(MainWindow, "_restore_settings"), \
+             patch.object(MainWindow, "_save_settings"), \
+             patch("ui.main_window._UpdateChecker.start"):
+            window = MainWindow()
+            try:
+                window.astro_group.setChecked(True)
+                window.astro_drizzle.setCurrentIndex(window.astro_drizzle.findData(1))
+                window.astro_drizzle_true.setChecked(True)
+                args = window._common_args(".")
+                self.assertIn("--astro-drizzle-true", args)
+                self.assertEqual(args[args.index("--astro-drizzle") + 1], "1")
+            finally:
+                window.deleteLater()
+                type(self).app.processEvents()
+
+    def test_incomplete_drizzle_is_visible_with_real_used_frame_count(self):
+        import json
+        with tempfile.TemporaryDirectory() as folder, \
+             patch.object(MainWindow, "_restore_settings"), \
+             patch.object(MainWindow, "_save_settings"), \
+             patch("ui.main_window._UpdateChecker.start"):
+            window = MainWindow()
+            try:
+                window.work_edit.setText(folder)
+                window.result_path = str(Path(folder) / "result.tif")
+                (Path(folder) / "processing_report.json").write_text(json.dumps({
+                    "input_frames": 34, "registered_frames": 31,
+                    "drizzle": {"coverage_fraction": 0.0}}), encoding="utf-8")
+                window._show_quality()
+                text = window.decision.text()
+                self.assertIn("31", text)
+                self.assertIn("34", text)
+                self.assertIn("0.000", text)
+                self.assertIn("Dither", text)
+            finally:
+                window.deleteLater()
+                type(self).app.processEvents()
+
     def test_normal_astro_honors_calibration_and_cosmetic(self):
         with patch.object(MainWindow, "_restore_settings"), \
              patch.object(MainWindow, "_save_settings"), \

@@ -386,3 +386,85 @@ and read/shot performance; inspected seed 9518063 is no longer an untouched test
 
 This evidence/documentation update does not change the tested runtime. Version
 remains 1.27.1-beta; GPU speed does not establish camera-general AI or RC parity.
+
+## Native projects, CFA Drizzle and measured stellar white balance
+
+The next user-requested expansion adds a real project document with immutable
+result snapshots. New results, scientific coverage/weight companions and recorded
+AI groups are archived and hashed. Save/Open/History work across restarts and
+folder relocation; changed files cannot be silently relinked. Scientific export
+publishes a complete verified copy into a fresh destination. Archive/export
+folders are excluded from raw-frame discovery. This is result-file history, not
+parameter/mask undo, a complete raw-data backup or a recomputable process graph.
+
+The actual M27 GUI test used real menus/file dialogs, added two distinguishable
+FITS results, closed/reopened the window and selected the older result. The
+regular Export button copied its scientific files unchanged. Source/export SHA256
+is 73355cba99ce1be18c1fe6b91001e395b1cc6de9e18c39c18071b03af2ef2f50.
+Evidence: Codex work/forgepix-project-m27-02/gui-project-report.json. The second
+fixture has an explicit test offset to distinguish history states; it is not
+presented as an image-enhancement algorithm. Sixteen project regressions cover
+integrity, missing coverage, external changes, archive discovery and failed writes.
+
+Native Drizzle now uses exact square-drop area overlaps, Float64 accumulation,
+subpixel/affine geometry, original calibrated CFA samples and separate per-color
+coverage/weights. Missing samples are zero placeholders with zero support, never
+inpainted; no clipping or silent shape changes. GUI and CLI support native 1x CFA
+reconstruction. Actual used-frame counts and color coverage are shown in the UI.
+Input guards reject known nonlinear/display data, and cancellation invalidates
+partial contributions. See NATIVE_DRIZZLE.md for the flux/pixel-area convention
+and unsupported combinations; it does not perform sigma rejection or local
+normalization, and is not native WCS/TPS reconstruction.
+
+Full real M27 run: 34 original ASIAIR CFA FITS, normal quality selection kept 31,
+31 registrations, 9,300 s exposure, 114.0 s execution at 1x (4144 x 2822 RGB).
+Joint color coverage 99.9759%, Float32 FITS/TIFF pixel-identical, per-color masks
+match positive weights, original SHA256/mtime unchanged. No calibration frames
+were used, so amp glow/hot pixels remain and final image quality is unqualified.
+Evidence: work/forgepix-drizzle-m27-1x-full-01/drizzle-e2e-report.json. This run
+preceded final non-FITS input guards and clearer warning wording. An earlier
+three-frame 2x diagnostic with QC disabled had 0% joint coverage and may have
+matched fixed-pattern defects in the rejected cloudy last sub. It is explicitly
+not a qualified image integration. Launcher-only memory readings were discarded;
+no measured real-process peak memory is claimed for these runs.
+
+Twenty-one targeted Drizzle tests plus 80 independent random geometry cases
+passed. A separate corner/edge-intersection reference tested mono/RGB/CFA,
+rotation/shear/reflection/scale, null weights and invalid samples. After correcting
+tiny-drop area cancellation, normal-case relative weight/flux differences were
+below 2.8e-14; the smallest permitted pixfrac case differed by 1.7e-9 in weights.
+An interrupted affine frame cannot be finished or reused. Independent evidence:
+outputs/ForgePix-Drizzle-Independent-QA.json and its standalone reference script.
+
+Auto/Lite color correction now measures native circular star fluxes above robust
+local sky planes, fits per-star ratios and retains signed/HDR values. It does not
+call external solvers/network or label a neutral-star assumption as catalog PCC.
+Known narrowband data remain exempt. Independent review caught and fixed rounded
+edge patches and four-pixel unsaturated symmetric PSFs being mistaken for clipping.
+Fifteen targeted regressions plus GUI plumbing checks pass. Full M27 execution
+selected 148 stellar references in about 1.2 s without altering its source. The
+capture filter is unknown; this is not validation of its true colors.
+See NATIVE_STELLAR_BALANCE.md for the aperture/reference assumptions.
+
+## Mean-anchored denoiser research v4
+
+Another bounded 6,000-step run completed on Spark/NVIDIA GB10 with CUDA 12.8:
+544.0 s optimization, 24.0 s development evaluation. A frozen parent plus a
+small mean-free student correction, original-distribution replay and local/faint
+structure losses address v3 regressions. All 27 development image-bias gates pass
+and the geometric development MSE is 10.90% lower, but 17 MAE, four MSE and one
+local-mean gate still fail. This is development evidence, not an independent
+generalization improvement. The candidate is rejected; bundled models unchanged.
+
+Reserved final seed 9671507 was not consumed; no final evaluation or ONNX export
+was run for this failed candidate. Seven focused training/selection tests passed
+(three on Spark). Plan, training, decision and execution attestations are stored
+under training/reports/denoise-anchored-v4-001-*.json. The per-tile mean constraint
+does not guarantee unbiased whole-image overlapping inference. No GPU training
+process/lock remains. Total completed optimization across the four initial v2
+models and the three denoiser refinement attempts is now 36,000 steps.
+
+Exact-commit final suite/build/package and repeat full-FITS evidence follow in
+the verification entry. Version remains 1.27.1-beta. Native astrometry, actual
+catalog/SPCC fitting, editable process masks/history, calibrated real-camera AI
+validation and broader comparative image-quality work remain open.

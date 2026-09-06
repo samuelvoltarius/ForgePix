@@ -175,6 +175,8 @@ class ExportMixin:
             except Exception as exc:
                 QMessageBox.warning(self, tr("Exportieren"), str(exc))
             return
+        if getattr(self, "_project_export_current", lambda: False)():
+            return
         try:
             import focus_cull_stack as F
             stack_dir = os.path.dirname(self.result_path)
@@ -194,6 +196,8 @@ class ExportMixin:
             QMessageBox.information(self, tr("Exportieren"), tr("Erst ein Ergebnis erzeugen.")); return
         if self._is_ai_result_current():
             self._export_ai_result()
+            return
+        if getattr(self, "_project_export_current", lambda: False)():
             return
         dlg = QDialog(self); dlg.setWindowTitle(tr("Exportieren")); dlg.resize(440, 480)
         lay = QVBoxLayout(dlg)
