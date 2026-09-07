@@ -365,8 +365,22 @@ def _exr_float(tag):
         return float(m.group()) if m else None
 
 
+# EXIF gibt es nur in Kamera-Dateiformaten. FITS, das Format der Astro-Aufnahmen, hat einen
+# eigenen Header und kein EXIF — exifread meldet darauf "File format not recognized." auf die
+# Konsole. Beim Stapeln von fuenf Subs stand das fuenfmal im Protokoll und sah aus wie ein
+# Fehler, obwohl nur eine sinnlose Frage gestellt wurde. Solche Dateien werden gar nicht erst
+# gefragt.
+_OHNE_EXIF = (".fit", ".fits", ".fts", ".xisf", ".ser", ".npy")
+
+
+def _hat_vielleicht_exif(pfad):
+    return os.path.splitext(str(pfad or ""))[1].lower() not in _OHNE_EXIF
+
+
 def _optics_via_exifread(path):
     """Pure-Python-EXIF (kein exiftool nötig). Liest JPEG + TIFF-basierte RAWs (ARW/NEF/CR2/DNG …)."""
+    if not _hat_vielleicht_exif(path):
+        return None
     try:
         import exifread
     except Exception:
@@ -453,6 +467,8 @@ def _exif_expo_iso(paths):
         try:
             import exifread
             for p in paths:
+                if not _hat_vielleicht_exif(p):
+                    continue
                 with open(p, "rb") as f:
                     t = exifread.process_file(f, details=False)
                 e = _exr_float(t.get("EXIF ExposureTime"))

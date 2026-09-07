@@ -650,6 +650,9 @@ def _embed_tiff_meta(src, tiffs):
 
 def _exif_make_datetime(src):
     """Hersteller + Aufnahmedatum via ExifRead (für TIFF-Provenienz). (None, None) bei Fehlen."""
+    from focus_analysis import _hat_vielleicht_exif
+    if not _hat_vielleicht_exif(src):
+        return None, None          # FITS hat kein EXIF — siehe focus_analysis._OHNE_EXIF
     try:
         import exifread
         with open(src, "rb") as f:
