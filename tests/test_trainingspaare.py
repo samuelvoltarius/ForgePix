@@ -167,5 +167,60 @@ class TestPaare(unittest.TestCase):
         self.assertEqual(trainingspaare.guete([])["anzahl"], 0)
 
 
+class TestFeldrotation(unittest.TestCase):
+    """Gedrehte Aufnahmen duerfen nicht verlorengehen.
+
+    Der Seestar S30 steht auf einer azimutalen Montierung, sein Bildfeld dreht sich also im
+    Lauf der Nacht. Hier wurde mit `_estimate_star_shift` ausgerichtet — reine Verschiebung.
+    An einer echten Serie (IC 434, 224 Subs) gemessen: bis -27,6 Grad Rotation gegenueber der
+    ersten Aufnahme, und im Ergebnis blieben 2 bis 27 % der Aufnahmen uebrig.
+
+    Das Tueckische war die Meldung: "239 Subs -> 24 Kacheln" las sich wie ein Erfolg. Dass 234
+    davon weggeworfen worden waren, stand nur im Fortschrittsprotokoll. Und die behaltenen
+    waren verschmiert (Exzentrizitaet 2,31 gegen 1,32 mit Drehung).
+    """
+
+    def setUp(self):
+        self.d = tempfile.mkdtemp(prefix="fp_rot_")
+        from constants import imwrite
+        rng = np.random.default_rng(11)
+        h = w = 200
+        grund = np.full((h, w), 0.03, np.float32)
+        for _ in range(40):                      # genug Sterne fuer Dreiecks-Matching
+            p = np.zeros((h, w), np.float32)
+            p[int(rng.integers(30, h - 30)), int(rng.integers(30, w - 30))] = 1.0
+            grund = np.clip(grund + cv2.GaussianBlur(p, (0, 0), 1.6) * float(rng.uniform(2, 8)),
+                            0, 1)
+        self.pfade = []
+        mitte = (w / 2.0, h / 2.0)
+        for i in range(6):
+            M = cv2.getRotationMatrix2D(mitte, i * 4.0, 1.0)   # bis 20 Grad
+            f = cv2.warpAffine(grund, M, (w, h), flags=cv2.INTER_LANCZOS4,
+                               borderMode=cv2.BORDER_REPLICATE)
+            f = np.clip(f + rng.normal(0, 0.004, (h, w)).astype(np.float32), 0, 1)
+            q = os.path.join(self.d, "r_%02d.tif" % i)
+            imwrite(q, np.clip(np.dstack([f] * 3) * 65535, 0, 65535).astype(np.uint16))
+            self.pfade.append(q)
+
+    def tearDown(self):
+        shutil.rmtree(self.d, ignore_errors=True)
+
+    def test_gedrehte_aufnahmen_bleiben_erhalten(self):
+        import astro
+        aus = trainingspaare._ausrichten(
+            [astro._read_float(p) for p in self.pfade], log=_stille)
+        self.assertEqual(len(aus), len(self.pfade),
+                         "gedrehte Aufnahmen wurden verworfen — Feldrotation nicht behandelt")
+
+    def test_gegenprobe_reine_verschiebung_verliert_sie(self):
+        """Damit der Test oben nicht aus Versehen immer gruen ist: mit reiner Verschiebung
+        MUESSEN Aufnahmen wegfallen. Faellt hier nichts weg, prueft der Test oben nichts."""
+        import astro
+        ref = astro._gray(astro._read_float(self.pfade[0]))
+        weg = sum(1 for p in self.pfade[1:]
+                  if astro._estimate_star_shift(ref, astro._gray(astro._read_float(p))) is None)
+        self.assertGreater(weg, 0, "die Testszene dreht sich gar nicht genug")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -81,7 +81,9 @@ def _ausrichten(bilder, log=log_print):
     raus = [bilder[0]]
     verworfen = 0
     for f in bilder[1:]:
-        M = astro._estimate_star_shift(ref, astro._gray(f))
+        # Verschiebung UND Feldrotation — siehe die Messung in prepare_scenes_eigene: mit
+        # reiner Translation fielen an einer Seestar-Serie 98 % der Paare weg.
+        M = astro._estimate_star_transform_robust(ref, astro._gray(f))
         if M is None:
             verworfen += 1
             continue

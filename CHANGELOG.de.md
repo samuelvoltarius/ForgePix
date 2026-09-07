@@ -8,6 +8,40 @@ Alle nennenswerten Änderungen an ForgePix. Format orientiert an
 
 ## [Unreleased]
 
+### Feldrotation: 98 % der Seestar-Aufnahmen wurden still weggeworfen
+
+Die beiden Trainingsmodule richteten Aufnahmen mit `_estimate_star_shift` aus — **reine
+Verschiebung, keine Drehung**. Der Seestar S30 steht auf einer azimutalen Montierung, sein
+Bildfeld dreht sich also im Lauf der Nacht. An einer echten Serie (IC 434, 224 Subs) gemessen:
+bis **−27,6° Rotation** gegenüber der ersten Aufnahme.
+
+Was dabei herauskam, sah nach Erfolg aus. Das Protokoll meldete „239 Subs → 24 Kacheln"; im
+Fortschrittsprotokoll stand daneben, dass 234 davon verworfen worden waren. Über die ersten 17
+Serien: Seestar-Serien behielten 2 bis 27 % der Aufnahmen, die nachgeführten ASI-Serien 90 bis
+100 %.
+
+Und die behaltenen Aufnahmen waren nicht etwa in Ordnung — sie waren verschmiert. An 40 Subs
+gemessen:
+
+| | reine Verschiebung | mit Drehung |
+|---|---|---|
+| verwendete Aufnahmen | 18 von 40 | **40 von 40** |
+| Hintergrundrauschen | 0,000166 | **0,000118** (−29 %) |
+| FWHM | 4,63 px | **2,63 px** (−43 %) |
+| Exzentrizität | 2,31 | **1,32** |
+
+Beide Module nutzen jetzt `_estimate_star_transform_robust` (Dreiecks-Matching, kommt ohne
+Translationsannahme aus). **Die Bearbeitungs-Pipeline war nie betroffen**: sie steht standardmäßig
+auf `--astro-align rotate` und fällt korrekt auf dasselbe Verfahren zurück.
+
+### Szenenbank: Kacheln werden sofort geschrieben
+
+Der Bau sammelte alle Kacheln im Speicher und schrieb erst am Ende. Nach 17 von 71 Serien belegte
+der Lauf 5,2 GB — bei allen 71 wären es über 20 GB gewesen, und ein Absturz in Serie 70 hätte
+alles gekostet, weil bis dahin keine einzige `.npy` auf der Platte lag. Jetzt wird je Serie eine
+Scherbe geschrieben und am Ende über eine Speicherabbildung zusammengesetzt; im Speicher liegt
+nie mehr als eine Scherbe.
+
 ### Der Rat wird anklickbar — und einer davon war falsch
 
 Nach dem Lauf zeigt ein Balken unter dem Bild, was ForgePix am fertigen Stapel gemessen hat und

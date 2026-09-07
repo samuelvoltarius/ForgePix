@@ -41,18 +41,28 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "core"))
 
 
 def _stapeln(pfade, skala, log):
-    """Eine Serie tief stapeln. Gibt das Mono-Ergebnis oder None."""
+    """Eine Serie tief stapeln. Gibt (Mono-Ergebnis oder None, Anzahl verworfener Aufnahmen).
+
+    Es wird STROEMEND gerechnet: eine laufende Summe statt einer Liste aller Aufnahmen. Der
+    erste Entwurf hielt alle Aufnahmen und zusaetzlich alle ausgerichteten Kopien im Speicher —
+    bei einer Serie mit 224 Subs zu 1080x1920 waren das rund 4 GB fuer eine einzige Serie.
+    Jetzt liegen nie mehr als zwei Aufnahmen und die Summe gleichzeitig da.
+    """
     import cv2
     import astro
-    bilder, unbrauchbar = [], 0
+    ref = None
+    summe = None
+    anzahl = 0
+    verworfen = 0
+
     for p in pfade:
         try:
             f = astro._read_float(p)
         except Exception:
-            unbrauchbar += 1
+            verworfen += 1
             continue
         if f is None:
-            unbrauchbar += 1
+            verworfen += 1
             continue
         if f.ndim == 3:
             f = astro._gray(f)
@@ -61,36 +71,39 @@ def _stapeln(pfade, skala, log):
         # "actual file length 262144, expected 23400000"). astropy fuellt den Rest mit Nullen
         # auf — die Datei laesst sich also lesen, hat die richtige Form und ist trotzdem zur
         # Haelfte leer. In einem Stapel faellt das niemandem auf, es zieht nur alles dunkler.
-        if not np.isfinite(f).all():
-            unbrauchbar += 1
-            continue
-        leer = float((f == 0).mean())
-        if leer > 0.30:
-            unbrauchbar += 1
+        if not np.isfinite(f).all() or float((f == 0).mean()) > 0.30:
+            verworfen += 1
             continue
         if skala != 1.0:
             f = cv2.resize(f, (0, 0), fx=skala, fy=skala)
-        bilder.append(f)
-    if unbrauchbar:
-        log("    %d Aufnahme(n) unbrauchbar (abgeschnitten oder ungueltig) — aussortiert"
-            % unbrauchbar)
-    if len(bilder) < 2:
-        return None, unbrauchbar
-    ref = bilder[0]
-    aus, verworfen = [ref], unbrauchbar
-    for f in bilder[1:]:
+
+        if ref is None:
+            ref, summe, anzahl = f, f.astype(np.float64), 1
+            continue
         if f.shape != ref.shape:
             verworfen += 1
             continue
-        M = astro._estimate_star_shift(ref, f)
+        # Verschiebung UND Feldrotation. Vorher stand hier `_estimate_star_shift`, das nur
+        # Translation kann — an Alfreds Seestar-Serien (azimutale Montierung, also Bildfeld-
+        # drehung) verwarf es 73 bis 98 % der Aufnahmen, und die wenigen behaltenen waren
+        # verschmiert. Gemessen an 40 Subs von IC 434, Rotation bis -27,6 Grad:
+        #     shift :  18 von 40 Frames, Rauschen 0,000166, FWHM 4,63 px, Exzentrizitaet 2,31
+        #     robust:  40 von 40 Frames, Rauschen 0,000118, FWHM 2,63 px, Exzentrizitaet 1,32
+        # Das Protokoll meldete dabei "239 Subs -> 24 Kacheln" und las sich wie ein Erfolg.
+        M = astro._estimate_star_transform_robust(ref, f)
         if M is None:
             verworfen += 1
             continue
-        aus.append(cv2.warpAffine(f, M, (f.shape[1], f.shape[0]),
-                                  flags=cv2.INTER_LANCZOS4, borderMode=cv2.BORDER_REPLICATE))
-    if len(aus) < 2:
+        summe += cv2.warpAffine(f, M, (f.shape[1], f.shape[0]),
+                                flags=cv2.INTER_LANCZOS4, borderMode=cv2.BORDER_REPLICATE)
+        anzahl += 1
+
+    if verworfen:
+        log("    %d von %d Aufnahme(n) verworfen (unlesbar, abgeschnitten oder nicht "
+            "ausrichtbar)" % (verworfen, len(pfade)))
+    if anzahl < 2:
         return None, verworfen
-    return np.mean(np.stack(aus), axis=0).astype(np.float32), verworfen
+    return (summe / anzahl).astype(np.float32), verworfen
 
 
 def _kacheln(bild, groesse, anzahl, rng, min_struktur=1e-5):
@@ -189,7 +202,8 @@ def main():
     print("  %d Serien zu verarbeiten" % len(reihen))
 
     rng = np.random.default_rng(20260907)
-    banks = {"train": [], "validation": [], "test": []}
+    zaehler = {"train": 0, "validation": 0, "test": 0}
+    scherben = args.output / "_scherben"
     aufzeichnungen = []
     for i, (schluessel, pfade) in enumerate(reihen, 1):
         name = "%s|%g|%s|%s" % (schluessel[0], schluessel[1], schluessel[2],
@@ -213,7 +227,16 @@ def main():
         # Aufteilung JE SERIE, nicht je Kachel: Kacheln derselben Nacht duerfen nie ueber
         # Trainings- und Testmenge verteilt werden, sonst prueft der Test, was er kennt.
         wohin = "train" if (i % 10) not in (0, 5) else ("validation" if i % 10 == 5 else "test")
-        banks[wohin].extend(kacheln)
+        # SOFORT schreiben, eine Scherbe je Serie. Der erste Entwurf sammelte alle Kacheln im
+        # Speicher und schrieb erst am Ende: nach 17 von 71 Serien belegte der Lauf 5,2 GB, bei
+        # allen 71 waeren es ueber 20 GB gewesen — und ein Absturz in Serie 70 haette alles
+        # gekostet, weil bis dahin keine einzige .npy auf der Platte lag.
+        scherben.mkdir(parents=True, exist_ok=True)
+        if kacheln:
+            np.save(scherben / ("%s__%s.npy" % (wohin, name.replace("|", "_"))),
+                    np.stack(kacheln).astype(np.float32))
+        zaehler[wohin] += len(kacheln)
+        del kacheln
         aufzeichnungen.append({
             "serie": name, "kamera": schluessel[0], "belichtung_s": schluessel[1],
             "nacht": schluessel[2], "subs": len(pfade), "nicht_ausrichtbar": verworfen,
@@ -229,16 +252,39 @@ def main():
     # Lauf neu — ein fortgesetzter Durchgang, in dem alle Serien schon erledigt waren, hat das
     # Manifest damit auf "counts: 0" gesetzt, obwohl die Kacheln noch auf der Platte lagen.
     # Genau die stille Sorte Datenverlust, die niemand bemerkt.
-    for menge, liste in banks.items():
+    endstand = {}
+    for menge in ("train", "validation", "test"):
         ziel = args.output / ("%s.npy" % menge)
-        vorhanden = np.load(ziel) if ziel.exists() else None
-        if liste:
-            neu_arr = np.stack(liste).astype(np.float32)
-            zusammen = np.concatenate([vorhanden, neu_arr]) if vorhanden is not None else neu_arr
-            np.save(ziel, zusammen)
-            banks[menge] = zusammen
-        elif vorhanden is not None:
-            banks[menge] = vorhanden
+        teile = sorted(scherben.glob("%s__*.npy" % menge)) if scherben.exists() else []
+        quellen = ([ziel] if ziel.exists() else []) + teile
+        if not quellen:
+            endstand[menge] = 0
+            continue
+        # Formen zuerst lesen, dann in eine memmap giessen: so liegt nie mehr als EINE Scherbe
+        # gleichzeitig im Speicher.
+        formen = [np.load(q, mmap_mode="r").shape for q in quellen]
+        gesamt = sum(f[0] for f in formen)
+        rest = formen[0][1:]
+        assert all(f[1:] == rest for f in formen), "Kachelgroessen passen nicht zusammen"
+        tmp = args.output / ("%s.npy.neu" % menge)
+        ziel_arr = np.lib.format.open_memmap(tmp, mode="w+", dtype=np.float32,
+                                             shape=(gesamt,) + rest)
+        pos = 0
+        for q in quellen:
+            teil = np.load(q, mmap_mode="r")
+            ziel_arr[pos:pos + teil.shape[0]] = teil
+            pos += teil.shape[0]
+            del teil
+        ziel_arr.flush()
+        del ziel_arr
+        os.replace(tmp, ziel)          # atomar: entweder alt oder neu, nie halb
+        for q in teile:
+            q.unlink()
+        endstand[menge] = gesamt
+    try:
+        scherben.rmdir()
+    except OSError:
+        pass
     # Die Aufzeichnungen kommen aus dem Fortschrittsprotokoll — dort steht ALLES, auch was
     # frueheren Laeufen gehoert.
     alle_aufzeichnungen = []
@@ -251,8 +297,7 @@ def main():
     manifest = {
         "schema_version": 1,
         "size": args.groesse,
-        "counts": {k: (len(v) if not isinstance(v, np.ndarray) else int(v.shape[0]))
-                   for k, v in banks.items()},
+        "counts": endstand,
         # Kameras aufschluesseln. Die Bank MISCHT Kameras, wenn nicht gefiltert wird — fuer
         # Szenenvielfalt ist das gewollt, aber wer ein kameraspezifisches Modell trainiert,
         # muss es wissen. Verschiedene Sensoren haben verschiedene Pixelmassstaebe, damit
@@ -273,9 +318,7 @@ def main():
     }
     (args.output / "manifest.json").write_text(
         json.dumps(manifest, ensure_ascii=False, indent=1), encoding="utf-8")
-    print("  fertig: %s" % ", ".join(
-        "%s %d" % (k, (len(v) if not isinstance(v, np.ndarray) else int(v.shape[0])))
-        for k, v in banks.items()))
+    print("  fertig: %s" % ", ".join("%s %d" % (k, v) for k, v in endstand.items()))
     print("  -> %s" % args.output)
 
 

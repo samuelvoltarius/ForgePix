@@ -8,6 +8,37 @@ All notable changes to ForgePix. Format based on
 
 ## [Unreleased]
 
+### Field rotation: 98% of the Seestar frames were silently discarded
+
+Both training modules aligned frames with `_estimate_star_shift` — **translation only, no
+rotation**. The Seestar S30 sits on an alt-azimuth mount, so its field rotates over the night.
+Measured on a real series (IC 434, 224 subs): up to **−27.6° of rotation** relative to the first
+frame.
+
+The result looked like success. The log said "239 subs -> 24 tiles"; the progress log recorded
+next to it that 234 of them had been dropped. Across the first 17 series: Seestar series kept 2
+to 27% of their frames, the tracked ASI series 90 to 100%.
+
+And the frames that were kept were not fine — they were smeared. Measured on 40 subs:
+
+| | translation only | with rotation |
+|---|---|---|
+| frames used | 18 of 40 | **40 of 40** |
+| background noise | 0.000166 | **0.000118** (−29%) |
+| FWHM | 4.63 px | **2.63 px** (−43%) |
+| eccentricity | 2.31 | **1.32** |
+
+Both modules now use `_estimate_star_transform_robust` (triangle matching, which needs no
+translation assumption). **The processing pipeline was never affected**: it defaults to
+`--astro-align rotate` and correctly falls back to the same method.
+
+### Scene bank: tiles are written immediately
+
+The build collected every tile in memory and wrote only at the end. After 17 of 71 series the run
+held 5.2 GB — all 71 would have been over 20 GB, and a crash in series 70 would have cost
+everything, because not a single `.npy` was on disk until then. Now one shard is written per
+series and assembled at the end through a memory map; never more than one shard is in memory.
+
 ### The advice becomes clickable — and one piece of it was wrong
 
 After a run, a bar below the image shows what ForgePix measured on the finished stack and what
