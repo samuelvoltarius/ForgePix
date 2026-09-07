@@ -8,6 +8,36 @@ All notable changes to ForgePix. Format based on
 
 ## [Unreleased]
 
+### Live stacking: 4 of 10 frames, and 231 messages for 10 files
+
+Found in a real live run (IC 417, 10 Seestar frames, fed in as they would arrive at night). Two
+defects that together made the whole mode useless:
+
+**Alignment could only translate.** The live stacker used `_estimate_star_shift`. The Seestar is
+alt-azimuth — after four frames it rejected every further one. Worse: at small rotation angles
+that method does not return "cannot do it" at all, but a **wrong translation** (measured on an 8°
+rotation: 3.8 / 6.3 px). It does not reject the frame, it registers it wrongly, and the stack gets
+doubled stars without anything announcing itself.
+
+**Rejected frames were retried forever.** The watch mode remembered only *successful* frames. A
+frame that can never be aligned was therefore recomputed every two seconds — 231 identical log
+messages for ten files. `hinzufuegen` now distinguishes three cases: accepted, permanently
+rejected, and "try again later" for a file still being written. Only the last is retried.
+
+The same run after the fix: **10 of 10 frames in the stack, not a single retry message.**
+
+### Star shape is measured on the stack, not on a sub
+
+The measurement report took FWHM and roundness from a single frame, because the tested analysis
+needs a file path. That produced wrong advice: across six real Seestar series the roundness of the
+subs was 1.63 to 1.66, that of the finished stack **1.26 to 1.37**. The rule threshold is 1.6 — so
+the rule set recommended `--astro-synthstar`, a measure that makes photometry unusable, in **four
+of six cases**, for images with no distorted stars. Registration averages the per-frame distortion
+away; the stack is the right thing to measure. It is briefly written to a temporary file for that.
+
+Re-measured on IC 417: roundness 1.65 (sub) against 1.40 (stack), and the false recommendation is
+gone.
+
 ### Two defects in header-based calibration detection
 
 Finding calibration frames through the FITS header solves a real problem: anyone keeping their

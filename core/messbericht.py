@@ -82,6 +82,38 @@ def _himmel(bild):
 _letzter_fehler = {}
 
 
+def _messziele(bild, pfad):
+    """Woran die Sternform gemessen wird — Stapel zuerst, Sub als Rueckfall.
+
+    Liefert (beschreibung, dateipfad, aufraeumen). `analyze_frame` braucht einen Pfad, also
+    wird das uebergebene Bild dafuer kurz in eine temporaere Datei geschrieben.
+    """
+    ziele = []
+    try:
+        import tempfile
+        import cv2
+        a = np.asarray(bild, np.float32)
+        if a.ndim == 2:
+            a = np.dstack([a] * 3)
+        fd, tmp = tempfile.mkstemp(prefix="fp_form_", suffix=".tif")
+        os.close(fd)
+        if cv2.imwrite(tmp, np.clip(a * 65535.0, 0, 65535).astype(np.uint16)):
+            def weg(p=tmp):
+                try:
+                    os.unlink(p)
+                except OSError:
+                    pass
+            ziele.append(("am uebergebenen Bild gemessen", tmp, weg))
+        else:
+            os.unlink(tmp)
+    except Exception as fehler:
+        _letzter_fehler["formdatei"] = "%s: %s" % (type(fehler).__name__, fehler)
+    if pfad and os.path.isfile(pfad):
+        ziele.append(("Form aus %s (Einzelaufnahme)" % os.path.basename(pfad),
+                      pfad, lambda: None))
+    return ziele
+
+
 def _sterne(bild, pfad=None):
     """Sternzahl aus dem ÜBERGEBENEN Bild, Sternform aus der getesteten Einzelbildanalyse.
 
@@ -96,8 +128,16 @@ def _sterne(bild, pfad=None):
       Eine zweite, schlechtere Messung neben eine getestete zu stellen, macht den Bericht
       unbrauchbar — man wüsste nie, welcher Zahl zu glauben ist.
 
-    Darum steht in `quelle`, woher die Formwerte stammen. Wer einen Stapel übergibt, bekommt
-    die Form eines REPRÄSENTATIVEN Subs genannt, nicht die des Stapels — und liest das auch so.
+    Darum steht in `quelle`, woher die Formwerte stammen.
+
+    **Gemessen wird am übergebenen Bild, nicht an einem Sub.** `analyze_frame` braucht einen
+    Dateipfad, also wird das Bild dafür kurz in eine temporäre Datei geschrieben. Der frühere
+    Weg — die Form von einem Sub nehmen — führte zu falschen Ratschlägen: an sechs echten
+    Seestar-Serien lag die Rundheit der Subs bei 1,63 bis 1,66, die des fertigen Stapels aber
+    bei 1,26 bis 1,37. Die Regelschwelle liegt bei 1,6, also empfahl das Regelwerk in vier von
+    sechs Fällen `--astro-synthstar` — eine Massnahme, die die Photometrie unbrauchbar macht —
+    für Bilder, die gar keine verzogenen Sterne hatten. Die Ausrichtung mittelt die Verformung
+    der Einzelaufnahmen weg; genau deshalb ist der Stapel das richtige Messobjekt.
     """
     import astro
     anzahl = None
@@ -107,16 +147,18 @@ def _sterne(bild, pfad=None):
         anzahl = int(len(punkte))
     except Exception as fehler:
         _letzter_fehler["sterne"] = "%s: %s" % (type(fehler).__name__, fehler)
-    if pfad and os.path.isfile(pfad):
+    # Erst am uebergebenen Bild versuchen (das ist der Stapel), dann als Rueckfall am Sub.
+    for quelle, messpfad, aufraeumen in _messziele(bild, pfad):
         try:
             import astro_quality
-            r = astro_quality.analyze_frame(pfad)
+            r = astro_quality.analyze_frame(messpfad)
             return {"anzahl": anzahl if anzahl is not None else r.get("stars"),
                     "fwhm_px": _zahl(r.get("fwhm")), "rundheit": _zahl(r.get("ecc")),
-                    "spur": bool(r.get("trail")),
-                    "quelle": "Form aus %s" % os.path.basename(pfad)}
+                    "spur": bool(r.get("trail")), "quelle": quelle}
         except Exception as fehler:
             _letzter_fehler["form"] = "%s: %s" % (type(fehler).__name__, fehler)
+        finally:
+            aufraeumen()
     return {"anzahl": anzahl, "fwhm_px": None, "rundheit": None, "spur": None,
             "quelle": "nur gezaehlt" if anzahl is not None else None}
 

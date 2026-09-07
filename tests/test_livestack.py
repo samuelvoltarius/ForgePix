@@ -41,6 +41,91 @@ def _stille(*a, **k):
     pass
 
 
+class TestFeldrotationUndWiederholung(unittest.TestCase):
+    """Zwei Fehler, die am echten Live-Lauf aufgefallen sind (IC 417, 10 Seestar-Aufnahmen).
+
+    1. **Ausrichtung nur als Verschiebung.** Der Live-Stapler nahm `_estimate_star_shift`.
+       Der Seestar steht azimutal, sein Bildfeld dreht sich im Lauf der Nacht — es kamen
+       4 von 10 Aufnahmen in den Stapel, der Rest wurde abgelehnt.
+    2. **Endloses Wiederholen.** Der Beobachtungsmodus merkte sich nur ERFOLGREICHE
+       Aufnahmen. Ein Frame, der sich nie ausrichten laesst, wurde damit alle zwei Sekunden
+       neu versucht: **231 identische Meldungen** im Protokoll fuer zehn Dateien.
+    """
+
+    def _sternfeld(self, seed=5, winkel=0.0):
+        rng = np.random.default_rng(seed)
+        h = w = 160
+        g = np.full((h, w), 0.03, np.float32)
+        for _ in range(60):
+            p = np.zeros((h, w), np.float32)
+            p[int(rng.integers(20, h - 20)), int(rng.integers(20, w - 20))] = 1.0
+            g += cv2.GaussianBlur(p, (0, 0), 1.6) * float(rng.uniform(2, 8))
+        g = np.clip(g, 0, 1)
+        if winkel:
+            M = cv2.getRotationMatrix2D((w / 2.0, h / 2.0), winkel, 1.0)
+            g = cv2.warpAffine(g, M, (w, h), flags=cv2.INTER_LANCZOS4,
+                               borderMode=cv2.BORDER_REPLICATE)
+        return np.dstack([g] * 3).astype(np.float32)
+
+    def test_gedrehter_frame_kommt_in_den_stapel(self):
+        s = livestack.LiveStack(gewichten=False, log=_stille)
+        self.assertTrue(s.hinzufuegen(self._sternfeld()))
+        self.assertTrue(s.hinzufuegen(self._sternfeld(winkel=8.0)),
+                        "ein gedrehter Frame wurde abgelehnt — Feldrotation nicht behandelt")
+        self.assertEqual(s.n, 2)
+
+    def test_gegenprobe_reine_verschiebung_registriert_falsch(self):
+        """Die Gegenprobe — und zugleich der schlimmere Teil des Befunds.
+
+        Bei 8 Grad Drehung gibt `_estimate_star_shift` nicht etwa None zurueck, sondern eine
+        VERSCHIEBUNG (gemessen: 3,8 / 6,3 px). Es lehnt den Frame also nicht ab, es registriert
+        ihn falsch — und der Stapel bekommt doppelte Sterne, ohne dass sich irgendwo etwas
+        meldet. Geprueft wird darum am Ergebnis: der Stapel mit reiner Verschiebung muss
+        deutlich schlechter zur Referenz passen als der mit Drehung.
+        """
+        ref_bild = self._sternfeld()
+        gedreht = self._sternfeld(winkel=8.0)
+        ref_grau = astro._gray(ref_bild)
+
+        def guete(schaetzer):
+            s = livestack.LiveStack(gewichten=False, log=_stille)
+            s.hinzufuegen(ref_bild)
+            with patch("livestack.astro._estimate_star_transform_robust", schaetzer):
+                s.hinzufuegen(gedreht)
+            e = astro._gray(s.ergebnis())
+            a, b = ref_grau.ravel() - ref_grau.mean(), e.ravel() - e.mean()
+            return float((a * b).sum() / (np.sqrt((a * a).sum() * (b * b).sum()) + 1e-12))
+
+        mit_drehung = guete(astro._estimate_star_transform_robust)
+        nur_schiebung = guete(astro._estimate_star_shift)
+        self.assertGreater(mit_drehung, nur_schiebung + 0.05,
+                           "mit Drehung %.3f, ohne %.3f — die Testszene dreht sich nicht genug"
+                           % (mit_drehung, nur_schiebung))
+
+    def test_nicht_ausrichtbar_ist_endgueltig_nicht_vorlaeufig(self):
+        """False heisst "entschieden", None heisst "spaeter noch einmal". Ohne diesen
+        Unterschied wiederholt der Beobachtungsmodus endlos."""
+        s = livestack.LiveStack(gewichten=False, log=_stille)
+        self.assertTrue(s.hinzufuegen(self._sternfeld()))
+        leer = np.full((160, 160, 3), 0.03, np.float32)      # keine Sterne, nicht ausrichtbar
+        self.assertIs(s.hinzufuegen(leer), False,
+                      "ein nicht ausrichtbarer Frame muss endgueltig abgelehnt werden")
+
+    def test_unlesbare_datei_wird_spaeter_erneut_versucht(self):
+        """Eine halb geschriebene Datei ist etwas anderes — die muss wiederkommen duerfen."""
+        def kaputt(_p):
+            raise OSError("noch im Schreiben")
+        s = livestack.LiveStack(gewichten=False, log=_stille)
+        s.reader = kaputt
+        self.assertIsNone(s.hinzufuegen("egal.fit"),
+                          "eine noch nicht lesbare Datei darf nicht endgueltig abgelehnt werden")
+
+    def test_falsche_bildgroesse_ist_endgueltig(self):
+        s = livestack.LiveStack(gewichten=False, log=_stille)
+        self.assertTrue(s.hinzufuegen(self._sternfeld()))
+        self.assertIs(s.hinzufuegen(np.full((80, 80, 3), 0.03, np.float32)), False)
+
+
 class TestLiveStack(unittest.TestCase):
     def test_registered_border_keeps_original_sky_and_weight(self):
         # The missing left eight columns must keep the reference alone. A
@@ -52,7 +137,7 @@ class TestLiveStack(unittest.TestCase):
         s = livestack.LiveStack(gewichten=False, log=_stille)
         self.assertTrue(s.hinzufuegen(reference))
         shift = np.array([[1., 0., 8.], [0., 1., 0.]])
-        with patch("livestack.astro._estimate_star_shift", return_value=shift):
+        with patch("livestack.astro._estimate_star_transform_robust", return_value=shift):
             self.assertTrue(s.hinzufuegen(frame))
         np.testing.assert_allclose(s.ergebnis(), reference, atol=1e-7)
         np.testing.assert_array_equal(s.gewicht[:, :8], 1)
@@ -70,7 +155,7 @@ class TestLiveStack(unittest.TestCase):
         self.assertTrue(s.hinzufuegen(reference))
         before_weight = s.gewicht.copy()
         shift = np.array([[1., 0., .5], [0., 1., .5]])
-        with patch("livestack.astro._estimate_star_shift", return_value=shift):
+        with patch("livestack.astro._estimate_star_transform_robust", return_value=shift):
             self.assertTrue(s.hinzufuegen(frame))
         # The central sky has identical noise and a removable +0.1 pedestal;
         # bright edges and zero padding must affect neither its level nor weight.
@@ -85,7 +170,7 @@ class TestLiveStack(unittest.TestCase):
         s = livestack.LiveStack(gewichten=False, log=_stille, context_id="calibration-and-options-hash")
         s.hinzufuegen(reference)
         shift = np.array([[1., 0., 12.], [0., 1., 0.]])
-        with patch("livestack.astro._estimate_star_shift", return_value=shift):
+        with patch("livestack.astro._estimate_star_transform_robust", return_value=shift):
             for _ in range(5):
                 self.assertTrue(s.hinzufuegen(reference))
         path = os.path.join(self.d, "coverage.npz")
@@ -98,7 +183,7 @@ class TestLiveStack(unittest.TestCase):
         next_frame[16, 2, 0] = .4  # only its second actual sample: not enough to reject
         next_frame[16, 20, 0] = .9  # seventh sample: reject this one channel
         identity = np.array([[1., 0., 0.], [0., 1., 0.]])
-        with patch("livestack.astro._estimate_star_shift", return_value=identity):
+        with patch("livestack.astro._estimate_star_transform_robust", return_value=identity):
             for state in (s, resumed):
                 self.assertTrue(state.hinzufuegen(next_frame))
         np.testing.assert_allclose(s.ergebnis()[16, 2], [.3, .2, .2], atol=1e-6)
@@ -113,7 +198,7 @@ class TestLiveStack(unittest.TestCase):
         reference = np.full((32, 32, 3), .2, np.float32)
         s.hinzufuegen(reference)
         shift = np.array([[1., 0., 100.], [0., 1., 0.]])
-        with patch("livestack.astro._estimate_star_shift", return_value=shift):
+        with patch("livestack.astro._estimate_star_transform_robust", return_value=shift):
             self.assertFalse(s.hinzufuegen(reference))
         self.assertEqual((s.n, s.verworfen), (1, 1))
         np.testing.assert_array_equal(s.anzahl, 1)

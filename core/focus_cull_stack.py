@@ -3329,9 +3329,15 @@ def live_loop(args, input_dir, work_dir):
             for pfad in neu:
                 if stop["flag"]:
                     break
-                if ls.hinzufuegen(pfad):
-                    print(f"  + {os.path.basename(pfad)}  ({ls.n} Frames im Stapel)")
+                ergebnis = ls.hinzufuegen(pfad)
+                # None heisst "noch nicht entscheidbar" (Datei wird vielleicht gerade
+                # geschrieben) — nur dann erneut versuchen. True und False sind beide
+                # Entscheidungen und werden gemerkt; sonst wird ein nicht ausrichtbarer Frame
+                # alle zwei Sekunden neu gerechnet.
+                if ergebnis is not None:
                     bekannt.add(pfad)
+                if ergebnis:
+                    print(f"  + {os.path.basename(pfad)}  ({ls.n} Frames im Stapel)")
                     ls.vorschau_schreiben(vorschau)
                     ls.speichern(zustand)
             time.sleep(2)

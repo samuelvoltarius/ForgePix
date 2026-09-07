@@ -35,7 +35,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 import messbericht  # noqa: E402
 
 
-def _szene(h=300, w=400, sterne=40, nebel=True, seed=3):
+def _szene(h=300, w=400, sterne=40, nebel=True, seed=3, breit=False):
+    """Eine Testszene. `breit=True` zieht die Sterne in eine Richtung — so sehen Sterne aus,
+    wenn die Nachfuehrung driftet oder das Bildfeld sich dreht."""
     rng = np.random.default_rng(seed)
     g = np.clip(rng.normal(0.030, 0.0015, (h, w)).astype(np.float32), 0, 1)
     if nebel:
@@ -46,7 +48,12 @@ def _szene(h=300, w=400, sterne=40, nebel=True, seed=3):
         x, y = int(rng.integers(20, w - 20)), int(rng.integers(20, h - 20))
         p = np.zeros((h, w), np.float32)
         p[y, x] = 1.0
-        g += cv2.GaussianBlur(p, (0, 0), 1.5) * float(rng.uniform(2, 8))
+        if breit:
+            p = cv2.GaussianBlur(p, (0, 0), sigmaX=4.0, sigmaY=1.4)
+            p *= 4.0 / (float(p.max()) + 1e-12) * 0.25
+        else:
+            p = cv2.GaussianBlur(p, (0, 0), 1.5)
+        g += p * float(rng.uniform(2, 8))
     g = np.clip(g, 0, 1)
     return np.dstack([g * 0.99, g, g * 0.995]).astype(np.float32)
 
@@ -95,11 +102,28 @@ class TestSterne(unittest.TestCase):
         self.assertIsNotNone(viel)
         self.assertGreater(viel, wenig, "mehr Sterne im Bild muessen mehr Sterne ergeben")
 
-    def test_ohne_datei_keine_form_aber_eine_anzahl(self):
+    def test_form_wird_am_uebergebenen_bild_gemessen(self):
+        """Frueher kam die Form von einem SUB, weil `analyze_frame` einen Dateipfad braucht.
+        Das fuehrte zu falschen Ratschlaegen: an sechs echten Seestar-Serien lag die Rundheit
+        der Subs bei 1,63 bis 1,66, die des fertigen Stapels aber bei 1,26 bis 1,37. Die
+        Regelschwelle liegt bei 1,6 — das Regelwerk empfahl also in vier von sechs Faellen
+        `--astro-synthstar`, eine Massnahme, die Photometrie unbrauchbar macht, fuer Bilder
+        ohne verzogene Sterne. Jetzt wird das uebergebene Bild kurz in eine temporaere Datei
+        geschrieben und DIESES gemessen."""
         b = messbericht.erstellen(_szene())["sterne"]
         self.assertIsNotNone(b["anzahl"])
-        self.assertIsNone(b["fwhm_px"], "ohne Datei darf keine FWHM erfunden werden")
-        self.assertEqual(b["quelle"], "nur gezaehlt")
+        self.assertIsNotNone(b["fwhm_px"], "die Form muss am uebergebenen Bild messbar sein")
+        self.assertIn("uebergebenen", b["quelle"])
+
+    def test_runde_und_verzogene_sterne_werden_unterschieden(self):
+        """Die Gegenprobe: waere die Messung wirkungslos, kaeme fuer beide dasselbe heraus."""
+        rund = messbericht.erstellen(_szene())["sterne"]["rundheit"]
+        verzogen = messbericht.erstellen(_szene(breit=True))["sterne"]["rundheit"]
+        self.assertIsNotNone(rund)
+        self.assertIsNotNone(verzogen)
+        self.assertGreater(verzogen, rund + 0.15,
+                           "verzogene Sterne muessen eine hoehere Rundheit ergeben (%.2f/%.2f)"
+                           % (verzogen, rund))
 
 
 class TestHimmelUndSignal(unittest.TestCase):
@@ -150,9 +174,17 @@ class TestText(unittest.TestCase):
             self.assertIn(kopf, t)
 
     def test_fehlende_werte_erscheinen_als_fragezeichen(self):
-        """Ein Platzhalter darf nicht wie eine Messung aussehen."""
-        t = messbericht.text(messbericht.erstellen(_szene()))
-        self.assertIn("?", t, "ohne Datei muessen Ausruestungswerte als unbekannt erscheinen")
+        """Ein Platzhalter darf nicht wie eine Messung aussehen.
+
+        Geprueft wird an einem Bericht mit fehlenden Werten. Frueher genuegte dafuer ein Bild
+        ohne Datei, weil dann auch die Sternform fehlte — die wird inzwischen am uebergebenen
+        Bild gemessen, ist also da. Der Punkt des Tests bleibt derselbe."""
+        b = messbericht.erstellen(_szene())
+        b["sterne"]["fwhm_px"] = None
+        b["himmel"]["gradient_prozent"] = None
+        t = messbericht.text(b)
+        self.assertIn("?", t, "fehlende Werte muessen als unbekannt erscheinen")
+        self.assertNotIn("0.00 px", t, "ein fehlender Wert darf nicht als Null erscheinen")
 
     def test_warnung_bei_signal_unter_rauschen(self):
         rng = np.random.default_rng(2)

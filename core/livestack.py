@@ -75,7 +75,11 @@ class LiveStack:
             return f, np.ones(f.shape[:2], dtype=bool)
         try:
             grau = astro._gray(f)
-            M = astro._estimate_star_shift(self.ref_grau, grau)
+            # Verschiebung UND Feldrotation. Hier stand `_estimate_star_shift`, das nur
+            # Translation kann. An echten Seestar-Aufnahmen (azimutale Montierung, das
+            # Bildfeld dreht sich im Lauf der Nacht) richtete der Live-Stapler damit vier
+            # Frames aus und lehnte danach jeden weiteren ab — gemessen an IC 417: 4 von 10.
+            M = astro._estimate_star_transform_robust(self.ref_grau, grau)
             # Die erkannten Sterne dieses Frames merken — sie werden in der Vorschau
             # markiert, damit sichtbar ist, worauf gerade ausgerichtet wird.
             self.letzte_sterne = astro._star_centroids(grau / (float(grau.max()) + 1e-9))
@@ -106,20 +110,34 @@ class LiveStack:
 
     # ------------------------------------------------------------ öffentlich
     def hinzufuegen(self, bild_oder_pfad):
-        """Einen Frame verrechnen. Gibt True zurück, wenn er im Stapel gelandet ist."""
+        """Einen Frame verrechnen.
+
+        Returns:
+            True  — im Stapel gelandet.
+            False — endgültig abgelehnt (falsche Größe, ungültige Pixel, nicht ausrichtbar).
+            None  — noch nicht entscheidbar, später erneut versuchen (Datei noch im Schreiben).
+
+        Die Unterscheidung ist der Punkt. Vorher gab es nur True/False, und der
+        Beobachtungsmodus merkte sich nur erfolgreiche Aufnahmen — ein Frame, der sich nie
+        ausrichten lässt, wurde damit alle zwei Sekunden neu versucht. Gemessen an zehn echten
+        Aufnahmen: **231 identische Meldungen** im Protokoll, dazu die Rechenzeit für jeden
+        Versuch. Eine halb geschriebene Datei dagegen muss erneut versucht werden — genau dafür
+        gibt es `None`.
+        """
         if isinstance(bild_oder_pfad, str):
             pfad = bild_oder_pfad
             try:
                 f = self.reader(pfad)
             except (OSError, ValueError, RuntimeError) as e:
-                self.log("    Live: Aufnahme noch nicht lesbar, wird erneut versucht: %s (%s)" % (pfad, e))
-                return False
+                self.log("    Live: Aufnahme noch nicht lesbar, wird erneut versucht: %s (%s)"
+                         % (pfad, e))
+                return None        # vorlaeufig: die Datei wird vielleicht noch geschrieben
             if f is not None and f.ndim == 2:
                 f = cv2.cvtColor(f, cv2.COLOR_GRAY2BGR)
         else:
             pfad, f = None, np.asarray(bild_oder_pfad, np.float32)
         if f is None:
-            return False
+            return None            # nichts gelesen — spaeter noch einmal ansehen
         if f.size == 0 or not np.isfinite(f).all():
             self.log("    Live: Aufnahme enthält leere oder ungültige Pixel — übersprungen")
             self.verworfen += 1

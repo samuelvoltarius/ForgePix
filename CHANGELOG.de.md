@@ -8,6 +8,40 @@ Alle nennenswerten Änderungen an ForgePix. Format orientiert an
 
 ## [Unreleased]
 
+### Live-Stacking: 4 von 10 Aufnahmen, und 231 Meldungen für 10 Dateien
+
+Am echten Live-Lauf aufgefallen (IC 417, 10 Seestar-Aufnahmen, nachgeschoben wie in der
+Nacht). Zwei Fehler, die zusammen den ganzen Modus unbrauchbar machten:
+
+**Die Ausrichtung konnte nur verschieben.** Der Live-Stapler nahm `_estimate_star_shift`. Der
+Seestar steht azimutal — nach vier Aufnahmen lehnte er jede weitere ab. Schlimmer noch: bei
+kleinen Drehwinkeln gibt dieses Verfahren gar kein „geht nicht" zurück, sondern eine
+**falsche Verschiebung** (an einer 8°-Drehung gemessen: 3,8 / 6,3 px). Es lehnt den Frame also
+nicht ab, es registriert ihn falsch, und der Stapel bekommt doppelte Sterne, ohne dass sich
+etwas meldet.
+
+**Abgelehnte Aufnahmen wurden endlos wiederholt.** Der Beobachtungsmodus merkte sich nur
+*erfolgreiche* Aufnahmen. Ein Frame, der sich nie ausrichten lässt, wurde damit alle zwei
+Sekunden neu gerechnet — 231 identische Meldungen im Protokoll für zehn Dateien. `hinzufuegen`
+unterscheidet jetzt drei Fälle: aufgenommen, endgültig abgelehnt, und „später noch einmal" für
+eine Datei, die gerade erst geschrieben wird. Nur der letzte Fall wird wiederholt.
+
+Derselbe Lauf nach der Reparatur: **10 von 10 Aufnahmen im Stapel, keine einzige
+Wiederholungsmeldung.**
+
+### Sternform wird am Stapel gemessen, nicht an einem Sub
+
+Der Messbericht nahm FWHM und Rundheit von einem Einzelbild, weil die getestete Analyse einen
+Dateipfad braucht. Das führte zu falschen Ratschlägen: an sechs echten Seestar-Serien lag die
+Rundheit der Subs bei 1,63 bis 1,66, die des fertigen Stapels aber bei **1,26 bis 1,37**. Die
+Regelschwelle liegt bei 1,6 — das Regelwerk empfahl also in **vier von sechs Fällen**
+`--astro-synthstar`, eine Maßnahme, die die Photometrie unbrauchbar macht, für Bilder ohne
+verzogene Sterne. Die Ausrichtung mittelt die Verformung der Einzelaufnahmen weg; der Stapel ist
+das richtige Messobjekt. Er wird dafür kurz in eine temporäre Datei geschrieben.
+
+An IC 417 nachgemessen: Rundheit 1,65 (Sub) gegen 1,40 (Stapel), und die falsche Empfehlung ist
+verschwunden.
+
 ### Zwei Fehler in der Kalibrier-Erkennung über die Kopfdaten
 
 Die Suche nach Kalibrierbildern über den FITS-Header löst ein echtes Problem: wer seine Darks
