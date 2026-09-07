@@ -146,6 +146,41 @@ KAMERAS = [
 NACH_KAMERA = {k[0]: k for k in KAMERAS}
 
 
+def _knapp(text):
+    """Nur Buchstaben und Ziffern, klein. "ZWO ASI294MC Pro" -> "zwoasi294mcpro"."""
+    return "".join(c for c in str(text or "").lower() if c.isalnum())
+
+
+# Herstellerwörter, die im FITS-Header mal dastehen und mal nicht. ASIAIR schreibt
+# "ZWO ASI294MC Pro", N.I.N.A. an derselben Kamera oft nur "ASI294MC Pro".
+_HERSTELLER = ("zwo", "qhy", "touptekastro", "touptek", "svbony", "player one", "playerone")
+
+
+def kamera_aus_name(name):
+    """Aus dem Kameranamen im Header den Schlüssel aus `KAMERAS` machen.
+
+    Gibt None zurück, wenn nichts passt ODER wenn mehrere Einträge passen. Mehrdeutig ist
+    schlimmer als gar nichts: ein falsch erkannter Sensor führt zu einem Farburteil über die
+    falsche Kamera, und das ist ein erfundener Befund. ASI294MC (IMX294) und ASI294MM (IMX492)
+    unterscheiden sich um einen Buchstaben und um den Faktor 2 in der Pixelgröße.
+    """
+    ziel = _knapp(name)
+    if not ziel:
+        return None
+    treffer = []
+    for schluessel, bezeichnung, _px in KAMERAS:
+        if schluessel == "manuell":
+            continue
+        modell = _knapp(bezeichnung.split("(")[0])
+        formen = {modell}
+        for h in _HERSTELLER:
+            if modell.startswith(_knapp(h)):
+                formen.add(modell[len(_knapp(h)):])
+        if any(f and (f in ziel or ziel in f) for f in formen):
+            treffer.append(schluessel)
+    return treffer[0] if len(treffer) == 1 else None
+
+
 def _eigene_datei():
     """Pfad der Datei mit den selbst eingetragenen Geräten (neben den übrigen Einstellungen)."""
     import os as _os

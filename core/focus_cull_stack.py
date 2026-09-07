@@ -2055,6 +2055,33 @@ def run_astro(input_dir, work_dir, args):
         json.dump(report, f, ensure_ascii=False, indent=2)
     print("  Ergebnis: %d von %d Aufnahmen, %.1f Minuten Gesamtbelichtung." %
           (len(used_paths), len(original_paths), report["integration_seconds"] / 60))
+
+    # --- Messbericht und Rat ---------------------------------------------------------
+    # Gemessen wird am LINEAREN Stapel, vor jeder Streckung: danach waeren Median, Rauschen
+    # und Kanalverhaeltnisse verzerrt und der Bericht wertlos. Faellt das hier aus, ist der
+    # Stapel trotzdem fertig — ein Bericht ist eine Zugabe, kein Teil des Ergebnisses.
+    try:
+        import messbericht
+        import regeln
+        _b = messbericht.erstellen(result, pfad=(used_paths[0] if used_paths else None),
+                                   paths=used_paths, log=lambda *a, **k: None)
+        _r = regeln.pruefen(_b)
+        with open(os.path.join(out, "messbericht.json"), "w", encoding="utf-8") as f:
+            json.dump({"bericht": _b,
+                       "raete": [dict(x._asdict()) for x in _r],
+                       "einstellungen": regeln.einstellungen(_r)},
+                      f, ensure_ascii=False, indent=2)
+        print()
+        print(messbericht.text(_b))
+        print()
+        print(regeln.text(_r))
+        if regeln.einstellungen(_r):
+            print()
+            print("  Vorschlag: " + " ".join(regeln.einstellungen(_r)))
+    except Exception as e:
+        # Nicht verschlucken. Ein stiller Fehler hier hiesse: der Bericht fehlt und niemand
+        # merkt es — genau die Sorte Fehler, die in diesem Projekt am meisten gekostet hat.
+        print("  Messbericht nicht erstellt: %s" % e)
     shutil.rmtree(reg_dir, ignore_errors=True)
     return out
 

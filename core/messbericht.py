@@ -236,6 +236,21 @@ def erstellen(bild, pfad=None, paths=None, kamera=None, filter_key=None, log=log
         `ausruestung` und `serie`.
     """
     a = np.asarray(bild, np.float32)
+
+    # Kamera aus dem Header erkennen, wenn keine vorgegeben wurde. Ohne Schluessel gaebe es
+    # kein Farburteil — und niemand traegt im DAU-Modus eine Kamera von Hand ein. Erkannt wird
+    # nur, was eindeutig ist; bei Mehrdeutigkeit bleibt es None (siehe equipment.kamera_aus_name).
+    kamera_quelle = "vorgegeben" if kamera else None
+    if not kamera and pfad:
+        try:
+            from astropy.io import fits
+            import equipment
+            kamera = equipment.kamera_aus_name(fits.getheader(pfad).get("INSTRUME"))
+            if kamera:
+                kamera_quelle = "aus dem Header erkannt"
+        except Exception:
+            kamera = None
+
     bericht = {
         "bild": {"hoehe": int(a.shape[0]), "breite": int(a.shape[1]),
                  "kanaele": int(a.shape[2]) if a.ndim == 3 else 1,
@@ -247,6 +262,8 @@ def erstellen(bild, pfad=None, paths=None, kamera=None, filter_key=None, log=log
         "ausruestung": _ausruestung(pfad, kamera, filter_key),
         "serie": _serie(paths),
     }
+    bericht["ausruestung"]["kamera_schluessel"] = kamera
+    bericht["ausruestung"]["kamera_herkunft"] = kamera_quelle
     try:
         import equipment
         skala = bericht["ausruestung"].get("skala_bogensek_px")

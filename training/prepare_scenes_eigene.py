@@ -44,20 +44,40 @@ def _stapeln(pfade, skala, log):
     """Eine Serie tief stapeln. Gibt das Mono-Ergebnis oder None."""
     import cv2
     import astro
-    bilder = []
+    bilder, unbrauchbar = [], 0
     for p in pfade:
-        f = astro._read_float(p)
+        try:
+            f = astro._read_float(p)
+        except Exception:
+            unbrauchbar += 1
+            continue
         if f is None:
+            unbrauchbar += 1
             continue
         if f.ndim == 3:
             f = astro._gray(f)
+        f = f.astype(np.float32)
+        # ABGESCHNITTENE DATEIEN aussortieren. Im Archiv liegt mindestens eine (astropy meldet
+        # "actual file length 262144, expected 23400000"). astropy fuellt den Rest mit Nullen
+        # auf — die Datei laesst sich also lesen, hat die richtige Form und ist trotzdem zur
+        # Haelfte leer. In einem Stapel faellt das niemandem auf, es zieht nur alles dunkler.
+        if not np.isfinite(f).all():
+            unbrauchbar += 1
+            continue
+        leer = float((f == 0).mean())
+        if leer > 0.30:
+            unbrauchbar += 1
+            continue
         if skala != 1.0:
             f = cv2.resize(f, (0, 0), fx=skala, fy=skala)
-        bilder.append(f.astype(np.float32))
+        bilder.append(f)
+    if unbrauchbar:
+        log("    %d Aufnahme(n) unbrauchbar (abgeschnitten oder ungueltig) — aussortiert"
+            % unbrauchbar)
     if len(bilder) < 2:
-        return None, 0
+        return None, unbrauchbar
     ref = bilder[0]
-    aus, verworfen = [ref], 0
+    aus, verworfen = [ref], unbrauchbar
     for f in bilder[1:]:
         if f.shape != ref.shape:
             verworfen += 1
@@ -99,6 +119,29 @@ def _kacheln(bild, groesse, anzahl, rng, min_struktur=1e-5):
     return raus
 
 
+def _kameras_in(pfade, hoechstens=40):
+    """Welche Kameras stecken wirklich in dieser Serie? Stichprobe ueber die Header."""
+    from astropy.io import fits
+    kameras = set()
+    for p in pfade[:hoechstens]:
+        try:
+            kameras.add(str(fits.getheader(p).get("INSTRUME", "?")).strip())
+        except Exception:
+            continue
+    return kameras
+
+
+def _kameras_zaehlen(aufzeichnungen):
+    """Welche Kamera wie viele Kacheln beigesteuert hat, je Menge."""
+    aus = {}
+    for a in aufzeichnungen:
+        kam = a.get("kamera") or "unbekannt"
+        menge = a.get("menge") or "?"
+        aus.setdefault(kam, {}).setdefault(menge, 0)
+        aus[kam][menge] += int(a.get("kacheln") or 0)
+    return aus
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -109,6 +152,10 @@ def main():
     ap.add_argument("--je-serie", type=int, default=24, help="Kacheln je Serie")
     ap.add_argument("--skala", type=float, default=1.0)
     ap.add_argument("--max-serien", type=int, default=0, help="0 = alle")
+    ap.add_argument("--kamera", default=None,
+                    help="Nur Serien dieser Kamera (Teilzeichenkette, z. B. 294MC). Ohne "
+                         "Angabe kommen ALLE Kameras in dieselbe Bank — fuer Szenenvielfalt "
+                         "ist das gewollt, fuer ein kameraspezifisches Modell nicht.")
     args = ap.parse_args()
 
     import trainingspaare
@@ -132,6 +179,10 @@ def main():
             print("  Quelle nicht erreichbar, uebersprungen: %s" % quelle, file=sys.stderr)
             continue
         serien.update(trainingspaare.serien_finden(quelle, min_subs=args.min_subs))
+    if args.kamera:
+        vorher = len(serien)
+        serien = {k: v for k, v in serien.items() if args.kamera.lower() in k[0].lower()}
+        print("  Kamerafilter %r: %d von %d Serien" % (args.kamera, len(serien), vorher))
     reihen = sorted(serien.items(), key=lambda kv: -len(kv[1]))
     if args.max_serien:
         reihen = reihen[:args.max_serien]
@@ -146,6 +197,14 @@ def main():
         if name in erledigt:
             continue
         t0 = time.time()
+        # Sicherung gegen gemischte Kameras: die Gruppierung trennt sie zwar, aber ein Stapel
+        # aus zwei Sensoren waere unbrauchbar und faellt niemandem auf — verschiedene
+        # Pixelmassstaebe ergeben verschieden breite Sterne im selben Bild.
+        kameras = _kameras_in(pfade)
+        if len(kameras) > 1:
+            print("  [%d/%d] %s — UEBERSPRUNGEN: mehrere Kameras in einer Serie (%s)"
+                  % (i, len(reihen), name, ", ".join(sorted(kameras))), file=sys.stderr)
+            continue
         stapel, verworfen = _stapeln(pfade, args.skala, print)
         if stapel is None:
             print("  [%d/%d] %s — nicht stapelbar, uebersprungen" % (i, len(reihen), name))
@@ -194,6 +253,12 @@ def main():
         "size": args.groesse,
         "counts": {k: (len(v) if not isinstance(v, np.ndarray) else int(v.shape[0]))
                    for k, v in banks.items()},
+        # Kameras aufschluesseln. Die Bank MISCHT Kameras, wenn nicht gefiltert wird — fuer
+        # Szenenvielfalt ist das gewollt, aber wer ein kameraspezifisches Modell trainiert,
+        # muss es wissen. Verschiedene Sensoren haben verschiedene Pixelmassstaebe, damit
+        # verschieden breite Sterne, und verschiedenes Ausleserauschen.
+        "kameras": _kameras_zaehlen(alle_aufzeichnungen),
+        "kamerafilter": args.kamera,
         "records": alle_aufzeichnungen,
         "use": "Bodengebundene Szenen aus eigenen Aufnahmen, als Grundlage fuer synthetische "
                "Degradation. NICHT als rauschfreie Wahrheit.",
