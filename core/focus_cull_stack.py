@@ -2421,6 +2421,34 @@ def _maybe_upscale(result, args):
         return result
 
 
+def _groesstes_rechteck(maske):
+    """Groesstes achsenparalleles Rechteck, das nur aus True besteht. Gibt (y0, y1, x0, x1).
+
+    Klassisches Histogramm-Verfahren, O(h*w). Der naheliegende Greedy-Ansatz — immer die
+    duennste der vier Kanten abtragen — geht hier schief: eine duenne ECKE gehoert zu zwei
+    Kanten, die betroffene Kante sieht darum dauerhaft schlecht aus und wird bis zur
+    Flaechengrenze abgetragen. An einer Karte ganz OHNE Feldrotation gemessen kam so ein
+    Streifen von 122..256 statt des vollen Bildes heraus.
+    """
+    h, w = maske.shape[:2]
+    hoehen = np.zeros(w, np.int32)
+    bestes = (0, 0, 0, 0, 0)
+    for y in range(h):
+        hoehen = np.where(maske[y], hoehen + 1, 0)
+        stapel = []
+        for x in range(w + 1):
+            hier = int(hoehen[x]) if x < w else 0
+            start = x
+            while stapel and stapel[-1][1] >= hier:
+                sx, sh = stapel.pop()
+                flaeche = sh * (x - sx)
+                if flaeche > bestes[0]:
+                    bestes = (flaeche, y - sh + 1, y + 1, sx, x)
+                start = sx
+            stapel.append((start, hier))
+    return bestes[1:] if bestes[0] else None
+
+
 def _zuschnitt_auf_beitraege(result, stack_info, args):
     """Den Rahmen wegschneiden, in dem nur wenige Aufnahmen beigetragen haben.
 
@@ -2443,43 +2471,68 @@ def _zuschnitt_auf_beitraege(result, stack_info, args):
     Gibt `(result, stack_info)` zurueck. Ist nichts zu schneiden, bleibt beides unveraendert —
     ein zweiter Aufruf tut darum nichts mehr.
     """
-    if getattr(args, "autocrop", True) and stack_info is not None:
-        _anzahl = stack_info.get("beitraege")
-        if _anzahl is None:
-            print("  Zuschnitt nicht moeglich: das Stapelverfahren liefert keine "
-                  "Beitragszahl je Pixel.")
-        elif np.isfinite(_anzahl).any():
-            _voll = np.asarray(_anzahl, np.float32)
-            # Je ZEILE und je SPALTE der Median, nicht jedes einzelne Pixel. Der Randabfall
-            # ist ein zeilen- und spaltenweiter Effekt; die Sigma-Rejection verwirft dagegen
-            # verstreute Einzelpixel im ganzen Bild. Mit `all()` genuegte ein einziges
-            # verworfenes Pixel, um eine Zeile auszuschliessen — dann qualifizierte sich keine
-            # einzige und der Zuschnitt tat wortlos nichts. Genau so gemessen an IC 434.
-            _zp = np.median(_voll, axis=1)
-            _sp = np.median(_voll, axis=0)
-            _grenze = 0.8 * float(max(_zp.max(), _sp.max()))
-            _zeilen = np.where(_zp >= _grenze)[0]
-            _spalten = np.where(_sp >= _grenze)[0]
-            _hoch, _breit = _voll.shape[:2]
-            if not len(_zeilen) or not len(_spalten):
-                print("  Zuschnitt uebersprungen: keine Zeile oder Spalte erreicht 80 %% der "
-                      "Beitraege — die Abdeckung ist ueberall duenn.")
-            else:
-                y0, y1 = int(_zeilen[0]), int(_zeilen[-1]) + 1
-                x0, x1 = int(_spalten[0]), int(_spalten[-1]) + 1
-                _rest = (y1 - y0) * (x1 - x0) / float(_hoch * _breit)
-                if _rest < 0.5:
-                    print("  Zuschnitt uebersprungen: es blieben nur %.0f %% des Bildes "
-                          "uebrig — das deutet auf ein anderes Problem hin." % (100 * _rest))
-                elif (y0, x0) != (0, 0) or (y1, x1) != (_hoch, _breit):
-                    result = result[y0:y1, x0:x1]
-                    stack_info = dict(stack_info)
-                    stack_info["coverage"] = np.asarray(stack_info["coverage"])[y0:y1, x0:x1]
-                    stack_info["beitraege"] = _voll[y0:y1, x0:x1]
-                    print("  Zuschnitt: %d px oben, %d unten, %d links, %d rechts — dort "
-                          "trugen weniger als 80 %% der Aufnahmen bei (%dx%d -> %dx%d)."
-                          % (y0, _hoch - y1, x0, _breit - x1,
-                             _breit, _hoch, x1 - x0, y1 - y0))
+    # Wieviel Beitrag die duennste Stelle im behaltenen Bild mindestens haben muss. Das Rauschen
+    # geht mit 1/Wurzel(n): 0,8 heisst hoechstens das 1,12-fache Rauschen am Rand.
+    _ANTEIL = 0.8
+    if not getattr(args, "autocrop", True) or stack_info is None:
+        return result, stack_info
+    _anzahl = stack_info.get("beitraege")
+    if _anzahl is None:
+        print("  Zuschnitt nicht moeglich: das Stapelverfahren liefert keine "
+              "Beitragszahl je Pixel.")
+        return result, stack_info
+    if not np.isfinite(_anzahl).any():
+        print("  Zuschnitt nicht moeglich: die Beitragszahl enthaelt keine gueltigen Werte.")
+        return result, stack_info
+
+    _voll = np.asarray(_anzahl, np.float32)
+    _hoch, _breit = _voll.shape[:2]
+    # Die Sigma-Rejection verwirft ueberall verstreute EINZELpixel. Die duerfen den Zuschnitt
+    # nicht steuern — sie sagen nichts ueber die Abdeckung, sondern ueber einen Satelliten oder
+    # ein Hotpixel an dieser Stelle. Ein 3x3-Median raeumt sie weg und laesst den geometrischen
+    # Randabfall unveraendert; an einer gleichmaessigen Karte mit 3,3 %% Loechern gemessen: das
+    # Minimum steigt von 18 auf 60 von 60, eine lineare Rampe aendert sich nicht.
+    # Ohne diesen Schritt schnitt das Verfahren selbst eine voellig gleichmaessige Karte bis an
+    # die Flaechengrenze zusammen.
+    _glatt = cv2.medianBlur(_voll, 3)
+    # Bezug ist das 99. Perzentil, nicht das Maximum: ein einzelnes Ausreisserpixel darf die
+    # Schwelle nicht fuer das ganze Bild verschieben.
+    _grenze = _ANTEIL * float(np.percentile(_glatt, 99.0))
+    # Auf einer verkleinerten Maske suchen — bei 1920x1080 waeren es sonst zwei Millionen
+    # Schleifendurchlaeufe. `erode` macht eine Zelle nur dann gut, wenn ihre ganze Umgebung gut
+    # ist; verkleinert wird also konservativ.
+    _k = max(1, min(_hoch, _breit) // 300)
+    _maske = (_glatt >= _grenze).astype(np.uint8)
+    if _k > 1:
+        _maske = cv2.erode(_maske, np.ones((_k, _k), np.uint8))[::_k, ::_k]
+    _kasten = _groesstes_rechteck(_maske.astype(bool))
+    if _kasten is None:
+        print("  Zuschnitt uebersprungen: nirgends erreichen die Beitraege %.0f %% — die "
+              "Abdeckung ist ueberall duenn." % (100 * _ANTEIL))
+        return result, stack_info
+    y0, y1, x0, x1 = (_kasten[0] * _k, min(_kasten[1] * _k, _hoch),
+                      _kasten[2] * _k, min(_kasten[3] * _k, _breit))
+    _warum = ""
+    if (y1 - y0) * (x1 - x0) < 0.5 * _hoch * _breit:
+        _warum = (" Mehr als die Haelfte waere weggefallen — das deutet auf starke "
+                  "Bildfeldrotation oder grosse Dither-Spruenge hin.")
+
+    if (y0, x0) == (0, 0) and (y1, x1) == (_hoch, _breit):
+        return result, stack_info
+
+    _mitte = float(np.median(_glatt[_hoch // 3:2 * _hoch // 3, _breit // 3:2 * _breit // 3]))
+    _duenn = float(_glatt[y0:y1, x0:x1].min())
+    _faktor = (_mitte / max(_duenn, 1e-9)) ** 0.5 if _mitte > 0 else float("nan")
+    result = result[y0:y1, x0:x1]
+    stack_info = dict(stack_info)
+    stack_info["coverage"] = np.asarray(stack_info["coverage"])[y0:y1, x0:x1]
+    stack_info["beitraege"] = _voll[y0:y1, x0:x1]
+    print("  Zuschnitt: %d px oben, %d unten, %d links, %d rechts (%dx%d -> %dx%d, %.0f %% "
+          "der Flaeche). Duennste Stelle jetzt %.0f %% der Mitte, dort rauscht es noch das "
+          "%.2f-fache. %s"
+          % (y0, _hoch - y1, x0, _breit - x1, _breit, _hoch, x1 - x0, y1 - y0,
+             100.0 * (y1 - y0) * (x1 - x0) / (_hoch * _breit),
+             100.0 * _duenn / max(_mitte, 1e-9), _faktor, _warum))
     return result, stack_info
 
 

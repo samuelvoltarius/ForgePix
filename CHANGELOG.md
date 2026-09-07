@@ -32,10 +32,36 @@ same stack:
 | G/R in the centre | 0.963 | 0.955 |
 | edge noise | 1.6x | **1.1-1.25x** |
 
-The first attempt kept only rows in which *every* pixel had enough contributions. Sigma
-rejection discards scattered individual pixels everywhere, so no row qualified and the crop did
-**nothing, silently**. The correct measure is the median per row and per column. Every path that
-skips the crop now says so in the log.
+**Three attempts were wrong**, and all three are kept as tests in
+`tests/test_astro_zuschnitt.py`:
+
+1. Keep rows in which *every* pixel has enough contributions. Sigma rejection discards scattered
+   individual pixels everywhere, so no row qualified and the crop did **nothing, silently**.
+2. The median per row and per column. Robust against those holes, but blind to **field
+   rotation**: the Seestar is alt-azimuth, the field rotates, and the thin spots then sit at the
+   *ends* of each row — a median taken across the row never sees them. That was the residual
+   blue cast left at the left and right edges of the finished image (G/B 0.78 against 1.00 in
+   the centre).
+3. Repeatedly trim whichever of the four edges is thinnest. A thin **corner** belongs to two
+   edges, so the affected edge looks permanently bad and gets shaved down to the area limit. On
+   a map with *no* rotation at all this left a vertical strip.
+
+The correct answer — exactly solvable rather than guessed — is the **largest axis-aligned
+rectangle** inside the well-covered area (histogram method, O(h*w), 0.05 s at 4144x2822).
+Scattered rejection holes are removed first with a 3x3 median: on a uniform map with 3.3 %
+holes this raises the minimum from 18 to 60 out of 60, while a linear ramp is unchanged.
+
+The threshold therefore controls **quality**, and the area follows from it:
+
+| field rotation | area kept | noise at the thinnest point |
+|---|---|---|
+| 0° | 90.9 % | 1.14x |
+| 8° | 78.1 % | 1.15x |
+| 20° | 58.3 % | 1.14x |
+
+For comparison, the same 8° case under the median method: 90.6 % area but **1.44x** noise. The
+log now reports both — how much area remained and how much the thinnest point still exceeds the
+centre. Every path that skips the crop says so as well.
 
 ### Registration validates its result against physics
 

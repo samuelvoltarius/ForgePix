@@ -33,10 +33,39 @@ entsteht. Am selben Stapel gemessen:
 | G/R in der Mitte | 0,963 | 0,955 |
 | Rauschen am Rand | 1,6-fach | **1,1–1,25-fach** |
 
-Die erste Fassung nahm nur Zeilen, in denen *jedes* Pixel genug Beiträge hat. Die
-Sigma-Rejection verwirft aber überall verstreute Einzelpixel — damit qualifizierte sich keine
-einzige Zeile, und der Zuschnitt tat **wortlos nichts**. Richtig ist der Median je Zeile und je
-Spalte. Jeder Weg, auf dem nicht zugeschnitten wird, sagt das jetzt im Protokoll.
+**Drei Anläufe waren falsch**, alle drei stehen als Test in
+`tests/test_astro_zuschnitt.py`:
+
+1. Zeilen nehmen, in denen *jedes* Pixel genug Beiträge hat. Die Sigma-Rejection verwirft aber
+   überall verstreute Einzelpixel — damit qualifizierte sich keine einzige Zeile, und der
+   Zuschnitt tat **wortlos nichts**.
+2. Der Median je Zeile und je Spalte. Robust gegen die Löcher, aber bei **Bildfeldrotation**
+   blind: der Seestar steht azimutal, das Feld dreht sich, und die dünnen Stellen sitzen dann an
+   den *Enden* der Zeilen — der Median in ihrer Mitte merkt davon nichts. Das war der
+   Rest-Blaustich, der links und rechts im fertigen Bild blieb (G/B 0,78 gegen 1,00 in der
+   Mitte).
+3. Von außen immer die dünnste der vier Kanten abtragen. Eine dünne **Ecke** gehört zu zwei
+   Kanten; die betroffene Kante sieht darum dauerhaft schlecht aus und wird bis zur
+   Flächengrenze abgehobelt. An einer Karte ganz *ohne* Rotation blieb so ein senkrechter
+   Streifen übrig.
+
+Richtig — und exakt lösbar statt geraten — ist das **größte achsenparallele Rechteck** innerhalb
+der gut abgedeckten Fläche (Histogramm-Verfahren, O(h·w), 0,05 s bei 4144×2822). Verstreute
+Rejection-Löcher werden vorher mit einem 3×3-Median weggeräumt: an einer gleichmäßigen Karte mit
+3,3 % Löchern steigt das Minimum dadurch von 18 auf 60 von 60, während eine lineare Rampe
+unverändert bleibt.
+
+Damit steuert die Schwelle die **Qualität**, und die Fläche ergibt sich:
+
+| Bildfeldrotation | verbleibende Fläche | Rauschen an der dünnsten Stelle |
+|---|---|---|
+| 0° | 90,9 % | 1,14-fach |
+| 8° | 78,1 % | 1,15-fach |
+| 20° | 58,3 % | 1,14-fach |
+
+Zum Vergleich derselbe Fall mit 8° und dem Median-Verfahren: 90,6 % Fläche, aber **1,44-faches**
+Rauschen. Das Protokoll nennt jetzt beides — wieviel Fläche blieb und wie stark die dünnste
+Stelle noch rauscht. Jeder Weg, auf dem nicht zugeschnitten wird, sagt das ebenfalls.
 
 ### Die Ausrichtung prüft ihr Ergebnis gegen die Physik
 
