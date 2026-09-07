@@ -2045,6 +2045,8 @@ def run_astro(input_dir, work_dir, args):
                                      detector=getattr(args, "detector", "ORB"),
                                      ref_path=_bestref,
                                      banding=getattr(args, "astro_banding", 0.0),
+                                     banding_vertikal=getattr(
+                                         args, "astro_banding_vertical", False),
                                      align_mode=align_mode, do_register=not args.no_register,
                                      return_info=True)
     else:
@@ -2054,7 +2056,9 @@ def run_astro(input_dir, work_dir, args):
                                            drizzle=drizzle, detector=getattr(args, "detector", "ORB"),
                                            tps=getattr(args, "astro_tps", False),
                                            ref_path=_bestref,
-                                           banding=getattr(args, "astro_banding", 0.0))
+                                           banding=getattr(args, "astro_banding", 0.0),
+                                           banding_vertikal=getattr(
+                                               args, "astro_banding_vertical", False))
         phase("stack")
         # Kometen-Stacking: auf den KERN statt auf die Sterne. Der Kern wird selbst gefunden,
         # niemand muss ihn anklicken. Findet sich keiner, wird ganz normal weitergestapelt —

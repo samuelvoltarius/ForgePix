@@ -831,7 +831,8 @@ def _ref_path(paths, ref_path=None):
 
 def register_and_cache(paths, out_dir, dark=None, flat=None, do_register=True,
                        align_mode="shift", cosmetic=False, drizzle=1, detector="ORB",
-                       tps=False, ref_path=None, banding=0.0, log=log_print):
+                       tps=False, ref_path=None, banding=0.0, banding_vertikal=False,
+                       log=log_print):
     """Frames kalibrieren + ausrichten, als float32-TIFF mit Abdeckungsmaske ablegen.
 
     align_mode: 'shift' = NUR Translation (Nachführung ohne Feldrotation, s. CLI --astro-align),
@@ -839,6 +840,9 @@ def register_and_cache(paths, out_dir, dark=None, flat=None, do_register=True,
                 bewusst NICHT genutzt — rastet bei Astro auf dem festen Fixed-Pattern statt auf
                 den gewanderten Sternen ein.
     cosmetic:   Hot-/Cold-Pixel vor dem Ausrichten entfernen.
+    banding_vertikal: spaltenweise statt zeilenweise korrigieren. `fix_banding` kann das
+                seit jeher, der Wert wurde nur nie durchgereicht — die Kommandozeilen-Option
+                `--astro-banding-vertical` stand in der Hilfe und hatte keine Wirkung.
     banding:    Staerke der Zeilen-Banding-Korrektur je Sub (0 = aus). Muss VOR dem Ausrichten
                 laufen: der Versatz haengt am Sensor, nicht am Himmel — nach dem Verschieben
                 waere er ueber die Zeilen verschmiert und nicht mehr sauber zu fassen.
@@ -852,7 +856,7 @@ def register_and_cache(paths, out_dir, dark=None, flat=None, do_register=True,
     drizzle = max(1, int(drizzle))
     ref = read_calibrated(_ref_path(paths, ref_path), dark, flat)
     if banding:
-        ref = fix_banding(ref, strength=banding)
+        ref = fix_banding(ref, strength=banding, vertical=banding_vertikal)
     if cosmetic:
         ref = cosmetic_correct(ref)
     refg = _gray(ref)
@@ -867,7 +871,7 @@ def register_and_cache(paths, out_dir, dark=None, flat=None, do_register=True,
             raise ForgePixFehler("Aufnahme passt nicht zur Referenzgroesse: %s (%s statt %s)"
                                  % (paths[i], f.shape[:2], ref.shape[:2]))
         if banding:
-            f = fix_banding(f, strength=banding)
+            f = fix_banding(f, strength=banding, vertical=banding_vertikal)
         if cosmetic:
             f = cosmetic_correct(f)
         return f
@@ -939,7 +943,8 @@ def register_and_cache(paths, out_dir, dark=None, flat=None, do_register=True,
 
 
 def drizzle_stack(paths, scale=2, pixfrac=0.7, dark=None, flat=None, cosmetic=False,
-                  detector="ORB", ref_path=None, banding=0.0, log=log_print, *,
+                  detector="ORB", ref_path=None, banding=0.0, banding_vertikal=False,
+                  log=log_print, *,
                   align_mode="rotate", do_register=True, transforms=None, masks=None,
                   cfa="auto", return_info=False, cancel=None):
     """Exact square-drop integration, including raw Bayer samples when specified.
@@ -1028,7 +1033,7 @@ def drizzle_stack(paths, scale=2, pixfrac=0.7, dark=None, flat=None, cosmetic=Fa
         else:
             frame, colours = read_calibrated(path, dark, flat), None
             if banding:
-                frame = fix_banding(frame, strength=banding)
+                frame = fix_banding(frame, strength=banding, vertical=banding_vertikal)
             if cosmetic:
                 frame = cosmetic_correct(frame)
             proxy = frame

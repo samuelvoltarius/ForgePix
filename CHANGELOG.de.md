@@ -8,6 +8,27 @@ Alle nennenswerten Änderungen an ForgePix. Format orientiert an
 
 ## [Unreleased]
 
+### Eine Kommandozeilen-Option ohne jede Wirkung
+
+Eine mechanische Prüfung aller **157** Optionen darauf, ob ihr Ziel überhaupt irgendwo gelesen
+wird, hat genau eine gefunden: **`--astro-banding-vertical`**. Sie stand in der Hilfe („Banding
+spaltenweise statt zeilenweise korrigieren"), wurde von argparse angenommen — und nirgends
+ausgewertet. `astro.fix_banding` kann die Richtung seit jeher, der Wert wurde nur nie
+durchgereicht.
+
+Gemessen, warum das zählt:
+
+| Bild mit Spalten-Banding | Spaltenstreuung |
+|---|---|
+| vorher | 0,01082 |
+| zeilenweise korrigiert | **0,01082** (exakt nichts) |
+| spaltenweise korrigiert | **0,00317** (−71 %) |
+
+Wer Spalten-Banding hatte, setzte die Option und bekam keinerlei Wirkung — ohne dass irgendwo
+etwas dagegen sprach. Die Richtung wird jetzt bis zur Korrektur durchgereicht, auf beiden
+Stapelwegen (normal und Drizzle). Die Prüfung selbst ist als Test geblieben: eine Option, die
+niemand liest, ist ein Versprechen ohne Wirkung.
+
 ### Der Astro-Modus hat `--export` und `--web-jpg` ignoriert
 
 Beide Optionen stehen in der Hilfe, werden angenommen — und taten im **Astro-Modus** nichts.

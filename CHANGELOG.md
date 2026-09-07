@@ -8,6 +8,26 @@ All notable changes to ForgePix. Format based on
 
 ## [Unreleased]
 
+### One command-line option with no effect at all
+
+A mechanical check of all **157** options for whether their destination is read anywhere found
+exactly one: **`--astro-banding-vertical`**. It appears in the help ("correct banding by column
+instead of by row"), argparse accepted it — and nothing evaluated it. `astro.fix_banding` has
+always supported the direction; the value was simply never passed through.
+
+Measured, why it matters:
+
+| Image with column banding | column spread |
+|---|---|
+| before | 0.01082 |
+| corrected by row | **0.01082** (exactly nothing) |
+| corrected by column | **0.00317** (−71%) |
+
+Anyone with column banding set the option and got no effect whatsoever, with nothing anywhere to
+say otherwise. The direction is now passed through to the correction on both stacking paths
+(normal and drizzle). The check itself remains as a test: an option nobody reads is a promise
+without effect.
+
 ### The astro mode ignored `--export` and `--web-jpg`
 
 Both options appear in the help, are accepted — and did nothing in the **astro mode**. No export,
