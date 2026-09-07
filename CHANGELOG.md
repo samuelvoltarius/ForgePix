@@ -8,6 +8,31 @@ All notable changes to ForgePix. Format based on
 
 ## [Unreleased]
 
+### The mosaic mode could not read FITS
+
+`cv2.imread` does not read FITS and returns `None`. The tiles were then silently discarded, and
+`stitch` reported "at least 2 overlapping tiles required" — a statement about overlap, when the
+problem was **reading**. Every mosaic run on astronomy data therefore failed, because FITS is the
+format astronomy cameras record in. Verified on real Seestar mosaic data (M 31, 124 tiles).
+
+FITS tiles now go through the project's own reader and are stretched for stitching — a linear
+frame in 8 bits is nearly black, and no feature detector finds anything in it. Unreadable tiles
+are counted and named instead of vanishing.
+
+**A second defect in the same place: an expected failure arrived as a traceback.** On a star field
+the panorama stitcher estimates focal length from feature pairs; without texture that goes badly
+wrong. On the real data it tried to allocate **2.7 TB**. The user found a `cv2.error` traceback in
+the log. It now says what happened: the panorama path is meant for moon and sun (plenty of surface
+texture); for deep-sky tiles the astro stacker with star registration is the right route. All the
+module's errors are now `ForgePixFehler` and appear as a line rather than a wall of traceback.
+
+### "Too few images" now says where the images are
+
+The Seestar puts the finished result in `<object>/` and the subframes in `<object>_sub/`. Choosing
+the former often leaves exactly **one** file, and the message was just "too few images for astro"
+— while up to **362 frames** sat next door. In the archive, **18 of 21** such folders have a
+usable neighbour. It is now named.
+
 ### 35 of 70 folders could not be opened at all
 
 `fits_lights` skips files whose name begins with `Stacked_` or `DSO_Stacked_`, so that a finished

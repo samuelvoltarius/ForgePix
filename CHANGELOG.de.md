@@ -8,6 +8,33 @@ Alle nennenswerten Änderungen an ForgePix. Format orientiert an
 
 ## [Unreleased]
 
+### Der Mosaik-Modus konnte keine FITS lesen
+
+`cv2.imread` liest keine FITS und gibt `None` zurück. Die Kacheln wurden danach still verworfen,
+und `stitch` meldete „Mindestens 2 überlappende Kacheln nötig" — eine Aussage über die
+Überlappung, obwohl das Problem das **Lesen** war. Damit scheiterte **jeder** Mosaik-Lauf mit
+Astro-Daten, denn FITS ist das Format, in dem Astrokameras aufnehmen. An echten
+Seestar-Mosaikdaten (M 31, 124 Kacheln) geprüft.
+
+FITS-Kacheln werden jetzt über den eigenen Leser geholt und für das Zusammensetzen gestreckt —
+eine lineare Aufnahme in 8 Bit ist fast schwarz, darin findet kein Merkmalsdetektor etwas. Nicht
+lesbare Kacheln werden gezählt und genannt statt stillschweigend verworfen.
+
+**Zweiter Fehler an derselben Stelle: ein erwartbarer Fehlschlag kam als Traceback.** Auf einem
+Sternfeld schätzt der Panorama-Zusammensetzer die Brennweite aus Merkmalspaaren; ohne Textur geht
+das gründlich daneben. An den echten Daten wollte er **2,7 TB** belegen. Der Benutzer fand einen
+`cv2.error`-Traceback im Protokoll. Jetzt steht dort, was los ist: der Panorama-Weg ist für Mond
+und Sonne gedacht (viel Oberflächenstruktur), für Deep-Sky-Kacheln ist der Astro-Stapel mit
+Sternausrichtung der richtige Weg. Alle Fehler des Moduls sind jetzt `ForgePixFehler` und
+erscheinen als Zeile statt als Traceback-Wand.
+
+### „Zu wenige Bilder" sagt jetzt, wo die Bilder liegen
+
+Der Seestar legt das fertige Ergebnis in `<Objekt>/` und die Einzelaufnahmen in `<Objekt>_sub/`.
+Wer den erstgenannten wählt, hat oft genau **eine** Datei und las nur „Zu wenige Bilder für
+Astro" — während nebenan bis zu **362 Aufnahmen** liegen. Im Bestand haben **18 von 21** solcher
+Ordner einen brauchbaren Nachbarn. Der wird jetzt genannt.
+
 ### 35 von 70 Ordnern liessen sich gar nicht öffnen
 
 `fits_lights` überspringt Dateien, deren Name mit `Stacked_` oder `DSO_Stacked_` beginnt — damit

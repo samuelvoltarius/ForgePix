@@ -5,9 +5,11 @@ mosaic.py — Mosaik/Panorama-Zusammensetzen für Modul „Hybrid" (Mond-/Sonnen
 Setzt überlappende Kacheln (Panels) zu einem großen Bild zusammen — z.B. mehrere
 Aufnahmen vom Mond/Sonne, die zusammen die ganze Scheibe ergeben. Reine OpenCV-Lösung.
 """
+import os
+
 import cv2
 import numpy as np
-from constants import to_uint8, imread, log_print
+from constants import ForgePixFehler, to_uint8, imread, log_print
 
 
 def _to8(img):
@@ -84,14 +86,14 @@ def stitch_detail(imgs, projection="spherical", log=log_print, masks=None):
     est = cv2.detail_HomographyBasedEstimator()
     ok, cams = est.apply(feats, pw, None)
     if not ok:
-        raise RuntimeError("Kamera-Schätzung fehlgeschlagen")
+        raise ForgePixFehler("Kamera-Schätzung fehlgeschlagen")
     for c in cams:
         c.R = c.R.astype(np.float32)
     adj = cv2.detail_BundleAdjusterRay()
     adj.setConfThresh(0.7)
     ok, cams = adj.apply(feats, pw, cams)
     if not ok:
-        raise RuntimeError("Bündelausgleich fehlgeschlagen")
+        raise ForgePixFehler("Bündelausgleich fehlgeschlagen")
     rmats = [np.copy(c.R) for c in cams]
     # WAVE_CORRECT_AUTO statt hart HORIZ: HORIZ verbiegt Multi-Row-/Gitter-Mosaike (z. B. Mond-Kachelraster)
     # vertikal. AUTO wählt Horizontal/Vertikal passend; Fallback HORIZ für ältere OpenCV ohne AUTO.
@@ -181,18 +183,55 @@ def _autocrop(img, thresh=8):
     return crop
 
 
+def _kachel_lesen(pfad, log=log_print):
+    """Eine Kachel als 8-Bit-BGR lesen — auch FITS.
+
+    `cv2.imread` kann keine FITS lesen und gibt None zurueck. Die Kacheln wurden danach still
+    verworfen, und `stitch` meldete "Mindestens 2 ueberlappende Kacheln noetig" — eine Aussage
+    ueber die Ueberlappung, obwohl das Problem das Lesen war. An echten Seestar-Mosaikdaten
+    (M 31, 124 Kacheln) scheiterte damit JEDER Mosaik-Lauf, denn FITS ist das Format, in dem
+    Astrokameras aufnehmen.
+
+    Eine lineare Astro-Aufnahme in 8 Bit ist fast schwarz, darin findet kein Merkmalsdetektor
+    etwas. Sie wird deshalb fuer das Zusammensetzen gestreckt. Das Ergebnis ist damit ein
+    Anzeigebild und keine lineare Messgroesse mehr — was fuer ein Mosaik ohnehin gilt, weil der
+    Stitcher in 8 Bit arbeitet und die Belichtung zwischen den Kacheln ausgleicht.
+    """
+    if os.path.splitext(pfad)[1].lower() in (".fit", ".fits", ".fts"):
+        try:
+            import astro
+            f = astro._read_float(pfad)
+            if f is None:
+                return None
+            if f.ndim == 2:
+                f = np.dstack([f] * 3)
+            gestreckt = astro.autostretch(f.astype(np.float32))
+            return np.clip(np.asarray(gestreckt, np.float32) * 255.0, 0, 255).astype(np.uint8)
+        except Exception as fehler:
+            log("  Kachel %s nicht lesbar: %s" % (os.path.basename(pfad), fehler))
+            return None
+    return _to8(imread(pfad, cv2.IMREAD_UNCHANGED))
+
+
 def stitch(paths, mode="panorama", projection="spherical", detail=True, autocrop=True, log=log_print):
     """Überlappende Kacheln zu einem Mosaik zusammensetzen.
     detail=True: explizite cv2.detail-Pipeline (Projektion/Belichtungsausgleich/MultiBand-Nähte),
     bei Fehlschlag Rückfall auf den klassischen cv2.Stitcher. Gibt (BGR-uint8, status) zurück.
     autocrop=True: schwarze Warp-Ränder auf das größte randvolle Rechteck zuschneiden (--no-autocrop = aus)."""
     _crop = _autocrop if autocrop else (lambda x: x)
-    imgs = [_to8(imread(p, cv2.IMREAD_UNCHANGED)) for p in paths]
+    imgs = [_kachel_lesen(p, log=log) for p in paths]
     imgs = [im if (im is None or im.ndim == 3) else cv2.cvtColor(im, cv2.COLOR_GRAY2BGR)
             for im in imgs]
-    imgs = [im for im in imgs if im is not None]
+    lesbar = [im for im in imgs if im is not None]
+    if len(lesbar) < len(imgs):
+        # NICHT verschweigen: vorher wurden unlesbare Kacheln stillschweigend verworfen und
+        # danach "Mindestens 2 ueberlappende Kacheln noetig" gemeldet — eine Meldung ueber die
+        # Ueberlappung, obwohl das Problem das Lesen war.
+        log("  %d von %d Kacheln nicht lesbar." % (len(imgs) - len(lesbar), len(imgs)))
+    imgs = lesbar
     if len(imgs) < 2:
-        raise RuntimeError("Mindestens 2 überlappende Kacheln nötig")
+        raise ForgePixFehler(
+            "Mindestens 2 lesbare, ueberlappende Kacheln noetig (%d gelesen)" % len(imgs))
     log(f"  {len(imgs)} Kacheln zusammensetzen ({mode}, {projection}) …")
     if detail and mode != "scans":
         try:
@@ -201,12 +240,28 @@ def stitch(paths, mode="panorama", projection="spherical", detail=True, autocrop
             log(f"  detail-Pipeline fehlgeschlagen ({e}) → klassischer Stitcher")
     m = cv2.Stitcher_SCANS if mode == "scans" else cv2.Stitcher_PANORAMA
     st = cv2.Stitcher_create(m)
-    status, pano = st.stitch(imgs)
+    try:
+        status, pano = st.stitch(imgs)
+    except cv2.error as e:
+        # Auf einem STERNFELD schaetzt der Panorama-Stitcher die Brennweite aus
+        # Merkmalspaaren — und ohne Textur geht das gruendlich daneben. An echten
+        # Seestar-Mosaikdaten (M 31) versuchte er daraufhin 2,7 TB zu allozieren und stuerzte
+        # mit einem Traceback ab, den der Benutzer im Protokoll fand. Ein erwartbarer
+        # Fehlschlag gehoert in eine Meldung, nicht in einen Traceback.
+        if "memory" in str(e).lower():
+            raise ForgePixFehler(
+                "Mosaik fehlgeschlagen: der Panorama-Zusammensetzer hat die Bildgeometrie "
+                "nicht bestimmen koennen und wollte unsinnig viel Speicher belegen. Das "
+                "passiert auf Sternfeldern, weil dort die Textur fehlt, aus der er die "
+                "Brennweite schaetzt. Fuer Mond und Sonne (viel Oberflaechenstruktur) "
+                "funktioniert er; fuer Deep-Sky-Kacheln ist der Astro-Stapel mit "
+                "Sternausrichtung der richtige Weg.") from e
+        raise ForgePixFehler("Mosaik fehlgeschlagen: %s" % e) from e
     if status != cv2.Stitcher_OK:
         msgs = {1: "zu wenig Überlappung / zu wenige gemeinsame Merkmale",
                 2: "Homographie-Schätzung fehlgeschlagen",
                 3: "Kamera-Parameter-Anpassung fehlgeschlagen"}
-        raise RuntimeError(f"Mosaik fehlgeschlagen ({msgs.get(status, status)}). "
+        raise ForgePixFehler(f"Mosaik fehlgeschlagen ({msgs.get(status, status)}). "
                            f"Tipp: mehr Überlappung (~30 %) zwischen den Kacheln.")
     return _crop(pano), "ok"
 

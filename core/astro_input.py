@@ -77,6 +77,39 @@ def light_paths(folder, fallback, log=None):
     return files
 
 
+def nachbarordner_mit_aufnahmen(folder, mindestens=2):
+    """Ordner in der Nachbarschaft, die mehr Aufnahmen enthalten. Liste von (pfad, anzahl).
+
+    Warum: der Seestar legt das fertige Ergebnis in `<Objekt>/` und die Einzelaufnahmen in
+    `<Objekt>_sub/`. Wer den erstgenannten waehlt, hat oft genau EINE Datei und bekam nur
+    „Zu wenige Bilder fuer Astro" — waehrend nebenan 362 Aufnahmen liegen. Im Bestand haben
+    18 von 21 solcher Ordner einen brauchbaren Nachbarn.
+    """
+    try:
+        wurzel = os.path.dirname(os.path.abspath(folder))
+        eigener = os.path.basename(os.path.abspath(folder))
+        if not os.path.isdir(wurzel):
+            return []
+    except OSError:
+        return []
+    treffer = []
+    for name in sorted(os.listdir(wurzel)):
+        p = os.path.join(wurzel, name)
+        if not os.path.isdir(p) or name == eigener:
+            continue
+        # Nur wirkliche Geschwister desselben Objekts: gleicher Anfang, laengerer Name.
+        if not name.startswith(eigener):
+            continue
+        try:
+            n = len(fits_lights(p))
+        except OSError:
+            continue
+        if n >= mindestens:
+            treffer.append((p, n))
+    treffer.sort(key=lambda x: -x[1])
+    return treffer
+
+
 def _bildart(pfad):
     """Welche Art Aufnahme ist das? Aus dem FITS-Header, sonst aus dem Dateinamen.
 

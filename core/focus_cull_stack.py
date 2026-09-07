@@ -1846,7 +1846,25 @@ def run_astro(input_dir, work_dir, args):
     import astro
     paths = _gather_session_paths(input_dir, args)
     if len(paths) < 2:
-        print("Zu wenige Bilder für Astro.", file=sys.stderr); return None
+        # Nicht nur "zu wenig" sagen, sondern wo die Aufnahmen liegen. Der Seestar legt das
+        # Ergebnis in <Objekt>/ und die Subs in <Objekt>_sub/ — im Bestand haben 18 von 21
+        # solcher Ordner einen brauchbaren Nachbarn, einer davon mit 362 Aufnahmen.
+        meldung = ("Zu wenige Bilder für Astro (%d gefunden, mindestens 2 nötig)."
+                   % len(paths))
+        try:
+            from astro_input import nachbarordner_mit_aufnahmen
+            nachbarn = nachbarordner_mit_aufnahmen(input_dir)
+        except Exception:
+            nachbarn = []
+        if nachbarn:
+            meldung += ("\n  Daneben liegt %s mit %d Aufnahmen — vermutlich ist "
+                        "das der gemeinte Ordner."
+                        % (os.path.basename(nachbarn[0][0]), nachbarn[0][1]))
+            for p, n in nachbarn[1:3]:
+                meldung += ("\n  Ausserdem: %s (%d Aufnahmen)"
+                            % (os.path.basename(p), n))
+        print(meldung, file=sys.stderr)
+        return None
     original_paths = list(paths)
     print(f"== Astro-Modus: {len(paths)} Frames, Methode={args.astro_method} ==")
     # Kalibrier-Frames automatisch finden, wenn nicht explizit gesetzt
