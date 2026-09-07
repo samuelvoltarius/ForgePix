@@ -1294,6 +1294,32 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, ProjectM
         rv.addWidget(self.preview, 6)
         self.progress = QProgressBar(); self.progress.setRange(0, 0); self.progress.hide()
         rv.addWidget(self.progress)
+
+        # --- Vorschlag des Regelwerks --------------------------------------------------
+        # Die Pipeline vermisst den fertigen Stapel und meldet ihre Empfehlung als Marker
+        # "RAT:<schalter>". Im Protokoll steht das auch — aber ein Anfaenger liest kein
+        # Protokoll und wuesste mit "--bg-extract" ohnehin nichts anzufangen. Hier steht der
+        # Rat in Worten, mit einem Knopf, der ihn setzt.
+        self.rat_bar = QWidget()
+        self.rat_bar.hide()
+        _rl = QHBoxLayout(self.rat_bar)
+        _rl.setContentsMargins(10, 6, 10, 6)
+        _rl.setSpacing(8)
+        self.rat_lbl = QLabel("")
+        self.rat_lbl.setWordWrap(True)
+        self.rat_lbl.setStyleSheet("color:#e6d9a8;font-size:12px;border:none;")
+        self.rat_btn = QPushButton(tr("Erneut mit diesen Einstellungen"))
+        self.rat_btn.clicked.connect(self._rat_uebernehmen)
+        self.rat_weg = QPushButton("✕")
+        self.rat_weg.setFixedWidth(28)
+        self.rat_weg.setToolTip(tr("Vorschlag ausblenden"))
+        self.rat_weg.clicked.connect(self.rat_bar.hide)
+        _rl.addWidget(self.rat_lbl, 1)
+        _rl.addWidget(self.rat_btn)
+        _rl.addWidget(self.rat_weg)
+        self.rat_bar.setStyleSheet(
+            "background:#2a2510;border:1px solid #4a4020;border-radius:8px;")
+        rv.addWidget(self.rat_bar)
         res_btns = QGridLayout(); res_btns.setSpacing(8)
         # Primäre Aktionen als Buttons, alles Weitere im „Werkzeuge"-Menü (entrümpelt)
         self.cmp_btn = QPushButton(tr("🔍  Vorher/Nachher"))
@@ -2143,6 +2169,11 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, ProjectM
         self.cmp_btn.setEnabled(False); self.openfolder_btn.setEnabled(False)
         self.export_btn.setEnabled(False); self.tools_btn.setEnabled(False)
         self.result_path = None; self.before_path = None; self._last_rationale = ""
+        # Der Vorschlag des letzten Laufs gilt fuer den letzten Lauf. Bliebe er stehen, waere er
+        # ein Rat zu einem Bild, das es nicht mehr gibt.
+        self._rat_schalter = []
+        if getattr(self, "rat_bar", None) is not None:
+            self.rat_bar.hide()
         self.progress.setRange(0, 0); self.progress.show()  # erst „beschäftigt“
         if auto:
             self._append(tr("Automatik: Aufnahmen prüfen, ausrichten und zusammenrechnen. KI ist optional.") + "\n")
@@ -2274,6 +2305,101 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, ProjectM
             sb.setValue(sb.maximum())
 
     # ---------- Statuszeile ----------
+    # --- Vorschlag des Regelwerks --------------------------------------------------------
+    # Zuordnung Schalter -> was in der Oberflaeche zu tun ist. Nur was hier drinsteht, wird
+    # gesetzt; alles andere wird dem Benutzer als "nicht uebernommen" genannt, statt still
+    # verschluckt zu werden. Ein Knopf, der behauptet etwas gesetzt zu haben und es nicht tut,
+    # waere schlimmer als gar kein Knopf.
+    def _rat_zuordnung(self):
+        def setz_haken(name, wert=True):
+            def f():
+                w = getattr(self, name, None)
+                if w is None:
+                    return False
+                w.setChecked(wert)
+                return True
+            return f
+
+        def setz_wert(name, wert):
+            def f():
+                w = getattr(self, name, None)
+                if w is None:
+                    return False
+                w.setValue(wert)
+                return True
+            return f
+
+        def setz_auswahl(name, daten):
+            def f():
+                w = getattr(self, name, None)
+                if w is None:
+                    return False
+                i = w.findData(daten)
+                if i < 0:
+                    return False
+                w.setCurrentIndex(i)
+                return True
+            return f
+
+        def drizzle():
+            return (setz_auswahl("astro_drizzle", 2)() and setz_haken("astro_drizzle_true")())
+
+        return {
+            "--bg-extract": (tr("Hintergrund entfernen"), setz_haken("astro_bg")),
+            "--astro-synthstar": (tr("Sternformen neu setzen"), setz_haken("astro_synthstar")),
+            "--astro-unclip-stars": (tr("Ausgefressene Sternkerne einfärben"),
+                                     setz_haken("astro_unclip")),
+            "--astro-starless-stretch 0.35": (tr("Sternlos strecken"),
+                                              setz_wert("astro_starless_stretch", 0.35)),
+            "--astro-drizzle 2 --astro-drizzle-true": (tr("Drizzle 2× aus den Originalmessungen"),
+                                                       drizzle),
+            "--bin 2": (tr("2×-Binning"), setz_auswahl("astro_bin", 2)),
+        }
+
+    def _rat_zeigen(self, zeile):
+        """Den Marker RAT:<schalter> in einen lesbaren Vorschlag verwandeln."""
+        self._rat_schalter = [t for t in zeile.split() if t]
+        zuordnung = self._rat_zuordnung()
+        namen = []
+        rest = list(self._rat_schalter)
+        for schluessel, (name, _tu) in zuordnung.items():
+            teile = schluessel.split()
+            if all(t in rest for t in teile):
+                namen.append(name)
+                for t in teile:
+                    rest.remove(t)
+        if not namen and not rest:
+            self.rat_bar.hide()
+            return
+        text = tr("ForgePix hat den Stapel vermessen und schlägt vor:") + " " + ", ".join(namen)
+        if rest:
+            # Ehrlich benennen, was der Knopf NICHT kann, statt es zu verschweigen.
+            text += "  " + tr("(nicht per Knopf setzbar: %s)") % " ".join(rest)
+        self.rat_lbl.setText(text)
+        self.rat_btn.setEnabled(bool(namen))
+        self.rat_bar.show()
+
+    def _rat_uebernehmen(self):
+        """Die vorgeschlagenen Einstellungen setzen — und zurueckmelden, was gesetzt wurde.
+
+        Es wird NICHT automatisch neu gestartet. Der Benutzer soll sehen, was sich geaendert
+        hat, bevor der naechste Lauf beginnt; ein Astro-Lauf dauert Minuten bis Stunden.
+        """
+        zuordnung = self._rat_zuordnung()
+        rest = list(getattr(self, "_rat_schalter", []))
+        gesetzt, misslungen = [], []
+        for schluessel, (name, tu) in zuordnung.items():
+            teile = schluessel.split()
+            if all(t in rest for t in teile):
+                for t in teile:
+                    rest.remove(t)
+                (gesetzt if tu() else misslungen).append(name)
+        if gesetzt:
+            self._append("\n  " + tr("Übernommen: %s") % ", ".join(gesetzt) + "\n")
+        if misslungen:
+            self._append("  " + tr("Nicht übernommen: %s") % ", ".join(misslungen) + "\n")
+        self.rat_bar.hide()
+
     def _set_status(self, text, color="#4caf50", bg="#1b2a1b"):
         self.status_lbl.setText(text)
         self.status_dot.setStyleSheet(f"color:{color};font-size:13px;")
@@ -2348,6 +2474,8 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, ProjectM
                     self._set_status(tr(label), color="#d4a72c", bg="#2a2510")
             elif s.startswith("RATIONALE:"):
                 self._last_rationale = s[len("RATIONALE:"):].strip() or self._last_rationale
+            elif s.startswith("RAT:"):
+                self._rat_zeigen(s[len("RAT:"):].strip())
             elif s.startswith("RESULT:"):
                 saw_result = True
         # Fallback für alte Pipeline-Versionen ohne Marker: deutsche Log-Schlüsselwörter
