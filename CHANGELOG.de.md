@@ -22,7 +22,7 @@ Ordnersuche nichts fand, war der Absturz die einzig mögliche Folge eines Treffe
 wurde nie durchlaufen.**
 
 **Er nahm fremde Kalibrierbilder.** Gesucht wird im übergeordneten Ordner, und zwar rekursiv —
-wer `D:stro\M31` wählt, durchsucht damit `D:stro` mit allen anderen Objekten, Kameras und
+wer `D:\astro\M31` wählt, durchsucht damit `D:\astro` mit allen anderen Objekten, Kameras und
 Belichtungszeiten. Die Treffer landeten ungeprüft in der Liste, und der Lauf starb anschliessend
 an `calibration_metadata.validate` mit „Kalibrierung/Aufnahmeserie passt nicht" — statt einfach
 ohne Kalibrierung weiterzurechnen. Genau das ist beim Entwickeln passiert: Testdateien im

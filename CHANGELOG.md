@@ -22,7 +22,7 @@ the name search found nothing, that crash was the only possible outcome of a hit
 never once exercised.**
 
 **It picked up foreign calibration frames.** The search covers the parent folder, recursively —
-choosing `D:stro\M31` searches all of `D:stro` with every other target, camera and exposure
+choosing `D:\astro\M31` searches all of `D:\astro` with every other target, camera and exposure
 time. Hits went into the list unchecked, and the run then died in
 `calibration_metadata.validate` with "calibration does not match the series" — instead of simply
 continuing without calibration. Exactly that happened during development: test files in the
