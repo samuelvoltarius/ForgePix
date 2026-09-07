@@ -14,6 +14,7 @@ Pipeline:
 Speicher: hält nie alle Frames gleichzeitig im RAM (anders als der Fokus-Stacker).
 Reine OpenCV/NumPy-Abhängigkeiten.
 """
+import math
 import os
 
 import numpy as np
@@ -641,7 +642,70 @@ def match_stars_triangles(ref_pts, img_pts, n_use=60, tol=0.02, min_matches=6):
     return src, dst
 
 
-def _estimate_star_transform_robust(refg, img_g, full_affine=False):
+def transform_kennwerte(M):
+    """Massstab (x und y) und Scherung einer 2x3-Affinen.
+
+    Bei einer Aehnlichkeits-Affine (`estimateAffinePartial2D`) sind sx und sy gleich und die
+    Scherung ist 0; bei voller Affine koennen sie auseinanderlaufen.
+    """
+    a, b = float(M[0][0]), float(M[0][1])
+    c, d = float(M[1][0]), float(M[1][1])
+    sx = math.hypot(a, c)
+    sy = math.hypot(b, d)
+    # Kosinus des Winkels zwischen den beiden Achsen: 0 = rechtwinklig, 1 = entartet.
+    scherung = abs(a * b + c * d) / max(sx * sy, 1e-12)
+    return sx, sy, scherung
+
+
+def transform_plausibel(M, erwarteter_massstab=1.0, toleranz=0.15, max_scherung=0.20):
+    """Passt die gefundene Abbildung zu dem, was physikalisch zu erwarten ist?
+
+    **Warum das noetig ist.** `estimateAffinePartial2D` mit RANSAC gibt eine Abbildung zurueck,
+    sobald drei Punktpaare zusammenpassen — und drei Paare findet man in zwei Sternfeldern fast
+    immer zufaellig. Herausgekommen ist dann keine Absage, sondern ein **falscher Treffer**:
+
+        ASI533MC Pro -> Seestar S30, direkt:  "ok", Massstab 0,58 — erwartet war 0,195
+        dieselben Daten vorskaliert:          4 von 4 "ok", Restmassstab
+                                              3,05 / 0,996 / 2,72 / 4,24 statt ~1,0
+
+    Also eine richtige Ausrichtung und drei erfundene, alle ununterscheidbar gemeldet. Bei
+    gleicher Kamera ist der erwartete Massstab 1,0; ueber verschiedene Optiken kommt er aus den
+    Kopfdaten (206,265 * Pixelgroesse[um] / Brennweite[mm]).
+
+    Das ist dieselbe Lehre wie bei der Kometen-Bahnpruefung, nur andersherum: eine Pruefung darf
+    ihre Toleranz nicht aus der geprueften Groesse ableiten — und ein Verfahren, das nur
+    *innere* Konsistenz prueft (Inlier), faellt auf eine in sich stimmige Erfindung herein. Es
+    braucht einen Bezug von aussen.
+
+    Args:
+        erwarteter_massstab: Verhaeltnis der Bildmassstaebe (Referenz zu Bild). 1,0 bei
+            gleicher Ausruestung.
+        toleranz: erlaubte relative Abweichung, voreingestellt 15 %.
+        max_scherung: erlaubte Schiefe der Achsen; nur bei voller Affine ungleich 0.
+
+    Returns:
+        (True, None) oder (False, Begruendung).
+    """
+    if M is None:
+        return False, "keine Abbildung"
+    sx, sy, scherung = transform_kennwerte(M)
+    if not all(math.isfinite(v) for v in (sx, sy, scherung)):
+        return False, "Abbildung enthaelt keine endlichen Werte"
+    erwartet = float(erwarteter_massstab)
+    if erwartet <= 0:
+        return False, "erwarteter Massstab muss positiv sein"
+    for name, wert in (("x", sx), ("y", sy)):
+        abweichung = abs(wert - erwartet) / erwartet
+        if abweichung > toleranz:
+            return False, ("Massstab %s %.4f statt %.4f erwartet (%.0f %% daneben)"
+                           % (name, wert, erwartet, 100 * abweichung))
+    if scherung > max_scherung:
+        return False, "Achsen stark verzogen (Scherung %.2f)" % scherung
+    return True, None
+
+
+def _estimate_star_transform_robust(refg, img_g, full_affine=False,
+                                    erwarteter_massstab=1.0, toleranz=0.15):
     """A3 — robuste Stern-Transform über Dreiecks-Matching (translationsfrei).
 
     Schätzt die Abbildung img → ref allein aus der Sterngeometrie und funktioniert daher auch über
@@ -665,7 +729,14 @@ def _estimate_star_transform_robust(refg, img_g, full_affine=False):
                 M, inl = cv2.estimateAffinePartial2D(src, dst, method=cv2.RANSAC,
                                                      ransacReprojThreshold=3.0)
             if M is not None and (inl is None or int(inl.sum()) >= 3):
-                return M.astype(np.float32)
+                # Drei Inlier heissen nur, dass drei Punkte zueinander passen — nicht, dass die
+                # Abbildung stimmt. Gegen die Physik pruefen, sonst kommt ein erfundener
+                # Treffer heraus statt einer Absage. Siehe `transform_plausibel`.
+                ok, _grund = transform_plausibel(M, erwarteter_massstab=erwarteter_massstab,
+                                                 toleranz=toleranz,
+                                                 max_scherung=0.20 if full_affine else 1.0)
+                if ok:
+                    return M.astype(np.float32)
     # Fallback: bestehendes translationsbasiertes Verfahren
     return _estimate_star_transform(refg, img_g)
 
@@ -1291,18 +1362,32 @@ def stack(paths, method="sigma", kappa=2.5, normalize=True, local_norm=False,
             raise ForgePixFehler("Stacking: unpassende Bildgroesse oder ungueltige Pixelwerte: %s" % p)
         return f
 
-    def finish(result, supported):
+    def finish(result, supported, beitraege=None):
+        """`beitraege`: wie VIELE Aufnahmen je Pixel beigetragen haben (nicht ob ueberhaupt).
+
+        Die Abdeckungsmaske ist binaer und sagt nur "mindestens eine Aufnahme". Am Bildrand
+        tragen aber nur wenige bei, und diese Pixel sind entsprechend verrauscht — an einem
+        echten Stapel aus 133 Aufnahmen gemessen: die aeusseren 5 px rauschen 1,6-mal so stark
+        wie die Mitte, bei 80 px noch 1,3-mal. Nach dem Strecken wird daraus ein sichtbarer
+        farbiger Saum. Die Zahl wurde bisher berechnet und weggeworfen.
+        """
         if not return_info:
             return result
         coverage = np.asarray(supported, dtype=bool)
         if coverage.ndim == 3:
             coverage = coverage.all(axis=2)
         coverage = coverage.copy()
-        return result, {"coverage": coverage, "report": {
+        anzahl = None
+        if beitraege is not None:
+            anzahl = np.asarray(beitraege, np.float32)
+            if anzahl.ndim == 3:
+                anzahl = anzahl.min(axis=2)
+            anzahl = anzahl.copy()
+        return result, {"coverage": coverage, "beitraege": anzahl, "report": {
             "method": method, "coverage_fraction": float(coverage.mean()),
             "coverage_semantics": "accepted contribution in every output channel",
             "variance_available": False,
-            "per_pixel_exposure_available": False}}
+            "per_pixel_exposure_available": anzahl is not None}}
 
     # additive Normalisierung + SNR-Sigma in EINEM Vorab-Pass (vorher zwei getrennte
     # Volldurchläufe über alle Dateien). σ_bg ist gegen den späteren Skalar-Offset invariant
@@ -1425,6 +1510,7 @@ def stack(paths, method="sigma", kappa=2.5, normalize=True, local_norm=False,
         # Sigma-Clipping bei WENIGEN Subs und systematisch ungleicher Transparenz/Helligkeit.
         res = np.empty(shape, np.float32)
         coverage_out = np.zeros(shape[:2], bool) if return_info else None
+        anzahl_out = np.zeros(shape[:2], np.float32) if return_info else None
         rows = max(1, 2_000_000 // (shape[1] * shape[2]))
         x = np.arange(n, dtype=np.float32)
         xm = x.mean(); xv = float(((x - xm) ** 2).sum()) + 1e-9
@@ -1451,8 +1537,9 @@ def stack(paths, method="sigma", kappa=2.5, normalize=True, local_norm=False,
             res[y:y + rows] = (v * w_).sum(axis=0) / np.clip(w_.sum(axis=0), 1.0, None)
             if return_info:
                 coverage_out[y:y + rows] = (w_.sum(axis=0) > 0).all(axis=2)
+                anzahl_out[y:y + rows] = w_.sum(axis=0).min(axis=2)
             log(f"    linearfit-Rejection Zeilen {y}/{shape[0]}")
-        return finish(res, coverage_out)
+        return finish(res, coverage_out, beitraege=anzahl_out)
 
     # Sigma/Winsor: Welford moments in Float64, including the products. Raw
     # Float32 E[x²]-E[x]² can report zero scatter around a rounded mean that
@@ -1513,7 +1600,8 @@ def stack(paths, method="sigma", kappa=2.5, normalize=True, local_norm=False,
         log(f"    {method}-Rejection {i + 1}/{n}")
         if preview_cb and (i % _pv_every == 0 or i == n - 1):
             preview_cb(np.clip(acc / np.clip(cnt, 1e-6, None), 0, 1).astype(np.float32), i + 1, n)
-    return finish((acc / np.clip(cnt, 1e-6, None)).astype(np.float32), cnt > 0)
+    return finish((acc / np.clip(cnt, 1e-6, None)).astype(np.float32), cnt > 0,
+                  beitraege=cnt)
 
 
 def bin_image(f, factor=2):

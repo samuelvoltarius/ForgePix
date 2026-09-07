@@ -8,6 +8,95 @@ All notable changes to ForgePix. Format based on
 
 ## [Unreleased]
 
+### The astro stack is cropped to full per-pixel contribution
+
+Registration shifts the frames against each other, so at the border only a few subs contribute
+and those pixels are correspondingly noisier. Measured on a real stack (IC 434, 133 of 224 subs,
+Seestar S30): the outer 5 px were **1.6x** noisier than the centre, still 1.3x at 80 px — after
+stretching, a clearly visible blue-red fringe.
+
+`--autocrop` is documented as on by default but was **never applied in astro mode** (only in
+macro and mosaic). The coverage mask is binary (only "at least one frame") and cannot see the
+falloff; the per-pixel contribution count was computed during stacking and thrown away. It is
+now returned (`sigma`, `winsor`, `linearfit`) and drives the crop.
+
+The fringe spoils not only the look but the **measurement** — and therefore the advice the rule
+engine derives from it. The crop now happens *before* the report is produced. Measured on the
+same stack:
+
+| | before | after |
+|---|---|---|
+| image size | 1080 x 1920 | 991 x 1790 |
+| background gradient | 41.9 % | **30.3 %** |
+| G/R at the top edge | 0.680 | **1.003** |
+| G/R in the centre | 0.963 | 0.955 |
+| edge noise | 1.6x | **1.1-1.25x** |
+
+The first attempt kept only rows in which *every* pixel had enough contributions. Sigma
+rejection discards scattered individual pixels everywhere, so no row qualified and the crop did
+**nothing, silently**. The correct measure is the median per row and per column. Every path that
+skips the crop now says so in the log.
+
+### Registration validates its result against physics
+
+`_estimate_star_transform_robust` accepted any transform as soon as RANSAC found three point
+pairs — and three pairs occur by chance in almost any two star fields. The result was therefore
+not a refusal but an **invented match**, which is more dangerous than a failure because it
+reports itself as success. Measured on Seestar S30 (3.99 arcsec per pixel) against ASI533MC Pro
+(0.776), scale ratio 5.14:
+
+| attempt | result |
+|---|---|
+| ASI533 to Seestar, direct | "ok", scale **0.5826** — 0.195 expected |
+| Seestar to ASI533, direct | no alignment |
+| same data pre-scaled | 4 of 4 "ok", residual scale 3.05 / **0.996** / 2.72 / 4.24 |
+
+One correct alignment and three invented ones, all reported identically. New:
+`transform_kennwerte` and `transform_plausibel` check the recovered scale against the expected
+one (1.0 for identical equipment, otherwise from the headers). All three false matches are
+rejected, the correct alignment survives. Field rotation up to 179 degrees and scale drift up to
+15 % pass unchanged — the Seestar is alt-azimuth, where field rotation is the normal case.
+
+**Mixing cameras and telescopes still does not work.** Header-based pre-scaling alone is not
+enough; it produces three false matches per correct one. What is new is only that those false
+matches are now caught instead of silently entering the result.
+
+### The rule engine no longer recommends what just ran
+
+A run with `--bg-extract` removed the background and then advised turning on background
+removal — with `--bg-extract`. Following that advice costs 20 minutes and yields the identical
+image.
+
+The cause is ordering: `_astro_write` binds `result = astro.background_extract(result)` locally,
+so the caller's report sees the stack **before** removal. The measured 16.1 % gradient is real —
+just measured on the raw stack. `regeln.pruefen` now takes `bereits=[...]`, the switches already
+applied; advice naming an already-set switch is downgraded to a note that says so instead of
+recommending an action. The finding itself does not disappear.
+
+### The Siril bridge finds its scripts on Windows
+
+`_scripts_dir()` knew only the macOS and Linux paths. Siril 1.4 stores its Python scripts under
+`%LOCALAPPDATA%/siril-scripts` on Windows. Checked against a real installation (Siril 1.4.2):
+**58 scripts were present, 0 were found** — the entire bridge did nothing, silently, on Windows.
+`LOCALAPPDATA` and `APPDATA` are now checked as well.
+
+On licensing, counted per file rather than per collection: the collection is MIT (Team
+Free-astro), the individual files are not — **52x GPL-3.0(-or-later), 4x MIT, 2 unstated**.
+ForgePix only *drives* Siril externally and bundles nothing, so no licence compatibility is
+required.
+
+### The scene bank takes cameras in turn
+
+The builder sorted series strictly by sub count, descending. The Seestar S30 takes very many
+short exposures, so its series all came first. Measured on the first six series of scene bank
+v2: **96 Seestar tiles against 24 each for the two ZWO cameras** — 4:1:1.
+
+This is not cosmetic: a denoiser learns the noise profile of the sensor it sees most often.
+ForgePix is meant to serve all astrophotographers, not only those with the same camera. Series
+are now taken from each camera in turn, so the ratio holds at *every* point in time — which is
+what counts for runs that take hours and get interrupted. Also new: `--max-je-kamera N` caps a
+single camera; resumed runs count towards that cap.
+
 ### The background method is now selectable in the interface
 
 `--astro-bg-backend {own,graxpert}` existed only on the command line. In the interface, GraXpert

@@ -41,7 +41,39 @@ def _w(bericht, *pfad, standard=None):
     return standard if k is None else k
 
 
-def pruefen(bericht, komet=False):
+# Wurde eine Massnahme schon angewandt, darf sie nicht noch einmal empfohlen werden. Das ist
+# kein Schoenheitsfehler: der Messbericht entsteht am ROHEN Stapel, vor Hintergrund-Entfernung
+# und Streckung. Lief `--bg-extract`, misst der Bericht trotzdem den Verlauf von vorher und das
+# Regelwerk empfiehlt genau den Schalter, der gerade lief. An echten Daten gesehen (IC 434,
+# 133 Subs): Hintergrund-Entfernung lief, Bericht meldete 16,1 % Gradient, Rat lautete
+# "--bg-extract einschalten". Wer folgt, bekommt dasselbe Bild und haelt das Programm fuer kaputt.
+_SCHON_GELAUFEN = {
+    "--bg-extract": "Die Hintergrund-Entfernung lief bei diesem Durchgang bereits; gemessen "
+                    "wurde der Stapel davor. Bleibt der Verlauf im fertigen Bild sichtbar, "
+                    "hilft der Schalter nicht weiter.",
+}
+
+
+def _bereits_beruecksichtigen(raete, bereits):
+    """Raete entschaerfen, deren Massnahme schon angewandt wurde."""
+    if not bereits:
+        return raete
+    bereits = {str(x).split()[0] for x in bereits if x}
+    aus = []
+    for r in raete:
+        schalter = r.einstellung.split()[0] if r.einstellung else None
+        if schalter is None or schalter not in bereits:
+            aus.append(r)
+            continue
+        aus.append(Rat(HINWEIS, r.titel,
+                       r.grund + "  " + _SCHON_GELAUFEN.get(
+                           schalter, "Diese Massnahme lief bei diesem Durchgang bereits."),
+                       "Nichts umstellen — der Schalter ist schon gesetzt.",
+                       None))
+    return aus
+
+
+def pruefen(bericht, komet=False, bereits=None):
     """Den Messbericht durchgehen und eine Liste von `Rat` zurückgeben.
 
     Fehlende Werte fuehren NICHT zu einem Rat. Eine Regel, die auf `None` anspringt, erfindet
@@ -55,6 +87,9 @@ def pruefen(bericht, komet=False):
             man diesen Modus waehlt. Ausserdem verzerren die Sternstriche die Messung des
             Hintergrunds — an echten Kometendaten gemessen: Rauschen 0,010 statt 0,0003 und
             ein Gradient von 133 % bei einem Bild, das nur Striche enthaelt.
+        bereits: Schalter, die bei diesem Durchgang schon angewandt wurden (z. B.
+            {"--bg-extract"}). Ein Rat, der genau diesen Schalter empfiehlt, wird dann zum
+            Hinweis herabgestuft und empfiehlt nichts mehr — siehe `_SCHON_GELAUFEN`.
     """
     raete = []
 
@@ -193,6 +228,8 @@ def pruefen(bericht, komet=False):
             "und Strichspuren werden hier darum NICHT beurteilt.",
             "Fuer eine Beurteilung des Himmels denselben Stapel ohne --astro-komet rechnen.",
             None))
+    # Erst entschaerfen, dann sortieren: die Herabstufung aendert die Reihenfolge.
+    raete = _bereits_beruecksichtigen(raete, bereits)
     reihenfolge = {KRITISCH: 0, WICHTIG: 1, HINWEIS: 2}
     raete.sort(key=lambda r: reihenfolge.get(r.stufe, 9))
     return raete

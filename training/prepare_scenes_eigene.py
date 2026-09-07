@@ -28,6 +28,7 @@ Der Lauf ist FORTSETZBAR: bereits verarbeitete Serien stehen im Fortschrittsprot
 werden übersprungen. Ein abgebrochener Durchgang kostet damit nur die angefangene Serie.
 """
 import argparse
+import collections
 import hashlib
 import json
 import os
@@ -152,6 +153,34 @@ def _kameras_in(pfade, hoechstens=40):
     return kameras
 
 
+def _nach_kamera_verschraenken(reihen):
+    """Serien abwechselnd aus jeder Kamera nehmen statt streng nach Groesse.
+
+    Vorher war nach Sub-Anzahl absteigend sortiert. Der Seestar S30 nimmt sehr viele kurze
+    Aufnahmen, seine Serien stehen damit alle vorn — und ein Lauf, der abbricht oder ueber
+    `--max-serien` gedeckelt wird, besteht fast nur aus Seestar-Material. Gemessen nach den
+    ersten sechs Serien von v2: **96 Kacheln Seestar gegen je 24 der beiden ZWO-Kameras**,
+    also 4:1:1.
+
+    Das ist kein Schoenheitsfehler. Ein Entrauscher lernt das Rauschprofil des Sensors, den er
+    am haeufigsten sieht; bei diesem Verhaeltnis entsteht wieder ein Seestar-Modell mit
+    Beiwerk. ForgePix soll aber fuer alle Astrofotografen taugen, nicht nur fuer die mit
+    derselben Kamera.
+
+    Reihum genommen stimmt das Verhaeltnis zu **jedem** Zeitpunkt, nicht erst am Ende — und
+    genau das zaehlt bei Laeufen, die Stunden dauern und unterbrochen werden.
+    """
+    nach_kamera = collections.OrderedDict()
+    for schluessel, pfade in reihen:
+        nach_kamera.setdefault(str(schluessel[0]), []).append((schluessel, pfade))
+    raus = []
+    while any(nach_kamera.values()):
+        for kamera in list(nach_kamera):
+            if nach_kamera[kamera]:
+                raus.append(nach_kamera[kamera].pop(0))
+    return raus
+
+
 def _kameras_zaehlen(aufzeichnungen):
     """Welche Kamera wie viele Kacheln beigesteuert hat, je Menge."""
     aus = {}
@@ -173,6 +202,10 @@ def main():
     ap.add_argument("--je-serie", type=int, default=24, help="Kacheln je Serie")
     ap.add_argument("--skala", type=float, default=1.0)
     ap.add_argument("--max-serien", type=int, default=0, help="0 = alle")
+    ap.add_argument("--max-je-kamera", type=int, default=0,
+                    help="Hoechstens so viele Kacheln je Kamera (0 = unbegrenzt). Verhindert, "
+                         "dass eine Kamera das Modell dominiert — der Seestar S30 nimmt sehr "
+                         "viele kurze Subs und stellte in v2 sonst 4 von 6 Serien.")
     ap.add_argument("--kamera", default=None,
                     help="Nur Serien dieser Kamera (Teilzeichenkette, z. B. 294MC). Ohne "
                          "Angabe kommen ALLE Kameras in dieselbe Bank — fuer Szenenvielfalt "
@@ -186,13 +219,21 @@ def main():
     args.output.mkdir(parents=True, exist_ok=True)
     fortschritt = args.output / "fortschritt.jsonl"
     erledigt = set()
+    # Bei einer Fortsetzung zaehlen die schon geschriebenen Kacheln je Kamera mit, sonst haette
+    # ein zweiter Lauf seine eigene, frische Obergrenze — und die Deckelung waere wirkungslos.
+    je_kamera = collections.Counter()
     if fortschritt.exists():
         for zeile in fortschritt.read_text(encoding="utf-8").splitlines():
             try:
-                erledigt.add(json.loads(zeile)["serie"])
+                eintrag = json.loads(zeile)
             except Exception:
                 continue
+            erledigt.add(eintrag["serie"])
+            je_kamera[str(eintrag.get("kamera") or "unbekannt")] += int(eintrag.get("kacheln") or 0)
         print("  %d Serien bereits erledigt — werden uebersprungen" % len(erledigt))
+        if je_kamera:
+            print("  bisher je Kamera: %s"
+                  % ", ".join("%s %d" % (k, v) for k, v in je_kamera.most_common()))
 
     serien = {}
     for quelle in args.quellen:
@@ -204,7 +245,8 @@ def main():
         vorher = len(serien)
         serien = {k: v for k, v in serien.items() if args.kamera.lower() in k[0].lower()}
         print("  Kamerafilter %r: %d von %d Serien" % (args.kamera, len(serien), vorher))
-    reihen = sorted(serien.items(), key=lambda kv: -len(kv[1]))
+    # Innerhalb einer Kamera die groessten Serien zuerst, ueber die Kameras hinweg reihum.
+    reihen = _nach_kamera_verschraenken(sorted(serien.items(), key=lambda kv: -len(kv[1])))
     if args.max_serien:
         reihen = reihen[:args.max_serien]
     print("  %d Serien zu verarbeiten" % len(reihen))
@@ -225,6 +267,10 @@ def main():
         # Sicherung gegen gemischte Kameras: die Gruppierung trennt sie zwar, aber ein Stapel
         # aus zwei Sensoren waere unbrauchbar und faellt niemandem auf — verschiedene
         # Pixelmassstaebe ergeben verschieden breite Sterne im selben Bild.
+        if args.max_je_kamera and je_kamera[str(schluessel[0])] >= args.max_je_kamera:
+            print("  [%d/%d] %s — uebersprungen: %s hat die Obergrenze von %d Kacheln erreicht"
+                  % (i, len(reihen), name, schluessel[0], args.max_je_kamera))
+            continue
         kameras = _kameras_in(pfade)
         if len(kameras) > 1:
             print("  [%d/%d] %s — UEBERSPRUNGEN: mehrere Kameras in einer Serie (%s)"
@@ -248,6 +294,7 @@ def main():
             np.save(scherben / ("%s__%s.npy" % (wohin, name.replace("|", "_"))),
                     np.stack(kacheln).astype(np.float32))
         zaehler[wohin] += n_kacheln
+        je_kamera[str(schluessel[0])] += n_kacheln
         del kacheln, stapel
         aufzeichnungen.append({
             "serie": name, "kamera": schluessel[0], "belichtung_s": schluessel[1],

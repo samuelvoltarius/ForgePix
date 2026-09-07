@@ -8,6 +8,97 @@ Alle nennenswerten Änderungen an ForgePix. Format orientiert an
 
 ## [Unreleased]
 
+### Der Astro-Stapel wird auf die volle Beitragszahl zugeschnitten
+
+Beim Ausrichten wandern die Aufnahmen gegeneinander. Am Bildrand tragen darum nur wenige Subs
+bei, und diese Pixel rauschen entsprechend stärker. An einem echten Stapel gemessen (IC 434,
+133 von 224 Subs, Seestar S30): die äußeren 5 px rauschten **1,6-mal** so stark wie die Mitte,
+bei 80 px noch 1,3-mal — nach dem Strecken ein deutlich sichtbarer blau-roter Saum.
+
+`--autocrop` ist als Standard-an dokumentiert, wurde im Astro-Modus aber **überhaupt nicht
+angewandt** (nur im Makro- und Mosaik-Modus). Die Abdeckungsmaske ist binär (nur „mindestens
+eine Aufnahme“) und sieht den Abfall gar nicht; die Beitragszahl je Pixel wurde beim Stapeln
+berechnet und weggeworfen. Sie wird jetzt zurückgegeben (`sigma`, `winsor`, `linearfit`) und
+trägt den Zuschnitt.
+
+Der Saum verdirbt nicht nur den Anblick, sondern auch die **Messung** — und damit den Rat, den
+das Regelwerk daraus ableitet. Deshalb wird jetzt zugeschnitten, *bevor* der Messbericht
+entsteht. Am selben Stapel gemessen:
+
+| | vorher | nachher |
+|---|---|---|
+| Bildgröße | 1080 × 1920 | 991 × 1790 |
+| Helligkeitsverlauf | 41,9 % | **30,3 %** |
+| G/R am oberen Rand | 0,680 | **1,003** |
+| G/R in der Mitte | 0,963 | 0,955 |
+| Rauschen am Rand | 1,6-fach | **1,1–1,25-fach** |
+
+Die erste Fassung nahm nur Zeilen, in denen *jedes* Pixel genug Beiträge hat. Die
+Sigma-Rejection verwirft aber überall verstreute Einzelpixel — damit qualifizierte sich keine
+einzige Zeile, und der Zuschnitt tat **wortlos nichts**. Richtig ist der Median je Zeile und je
+Spalte. Jeder Weg, auf dem nicht zugeschnitten wird, sagt das jetzt im Protokoll.
+
+### Die Ausrichtung prüft ihr Ergebnis gegen die Physik
+
+`_estimate_star_transform_robust` nahm jede Abbildung an, sobald RANSAC drei Punktpaare fand —
+und drei Paare findet man in zwei Sternfeldern fast immer zufällig. Das Ergebnis war darum keine
+Absage, sondern ein **erfundener Treffer**, und der ist gefährlicher als ein Fehlschlag, weil er
+sich wie ein Erfolg meldet. Gemessen an Seestar S30 (3,99 Bogensekunden je Pixel) gegen
+ASI533MC Pro (0,776), Maßstabsverhältnis 5,14:
+
+| Versuch | Ergebnis |
+|---|---|
+| ASI533 nach Seestar, direkt | „ok“, Maßstab **0,5826** — erwartet war 0,195 |
+| Seestar nach ASI533, direkt | keine Ausrichtung |
+| dieselben Daten vorskaliert | 4 von 4 „ok“, Restmaßstab 3,05 / **0,996** / 2,72 / 4,24 |
+
+Also eine richtige Ausrichtung und drei erfundene, alle ununterscheidbar gemeldet. Neu prüfen
+`transform_kennwerte` und `transform_plausibel` den gefundenen Maßstab gegen den erwarteten
+(1,0 bei gleicher Ausrüstung, sonst aus den Kopfdaten). Alle drei Fehltreffer werden verworfen,
+die richtige Ausrichtung bleibt. Feldrotation bis 179 Grad und Maßstabsdrift bis 15 % gehen
+unverändert durch — der Seestar steht azimutal, Bildfeldrotation ist dort der Normalfall.
+
+**Kameras und Teleskope mischen geht damit noch nicht.** Die Vorskalierung aus den Kopfdaten
+allein reicht nicht; sie erzeugt drei Fehltreffer auf einen Treffer. Neu ist nur, dass diese
+Fehltreffer jetzt auffallen, statt still ins Ergebnis zu wandern.
+
+### Das Regelwerk empfiehlt nicht mehr, was gerade gelaufen ist
+
+Ein Lauf mit `--bg-extract` entfernte den Hintergrund und riet danach, die
+Hintergrund-Entfernung einzuschalten — mit `--bg-extract`. Wer folgt, rechnet 20 Minuten neu und
+bekommt exakt dasselbe Bild.
+
+Die Ursache ist die Reihenfolge: `_astro_write` bindet `result = astro.background_extract(result)`
+nur lokal, der Messbericht des Aufrufers sieht also den Stapel **vor** der Entfernung. Die
+gemessenen 16,1 % Verlauf sind echt — nur eben am Rohstapel. `regeln.pruefen` nimmt darum jetzt
+`bereits=[…]` mit den angewandten Schaltern entgegen; ein Rat auf einen bereits gesetzten
+Schalter wird zum Hinweis herabgestuft, der das dazusagt, statt eine Handlung zu empfehlen. Der
+Befund selbst verschwindet nicht.
+
+### Siril-Brücke findet ihre Skripte auf Windows
+
+`_scripts_dir()` kannte nur die Pfade von macOS und Linux. Siril 1.4 legt seine Python-Skripte
+auf Windows unter `%LOCALAPPDATA%/siril-scripts` ab. An einer echten Installation (Siril 1.4.2)
+nachgesehen: **58 Skripte lagen da, gefunden wurden 0** — die ganze Brücke tat auf Windows
+wortlos nichts. Jetzt werden `LOCALAPPDATA` und `APPDATA` mitgeprüft.
+
+Zur Lizenzfrage, je Datei gezählt statt je Sammlung: die Sammlung steht unter MIT (Team
+Free-astro), die einzelnen Dateien nicht — **52 mal GPL-3.0(-or-later), 4 mal MIT, 2 ohne
+Angabe**. ForgePix *steuert* Siril nur von außen an und bündelt nichts; dafür braucht es keine
+Lizenzverträglichkeit.
+
+### Die Szenenbank nimmt die Kameras reihum
+
+Der Bau sortierte die Serien streng nach Sub-Anzahl absteigend. Der Seestar S30 nimmt sehr viele
+kurze Aufnahmen, seine Serien standen damit alle vorn. Gemessen an den ersten sechs Serien von
+Szenenbank v2: **96 Kacheln Seestar gegen je 24 der beiden ZWO-Kameras**, also 4:1:1.
+
+Das ist kein Schönheitsfehler: ein Entrauscher lernt das Rauschprofil des Sensors, den er am
+häufigsten sieht. ForgePix soll für alle Astrofotografen taugen, nicht nur für die mit derselben
+Kamera. Serien werden jetzt reihum aus jeder Kamera genommen — damit stimmt das Verhältnis zu
+*jedem* Zeitpunkt, was bei Läufen zählt, die Stunden dauern und unterbrochen werden. Neu
+außerdem `--max-je-kamera N`, das eine Kamera deckelt; fortgesetzte Läufe zählen dabei mit.
+
 ### Das Hintergrund-Verfahren ist jetzt in der Oberfläche wählbar
 
 `--astro-bg-backend {own,graxpert}` gab es nur auf der Kommandozeile. In der Oberfläche war

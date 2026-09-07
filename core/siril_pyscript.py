@@ -20,9 +20,24 @@ from constants import log_print
 
 
 def _scripts_dir():
-    for base in (os.path.expanduser("~/Library/Application Support/org.siril.Siril/siril-scripts"),
-                 os.path.expanduser("~/.config/siril/siril-scripts"),
-                 os.path.expanduser("~/.siril/siril-scripts")):
+    """Wo Siril seine Python-Skripte ablegt.
+
+    Der Windows-Pfad hat lange gefehlt. Siril 1.4 legt die Sammlung dort unter
+    %LOCALAPPDATA%/siril-scripts ab — nicht unter ~/.config. Ohne diesen Eintrag fand die
+    Bruecke auf Windows NIE ein Skript und tat wortlos nichts; nachgesehen an einer echten
+    Installation (Siril 1.4.2): 58 Skripte lagen da, gefunden wurden 0.
+    """
+    kandidaten = [
+        os.path.expanduser("~/Library/Application Support/org.siril.Siril/siril-scripts"),
+        os.path.expanduser("~/.config/siril/siril-scripts"),
+        os.path.expanduser("~/.siril/siril-scripts"),
+    ]
+    for umgebung in ("LOCALAPPDATA", "APPDATA"):
+        wurzel = os.environ.get(umgebung)
+        if wurzel:
+            kandidaten.append(os.path.join(wurzel, "siril-scripts"))
+            kandidaten.append(os.path.join(wurzel, "siril", "siril-scripts"))
+    for base in kandidaten:
         if os.path.isdir(base):
             return base
     return None

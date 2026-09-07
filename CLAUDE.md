@@ -168,3 +168,31 @@ Bestandsaufnahme in [docs/ASTRO_DATEN.md](docs/ASTRO_DATEN.md).
 Der ASI294MC Pro braucht **keine Bias-Frames und keine Dark-Skalierung** (Dark-Flats statt
 Bias). Er ist **nicht** dasselbe wie der ASI294MM Pro — anderer Sensor (IMX492), halbe
 Pixelgröße. Die Kamera-Erkennung schweigt bei Mehrdeutigkeit lieber, als sich zu vertun.
+
+## Offene Punkte (Stand 07.09.2026)
+
+* **Kameras/Teleskope mischen geht noch nicht.** Gemessen an Seestar S30 (3,99 "/px) gegen
+  ASI533MC Pro (0,776 "/px), Faktor 5,14: die direkte Ausrichtung meldet „ok" und liefert
+  Maßstab 0,58 statt 0,195 — also einen **falschen Treffer statt einer Absage**. Mit
+  Vorskalierung aus den Headern richten sich 4 von 4 aus, aber nur eine hat den richtigen
+  Restmaßstab (0,996 gegen 3,05 / 2,72 / 4,24). Was fehlt, ist dieselbe Absicherung wie beim
+  Kometen: **das Ergebnis gegen die Vorhersage aus den Headern prüfen** und verwerfen, wenn der
+  Restmaßstab nicht nahe 1 liegt.
+* **Die Szenenbank muss je Kamera gedeckelt werden.** v2 steht bei 4:1:1 zugunsten des Seestar.
+  Ein Entrauscher lernt das Rauschprofil des Sensors, den er am häufigsten sieht — bei diesem
+  Verhältnis entsteht wieder ein Seestar-Modell. Das Ziel ist ausdrücklich ein Modell für alle.
+
+## Siril
+
+Siril 1.4 bringt 58 Python-Skripte mit (`%LOCALAPPDATA%/siril-scripts` auf Windows,
+`~/.config/siril/siril-scripts` auf Linux). **Nachbauen lohnt bei fast keinem:** 14 sind nur
+Hüllen um fremde Programme, 35 sind PyQt6-Dialoge, 3 brauchen KI-Gewichte, die nicht dabei
+sind. Übrig bleiben sechs reine Rechnungen, deren Themen ForgePix bereits abdeckt.
+
+**Lizenz: je Datei prüfen, nicht je Sammlung.** Die Sammlung steht unter MIT (Team Free-astro),
+die einzelnen Dateien nicht: gezählt 52× GPL-3.0(-or-later), 4× MIT, 2 ohne Angabe. GPL schützt
+den **Code**, nicht das **Verfahren** — nachbauen ist erlaubt, kopieren nicht. Die Falle: wer
+den GPL-Quelltext liest und dann dasselbe schreibt, erzeugt im Zweifel ein abgeleitetes Werk.
+Sicher ist nur der Weg über die veröffentlichte Beschreibung, nicht über die Quelle (so schon
+in `docs/DARKTABLE_RESEARCH.md` festgelegt). ForgePix *steuert* Siril nur von außen an und
+bündelt nichts — dafür braucht es keine Lizenzverträglichkeit.

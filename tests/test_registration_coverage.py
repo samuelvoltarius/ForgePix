@@ -72,7 +72,17 @@ class RegistrationCoverage(unittest.TestCase):
                     np.testing.assert_array_equal(info["coverage"], expected)
                     self.assertTrue(info["coverage"][12, 12])
                     self.assertFalse(info["report"]["variance_available"])
-                    self.assertFalse(info["report"]["per_pixel_exposure_available"])
+                    # Nicht jedes Verfahren kann sagen, WIE VIELE Aufnahmen je Pixel
+                    # beigetragen haben. Die drei mit Ausreisser-Verwurf zaehlen ohnehin mit
+                    # (`cnt`), average/median/max nicht. Die Zahl traegt den Astro-Zuschnitt:
+                    # am Bildrand tragen nur wenige Subs bei, und diese Pixel rauschen
+                    # entsprechend staerker (gemessen 1,6-fach in den aeusseren 5 px). Wer sie
+                    # nicht hat, darf auch nicht schneiden — und muss das sagen.
+                    self.assertEqual(info["report"]["per_pixel_exposure_available"],
+                                     method in ("sigma", "winsor", "linearfit"),
+                                     "%s: Beitragszahl je Pixel unerwartet" % method)
+                    self.assertEqual(info["beitraege"] is not None,
+                                     method in ("sigma", "winsor", "linearfit"))
 
     def test_support_uses_accepted_channels_not_union_of_input_masks(self):
         with tempfile.TemporaryDirectory() as folder:

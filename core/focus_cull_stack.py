@@ -2160,6 +2160,11 @@ def run_astro(input_dir, work_dir, args):
         "banding_correction": float(getattr(args, "astro_banding", 0.0) or 0.0)}
     if observation is not None:
         observation["processing"] = processing
+    # HIER, nicht erst in `_astro_write`: der Messbericht weiter unten misst `result`. Schnitte
+    # man erst spaeter, wuerde weiter ueber den verrauschten Rand gemessen — und das Regelwerk
+    # gaebe seinen Rat auf verdorbenen Zahlen (gemessen: Gradient 41,9 % statt 24,7 %,
+    # G/R 0,68 am Rand gegen 0,96 in der Mitte).
+    result, stack_info = _zuschnitt_auf_beitraege(result, stack_info, args)
     out = _astro_write(result, work_dir, used_paths, args, astro,
         drizzle_info=drizzle_info, stack_info=stack_info, observation=observation)
     from constants import VERSION
@@ -2197,7 +2202,18 @@ def run_astro(input_dir, work_dir, args):
         # Es zaehlt, was TATSAECHLICH passiert ist, nicht der Schalter. Findet sich kein Kern,
         # wird normal auf die Sterne gestapelt — dann sind sie rund und die Regeln zu
         # Sternform und Hintergrund gelten wieder.
-        _r = regeln.pruefen(_b, komet=bool(_komet_angewandt))
+        # Was bei diesem Durchgang schon lief, darf nicht noch einmal empfohlen werden.
+        # Der Bericht misst den ROHEN Stapel; ohne diese Liste empfiehlt das Regelwerk
+        # `--bg-extract`, obwohl die Hintergrund-Entfernung gerade gelaufen ist.
+        _bereits = [s for s, an in (
+            ("--bg-extract", getattr(args, "bg_extract", False)),
+            ("--astro-cosmetic", getattr(args, "astro_cosmetic", False)),
+            ("--astro-deconv", getattr(args, "astro_deconv", False)),
+            ("--astro-synthstar", getattr(args, "astro_synthstar", False)),
+            ("--astro-denoise", float(getattr(args, "astro_denoise", 0.0) or 0.0) > 0),
+            ("--astro-starless-stretch", getattr(args, "astro_starless_stretch", None)),
+        ) if an]
+        _r = regeln.pruefen(_b, komet=bool(_komet_angewandt), bereits=_bereits)
         with open(os.path.join(out, "messbericht.json"), "w", encoding="utf-8") as f:
             json.dump({"bericht": _b,
                        "raete": [dict(x._asdict()) for x in _r],
@@ -2405,6 +2421,68 @@ def _maybe_upscale(result, args):
         return result
 
 
+def _zuschnitt_auf_beitraege(result, stack_info, args):
+    """Den Rahmen wegschneiden, in dem nur wenige Aufnahmen beigetragen haben.
+
+    Beim Ausrichten wandern die Aufnahmen gegeneinander. Am Bildrand tragen darum nur wenige
+    Subs bei, und diese Pixel rauschen entsprechend staerker. An einem echten Stapel gemessen
+    (IC 434, 133 von 224 Subs, Seestar S30): die aeusseren 5 px rauschen **1,6-mal** so stark
+    wie die Mitte, bei 80 px noch 1,3-mal. Nach dem Strecken wird daraus ein sichtbarer
+    blau-roter Saum. Die Abdeckungsmaske ist binaer ("mindestens eine Aufnahme") und sieht den
+    Abfall gar nicht; `--autocrop` ist als Standard-an dokumentiert, wurde im Astro-Modus aber
+    ueberhaupt nicht angewandt (nur im Makro- und Mosaik-Modus).
+
+    Der Saum verdirbt nicht nur den Anblick, sondern auch die **Messung** — und damit den Rat,
+    den das Regelwerk daraus ableitet. Am ausgelieferten Bild nachgerechnet:
+
+        ganzes Bild           Gradient 41,9 %     Rand oben  G/R 0,680
+        40 px Rand abgezogen  Gradient 24,7 %     Mitte      G/R 0,963
+
+    Darum wird hier zugeschnitten, BEVOR der Messbericht entsteht.
+
+    Gibt `(result, stack_info)` zurueck. Ist nichts zu schneiden, bleibt beides unveraendert —
+    ein zweiter Aufruf tut darum nichts mehr.
+    """
+    if getattr(args, "autocrop", True) and stack_info is not None:
+        _anzahl = stack_info.get("beitraege")
+        if _anzahl is None:
+            print("  Zuschnitt nicht moeglich: das Stapelverfahren liefert keine "
+                  "Beitragszahl je Pixel.")
+        elif np.isfinite(_anzahl).any():
+            _voll = np.asarray(_anzahl, np.float32)
+            # Je ZEILE und je SPALTE der Median, nicht jedes einzelne Pixel. Der Randabfall
+            # ist ein zeilen- und spaltenweiter Effekt; die Sigma-Rejection verwirft dagegen
+            # verstreute Einzelpixel im ganzen Bild. Mit `all()` genuegte ein einziges
+            # verworfenes Pixel, um eine Zeile auszuschliessen — dann qualifizierte sich keine
+            # einzige und der Zuschnitt tat wortlos nichts. Genau so gemessen an IC 434.
+            _zp = np.median(_voll, axis=1)
+            _sp = np.median(_voll, axis=0)
+            _grenze = 0.8 * float(max(_zp.max(), _sp.max()))
+            _zeilen = np.where(_zp >= _grenze)[0]
+            _spalten = np.where(_sp >= _grenze)[0]
+            _hoch, _breit = _voll.shape[:2]
+            if not len(_zeilen) or not len(_spalten):
+                print("  Zuschnitt uebersprungen: keine Zeile oder Spalte erreicht 80 %% der "
+                      "Beitraege — die Abdeckung ist ueberall duenn.")
+            else:
+                y0, y1 = int(_zeilen[0]), int(_zeilen[-1]) + 1
+                x0, x1 = int(_spalten[0]), int(_spalten[-1]) + 1
+                _rest = (y1 - y0) * (x1 - x0) / float(_hoch * _breit)
+                if _rest < 0.5:
+                    print("  Zuschnitt uebersprungen: es blieben nur %.0f %% des Bildes "
+                          "uebrig — das deutet auf ein anderes Problem hin." % (100 * _rest))
+                elif (y0, x0) != (0, 0) or (y1, x1) != (_hoch, _breit):
+                    result = result[y0:y1, x0:x1]
+                    stack_info = dict(stack_info)
+                    stack_info["coverage"] = np.asarray(stack_info["coverage"])[y0:y1, x0:x1]
+                    stack_info["beitraege"] = _voll[y0:y1, x0:x1]
+                    print("  Zuschnitt: %d px oben, %d unten, %d links, %d rechts — dort "
+                          "trugen weniger als 80 %% der Aufnahmen bei (%dx%d -> %dx%d)."
+                          % (y0, _hoch - y1, x0, _breit - x1,
+                             _breit, _hoch, x1 - x0, y1 - y0))
+    return result, stack_info
+
+
 def _astro_write(result, work_dir, paths, args, astro, *, drizzle_info=None,
                  stack_info=None, observation=None):
     """Astro-Ergebnis schreiben: optional Hintergrund-Extraktion, dann 16-bit-Linear +
@@ -2425,6 +2503,14 @@ def _astro_write(result, work_dir, paths, args, astro, *, drizzle_info=None,
                 getattr(args, "astro_deconv", False), getattr(args, "astro_synthstar", False),
                 float(getattr(args, "astro_denoise", 0.0) or 0.0) > 0)):
             raise ForgePixFehler("Der Stack enthält Abdeckungslücken. Zuerst den linearen Stack speichern und auf vollständig bedeckte Bereiche zuschneiden, bevor Hintergrundkorrektur, Dekonvolution oder Entrauschen angewendet wird.")
+    # Randstreifen wegschneiden, in denen nur wenige Aufnahmen beigetragen haben.
+    #
+    # Die Abdeckungsmaske ist binaer ("mindestens eine Aufnahme") und sieht diese Streifen
+    # nicht. An einem echten Stapel aus 133 Aufnahmen gemessen: die aeusseren 5 px rauschen
+    # 1,6-mal so stark wie die Mitte, bei 80 px noch 1,3-mal — nach dem Strecken ein sichtbarer
+    # farbiger Saum. `--autocrop` ist als Standard dokumentiert, wurde im Astro-Modus aber
+    result, stack_info = _zuschnitt_auf_beitraege(result, stack_info, args)
+
     _filt = aufnahmefilter(args, paths)
     if _filt is not None and getattr(args, "dualband", False):
         import filters as _flt
