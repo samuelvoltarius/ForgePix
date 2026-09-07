@@ -2219,6 +2219,13 @@ def _detail_support(lum, thresh=2.5):
     return cv2.GaussianBlur(sup, (0, 0), 2.0)            # weiche Ränder gegen Maskenkanten
 
 
+# Ab dieser Flaeche gilt ein heller Bereich als ausgedehnt (Galaxie, Nebel) und nicht mehr
+# als Stern. Am M51-Stapel gemessen: die hellen Bereiche ueber 8 Sigma sind bei Sternen
+# zweistellig bis wenige hundert Pixel gross, die Galaxie haengt als ein Bereich von
+# Zehntausenden zusammen. Dazwischen liegt eine Groessenordnung Luft.
+_MAX_STERNFLAECHE = 2000
+
+
 def deconvolve(f, psf=None, iterations=15, star_protect=0.85, regularize=0.0,
                deringing=True, tiled_psf=False, tiles=3, log=log_print):
     """Dekonvolution (PixInsight/Deconvolution-Stil) — schärft echtes Detail zurück, das Seeing/Optik
@@ -2294,8 +2301,48 @@ def deconvolve(f, psf=None, iterations=15, star_protect=0.85, regularize=0.0,
     ratio = np.clip(ratio, 0.3, 3.0)
     out = f.astype(np.float32) * ratio[..., None] if f.ndim == 3 else f.astype(np.float32) * ratio
     # Stern-Schutz: in den hellsten Zonen weich aufs Original zurückblenden (gegen RL-Ringe)
+    #
+    # Die Helligkeitsschwelle allein taugt dafuer NICHT, und zwar aus zwei gemessenen Gruenden:
+    #
+    # 1. Sie trifft fast nichts. Am M51-Stapel (4144x2822, ueber 2000 Sterne) lagen ueber
+    #    Helligkeit 0,85 ganze NEUN Bereiche, der groesste 86 Pixel. Der Schutz war damit
+    #    praktisch abgeschaltet, und die Dekonvolution ringte um hunderte Sterne ungehindert.
+    # 2. Sie deckt die falsche Stelle ab. Der gesaettigte Kern endet bei Radius 3-4 px; der
+    #    Ueberschwinger sitzt bei Radius 10-13 px. Gemessen als Ueberschuss ueber den Himmel:
+    #
+    #        r:        4      5      6      7      8      9     10     11     12     13
+    #        ohne  +0.187 +0.082 +0.038 +0.019 +0.010 +0.007 +0.005 +0.003 +0.003 +0.002
+    #        mit   +0.073 +0.005 +0.004 +0.004 +0.004 +0.004 +0.011 +0.024 +0.026 +0.017
+    #
+    #    Ohne Dekonvolution faellt das Profil monoton. Mit ihr sitzt bei r=11 ein Wall,
+    #    achtmal so hoch. Nach der Streckung wird daraus das 2,5-fache der Himmelshelligkeit
+    #    — der sichtbare helle Ring um jeden Stern.
+    #
+    # Also: Sterne ueber dem RAUSCHEN suchen (nicht ueber einer festen Helligkeit), und den
+    # Schutz bis an den Ringradius aufblasen. Ausgedehnte helle Flaechen bleiben ausgenommen —
+    # im Galaxienkern und im Nebel SOLL geschaerft werden, dort ringt nichts.
     if star_protect is not None and star_protect < 1.0:
         hi = np.clip((lum - star_protect) / max(1e-3, 1.0 - star_protect), 0, 1)
+        _psf_px = psf.shape[0] if (psf is not None and not tiled_psf) else 21
+        _r = max(4, int(round(_psf_px * 0.6)))
+        _himmel = float(np.median(lum))
+        _sigma = float(np.median(np.abs(lum - _himmel))) * 1.4826
+        if _sigma > 0:
+            _kerne = (lum > _himmel + 8.0 * _sigma).astype(np.uint8)
+            _n, _marken, _stats, _ = cv2.connectedComponentsWithStats(_kerne, 8)
+            if _n > 1:
+                # Kompakt = Stern. Die Galaxie haengt als EIN grosser Bereich zusammen und
+                # faellt hier heraus; ihr Kern wird weiter geschaerft.
+                _tab = np.zeros(_n, np.uint8)
+                _tab[1:] = (_stats[1:, cv2.CC_STAT_AREA] <= _MAX_STERNFLAECHE).astype(np.uint8)
+                _sterne = _tab[_marken]
+                _scheiben = cv2.dilate(_sterne, cv2.getStructuringElement(
+                    cv2.MORPH_ELLIPSE, (2 * _r + 1, 2 * _r + 1)))
+                _weich = cv2.GaussianBlur(_scheiben.astype(np.float32), (0, 0),
+                                          max(1.0, _r / 3.0))
+                hi = np.maximum(hi, np.clip(_weich, 0, 1))
+                log("    Stern-Schutz: %d Sterne, Radius %d px, %.1f %% der Flaeche geschuetzt"
+                    % (int(_tab.sum()), _r, 100.0 * float((_scheiben > 0).mean())))
         hi = cv2.GaussianBlur(hi, (0, 0), 2.0)
         m = hi[..., None] if out.ndim == 3 else hi
         out = out * (1 - m) + f.astype(np.float32) * m

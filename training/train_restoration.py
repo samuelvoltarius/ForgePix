@@ -169,8 +169,29 @@ def train(args):
     scene_manifest = None
     if args.scenes and args.task != "starless":
         scene_manifest = json.loads((args.scenes/"manifest.json").read_text())
-        train_bank = torch.from_numpy(np.load(args.scenes/"train.npy"))[:,None].to(device)
-        val_bank = torch.from_numpy(np.load(args.scenes/"validation.npy"))[:,None].to(device)
+        def _bank(name):
+            """Kacheln laden und in (N, C, H, W) bringen.
+
+            Eine Mono-Bank liegt als (N, H, W) vor und braucht eine Kanalachse; eine Farbbank
+            als (N, H, W, 3) und muss umsortiert werden. Ohne diese Unterscheidung scheiterte
+            der erste Farb-Lauf mit "weight of size [64, 3, 3, 3], expected input[1, 1, 256,
+            256] to have 3 channels, but got 1 channels instead" — das Modell war dreikanalig,
+            die Daten nicht.
+            """
+            a = torch.from_numpy(np.load(args.scenes/name))
+            if a.ndim == 3:
+                a = a[:, None]
+            elif a.ndim == 4 and a.shape[-1] in (1, 3):
+                a = a.permute(0, 3, 1, 2).contiguous()
+            if a.shape[1] != args.channels:
+                raise SystemExit(
+                    "Die Szenenbank hat %d Kanal/Kanaele, --channels sagt %d. "
+                    "Eine Farbbank baut `prepare_scenes_eigene.py --farbe`."
+                    % (a.shape[1], args.channels))
+            return a.to(device)
+
+        train_bank = _bank("train.npy")
+        val_bank = _bank("validation.npy")
     config = dict(CONFIG, width=args.width, img_channel=args.channels,
                   middle_blk_num=args.bloecke)
     contract = dict(CONTRACT, channels=args.channels)

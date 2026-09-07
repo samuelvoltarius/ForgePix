@@ -8,6 +8,87 @@ Alle nennenswerten Änderungen an ForgePix. Format orientiert an
 
 ## [Unreleased]
 
+### Der helle Ring um jeden Stern — der zweite Teil der Dekonvolutionsringe
+
+Der schwarze Ring war weg, der helle nicht. Richardson-Lucy schwingt an Punktquellen in beide
+Richtungen: erst ein Graben, dann ein Wall. Der Riegel je Kanal traf nur den Graben.
+
+Radialprofil um 200 Sterne des M51-Stapels, Ueberschuss ueber den Himmelspegel in Vielfachen
+davon — v1 ist ohne Dekonvolution gestapelt:
+
+| r | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| ohne Dekonvolution | +0,187 | +0,082 | +0,038 | +0,019 | +0,010 | +0,007 | +0,005 | +0,003 | +0,003 | +0,002 |
+| mit, alter Stand | +0,073 | +0,005 | +0,004 | +0,004 | +0,004 | +0,004 | +0,011 | **+0,024** | **+0,026** | +0,017 |
+
+Ohne Dekonvolution faellt das Profil monoton. Mit ihr sitzt bei r=11 ein Wall, **achtmal so
+hoch**. Nach der Streckung wird daraus das 2,5-fache der Himmelshelligkeit — der sichtbare
+helle Ring.
+
+Der Stern-Schutz half aus zwei Gruenden nicht:
+
+* **Er griff fast nie.** Er blendete ab Helligkeit 0,85 aufs Original zurueck. Ueber dieser
+  Schwelle lagen im ganzen M51-Stapel (4144x2822) **neun Bereiche**, der groesste 86 Pixel —
+  bei ueber 2000 Sternen.
+* **Er deckte die falsche Stelle ab.** Der gesaettigte Kern endet bei Radius 3-4 px, der Wall
+  sitzt bei 10-13 px.
+
+Jetzt werden Sterne ueber dem RAUSCHEN gesucht (8 Sigma statt fester Helligkeit) und der
+Schutz bis an den Ringradius aufgeblasen, der aus der PSF-Groesse folgt. Ausgedehnte helle
+Flaechen bleiben ausgenommen — im Galaxienkern und im Nebel soll geschaerft werden, dort ringt
+nichts. Gemessen: das Profil um die Sterne ist jetzt **Ziffer fuer Ziffer das ohne
+Dekonvolution**, waehrend die Galaxie ihre Feinstruktur weiter um den **Faktor 1,46** gewinnt
+(0,002928 -> 0,004274). 419 Sterne geschuetzt, 15,9 % der Flaeche.
+
+Der Preis, offen gesagt: die Sterne werden nicht mehr geschaerft (Profil bei r=1 bleibt bei
++0,942 statt +1,651). Ein Kranz, der nur die Ringzone schuetzt und den Kern frei laesst, wurde
+geprueft — er bringt die Schaerfung zurueck, laesst aber die Haelfte des Ringes stehen
+(+0,013 gegen +0,008 natuerlich). Ringfreiheit ging vor.
+
+### Die Hof-Pruefung mass das falsche Bild
+
+`ringtiefe` und `ringfarbe` sollen die Dekonvolutionsringe finden — und liefen im Ablauf
+**vor** der Dekonvolution. Sie konnten den Fehler, fuer den sie gebaut wurden, nicht sehen.
+Belegt daran, dass `ringtiefe` ueber drei verschiedene Durchgaenge auf 16 Stellen identisch
+war, obwohl die Ergebnisbilder sich unterschieden. Am geschriebenen 32-bit-Linear nachgemessen
+ergaben dieselben drei Staepel:
+
+| | Ringtiefe | Hoffarbe B/G |
+|---|---|---|
+| ohne Kanal-Riegel | -139 % des Himmels | unbestimmt (schwarzer Ring) |
+| Riegel aus einer Flaeche | -29 % | **2,821** (violett) |
+| Riegel je Kanal | +4 % | 0,617 (Natur: 0,681) |
+
+Beide Regeln haetten die ersten beiden Faelle erkannt — sie liefen nur nie darauf. Gemessen
+wird jetzt die geschriebene Datei: was beurteilt wird, soll das sein, was auch ankommt.
+
+### Farb-Szenenbank aus den Hubble-Einzelfiltern
+
+`training/prepare_scenes_farbe.py` baut eine dreikanalige Szenenbank aus dem Archiv. Dasselbe
+Programm, derselbe Besuch, dasselbe Instrument, verschiedene Filter — und, an M16, M81 und M8
+nachgerechnet, **auf demselben Pixelraster**: gleiche Bildgroesse, gleiches CRVAL1/CRVAL2 und
+CRPIX1/CRPIX2 auf fuenf Nachkommastellen. Es muss nichts registriert werden. Geprueft wird es
+trotzdem bei jeder Gruppe.
+
+Am aktuellen Bestand: 102 Zeiger, davon 5 mit drei brauchbaren Filtern (etwa M16 mit
+f814w/f555w/f435w). Breit- und Mittelbaender werden bevorzugt, und zwischen benachbarten
+Kanaelen muessen mindestens 40 nm liegen — sonst waeren es zwei Mal dasselbe: fuer die
+planetarischen Nebel kam zuerst f658n/f656n/f502n heraus, Rot und Gruen zwei Nanometer
+auseinander.
+
+Was die Bank NICHT ist, und das gehoert zum Urteil dazu: die Kanaele stammen aus getrennten
+Belichtungen, ihr Rauschen ist also unabhaengig. Bei einer Farbkamera ist es ueber das
+Debayering verbunden. Die Bank aus den eigenen Kameras (`prepare_scenes_eigene.py --farbe`)
+gehoert dazugemischt, nicht ersetzt.
+
+### Szenenbank aus den eigenen Kameras auf Wunsch in Farbe
+
+`prepare_scenes_eigene.py --farbe` behaelt die drei Kanaele. Die Ausrichtung laeuft weiter
+ueber ein Graubild — der Dreiecksabgleich sucht Sterne, keine Farben —, aufsummiert wird aber
+das Farbbild. Das Trainingsskript prueft die Kanalzahl gegen die Bank und nennt im
+Konfliktfall den Befehl, der die passende Bank baut, statt mit einer Meldung aus dem Innersten
+von PyTorch abzubrechen.
+
 ### Die Dekonvolution frisst keine schwarzen Ringe mehr um die Sterne
 
 Ein M51-Stapel mit `--astro-deconv` bekam um **jeden** Stern einen schwarzen Ring; die Sterne

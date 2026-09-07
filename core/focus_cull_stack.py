@@ -2309,6 +2309,18 @@ def run_astro(input_dir, work_dir, args):
         import regeln
         _b = messbericht.erstellen(result, pfad=(used_paths[0] if used_paths else None),
                                    paths=used_paths, log=lambda *a, **k: None)
+        # Ringtiefe und Hoffarbe gehoeren ans ERGEBNIS, nicht an den Rohstapel. Sie suchen
+        # die Ringe der Dekonvolution — und die laeuft erst in `_astro_write`, also NACH
+        # dieser Messung. Am Rohstapel gemessen konnten die beiden Regeln den Fehler, fuer
+        # den sie gebaut wurden, gar nicht sehen. Belegt an M51: `ringtiefe` war ueber drei
+        # verschiedene Durchgaenge auf 16 Stellen identisch, obwohl die Ergebnisbilder sich
+        # unterschieden. Am fertigen 32-bit-Linear gemessen ergaben dieselben drei:
+        #     ohne Kanal-Riegel        -139 % des Himmels, Hoffarbe unbestimmt (schwarzer Ring)
+        #     Riegel aus EINER Flaeche  -29 %,             Hoffarbe 2,821  <- violett
+        #     Riegel je Kanal            +4 %,             Hoffarbe 0,617  (Natur: 0,681)
+        # Gelesen wird die geschriebene Datei, nicht ein Zwischenstand im Speicher: was
+        # beurteilt wird, soll das sein, was auch ankommt.
+        _b.update(_hoefe_am_ergebnis(out, messbericht))
         # Es zaehlt, was TATSAECHLICH passiert ist, nicht der Schalter. Findet sich kein Kern,
         # wird normal auf die Sterne gestapelt — dann sind sie rund und die Regeln zu
         # Sternform und Hintergrund gelten wieder.
@@ -2712,6 +2724,32 @@ def _zuschnitt_auf_beitraege(result, stack_info, args, drizzle_info=None):
              100.0 * (y1 - y0) * (x1 - x0) / (_hoch * _breit),
              100.0 * _duenn / max(_mitte, 1e-9), _faktor, _warum))
     return result, stack_info, drizzle_info
+
+
+def _hoefe_am_ergebnis(stack_dir, messbericht):
+    """Ringtiefe und Hoffarbe am geschriebenen 32-bit-Linear nachmessen.
+
+    Faellt es aus, bleiben die Werte vom Rohstapel stehen — ein unvollstaendiger Bericht ist
+    besser als ein abgebrochener Lauf. Gibt ein Teil-Dict zurueck, das ueber den Bericht
+    gelegt wird; ist nichts messbar, ist es leer und der Bericht bleibt, wie er war.
+    """
+    import glob as _glob
+    treffer = sorted(_glob.glob(os.path.join(stack_dir, "*_astro_linear_32bit.tif")))
+    if not treffer:
+        return {}
+    try:
+        from constants import imread
+        # imread liefert BGR — genau die Kanalordnung, in der `_ringfarbe` Kanal 0 durch
+        # Kanal 1 teilt und "B/G" meint. Nicht drehen.
+        fertig = imread(treffer[-1], cv2.IMREAD_UNCHANGED)
+        if fertig is None:
+            return {}
+        fertig = fertig.astype(np.float32)
+        return {"ringtiefe": messbericht._ringe(fertig),
+                "ringfarbe": messbericht._ringfarbe(fertig),
+                "hoefe_gemessen_an": os.path.basename(treffer[-1])}
+    except Exception:
+        return {}
 
 
 def _astro_write(result, work_dir, paths, args, astro, *, drizzle_info=None,

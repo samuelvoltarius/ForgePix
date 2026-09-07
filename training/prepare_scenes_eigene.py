@@ -41,8 +41,13 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "core"))
 
 
-def _stapeln(pfade, skala, log, min_bilder=8):
-    """Eine Serie tief stapeln. Gibt (Mono-Ergebnis oder None, Anzahl verworfener Aufnahmen).
+def _stapeln(pfade, skala, log, min_bilder=8, farbe=False):
+    """Eine Serie tief stapeln. Gibt (Ergebnis oder None, Anzahl verworfener Aufnahmen).
+
+    `farbe=True` behaelt die drei Kanaele. Die AUSRICHTUNG laeuft weiterhin ueber ein
+    Graubild — `_estimate_star_transform_robust` arbeitet auf Sternpositionen —, aufsummiert
+    wird aber das Farbbild. Gebraucht wird das fuer ein dreikanaliges Entrauschungsmodell;
+    GraXperts Entrauscher arbeitet so, unserer bisher einkanalig.
 
     `min_bilder` ist die Untergrenze fuer einen brauchbaren tiefen Stapel.
 
@@ -67,7 +72,7 @@ def _stapeln(pfade, skala, log, min_bilder=8):
         if f is None:
             verworfen += 1
             continue
-        if f.ndim == 3:
+        if f.ndim == 3 and not farbe:
             f = astro._gray(f)
         f = f.astype(np.float32)
         # ABGESCHNITTENE DATEIEN aussortieren. Im Archiv liegt mindestens eine (astropy meldet
@@ -80,10 +85,12 @@ def _stapeln(pfade, skala, log, min_bilder=8):
         if skala != 1.0:
             f = cv2.resize(f, (0, 0), fx=skala, fy=skala)
 
+        # Die Referenz ist IMMER grau: der Dreiecksabgleich sucht Sterne, keine Farben.
+        grau = astro._gray(f) if f.ndim == 3 else f
         if ref is None:
-            ref, summe, anzahl = f, f.astype(np.float64), 1
+            ref, summe, anzahl = grau, f.astype(np.float64), 1
             continue
-        if f.shape != ref.shape:
+        if grau.shape != ref.shape:
             verworfen += 1
             continue
         # Verschiebung UND Feldrotation. Vorher stand hier `_estimate_star_shift`, das nur
@@ -93,7 +100,7 @@ def _stapeln(pfade, skala, log, min_bilder=8):
         #     shift :  18 von 40 Frames, Rauschen 0,000166, FWHM 4,63 px, Exzentrizitaet 2,31
         #     robust:  40 von 40 Frames, Rauschen 0,000118, FWHM 2,63 px, Exzentrizitaet 1,32
         # Das Protokoll meldete dabei "239 Subs -> 24 Kacheln" und las sich wie ein Erfolg.
-        M = astro._estimate_star_transform_robust(ref, f)
+        M = astro._estimate_star_transform_robust(ref, grau)
         if M is None:
             verworfen += 1
             continue
@@ -202,6 +209,10 @@ def main():
     ap.add_argument("--je-serie", type=int, default=24, help="Kacheln je Serie")
     ap.add_argument("--skala", type=float, default=1.0)
     ap.add_argument("--max-serien", type=int, default=0, help="0 = alle")
+    ap.add_argument("--farbe", action="store_true",
+                    help="Kacheln dreikanalig (RGB) statt grau ablegen. Die Kameras sind "
+                         "Farbsensoren; fuer ein dreikanaliges Modell wird die Farbe "
+                         "gebraucht. Vorgabe bleibt grau, damit alte Baenke gleich bleiben.")
     ap.add_argument("--max-je-kamera", type=int, default=0,
                     help="Hoechstens so viele Kacheln je Kamera (0 = unbegrenzt). Verhindert, "
                          "dass eine Kamera das Modell dominiert — der Seestar S30 nimmt sehr "
@@ -276,7 +287,7 @@ def main():
             print("  [%d/%d] %s — UEBERSPRUNGEN: mehrere Kameras in einer Serie (%s)"
                   % (i, len(reihen), name, ", ".join(sorted(kameras))), file=sys.stderr)
             continue
-        stapel, verworfen = _stapeln(pfade, args.skala, print)
+        stapel, verworfen = _stapeln(pfade, args.skala, print, farbe=args.farbe)
         if stapel is None:
             print("  [%d/%d] %s — nicht stapelbar, uebersprungen" % (i, len(reihen), name))
             continue

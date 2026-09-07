@@ -8,6 +8,85 @@ All notable changes to ForgePix. Format based on
 
 ## [Unreleased]
 
+### The bright ring around every star — the other half of the deconvolution rings
+
+The black ring was gone, the bright one was not. Richardson-Lucy oscillates in both directions
+around point sources: first a trough, then a wall. The per-channel floor only addressed the
+trough.
+
+Radial profile around 200 stars of the M51 stack, excess over the sky level in multiples of it
+— v1 was stacked without deconvolution:
+
+| r | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| without deconvolution | +0.187 | +0.082 | +0.038 | +0.019 | +0.010 | +0.007 | +0.005 | +0.003 | +0.003 | +0.002 |
+| with, previous state | +0.073 | +0.005 | +0.004 | +0.004 | +0.004 | +0.004 | +0.011 | **+0.024** | **+0.026** | +0.017 |
+
+Without deconvolution the profile falls monotonically. With it there is a wall at r=11,
+**eight times as high**. After stretching that becomes 2.5x the sky brightness — the visible
+bright ring.
+
+The star protection did not help, for two reasons:
+
+* **It almost never triggered.** It blended back to the original above luminance 0.85. Across
+  the whole M51 stack (4144x2822) **nine regions** were above that threshold, the largest 86
+  pixels — with over 2000 stars present.
+* **It covered the wrong place.** The saturated core ends at radius 3-4 px; the wall sits at
+  10-13 px.
+
+Stars are now found above the NOISE (8 sigma instead of a fixed luminance) and the protection
+is dilated to the ring radius, which follows from the PSF size. Extended bright areas stay
+excluded — galaxy cores and nebulae are meant to be sharpened, and nothing rings there.
+Measured: the profile around stars is now **digit for digit the one without deconvolution**,
+while the galaxy still gains fine structure by a **factor of 1.46** (0.002928 -> 0.004274). 419
+stars protected, 15.9 % of the area.
+
+The price, stated plainly: stars are no longer sharpened (profile at r=1 stays at +0.942
+instead of +1.651). An annulus protecting only the ring zone and leaving the core free was
+tested — it restores the sharpening but leaves half the ring standing (+0.013 against +0.008
+natural). Ring-freedom won.
+
+### The halo check measured the wrong image
+
+`ringtiefe` and `ringfarbe` exist to find deconvolution rings — and ran **before**
+deconvolution in the pipeline. They could not see the defect they were built for. Demonstrated
+by `ringtiefe` being identical to 16 digits across three different runs whose output images
+differed. Re-measured on the written 32-bit linear, the same three stacks give:
+
+| | ring depth | halo colour B/G |
+|---|---|---|
+| no per-channel floor | -139 % of sky | undefined (black ring) |
+| floor from one surface | -29 % | **2.821** (violet) |
+| per-channel floor | +4 % | 0.617 (natural: 0.681) |
+
+Both rules would have caught the first two cases — they simply never ran on them. The written
+file is measured now: what gets judged should be what is delivered.
+
+### Colour scene bank from individual Hubble filters
+
+`training/prepare_scenes_farbe.py` builds a three-channel scene bank from the archive. Same
+programme, same visit, same instrument, different filters — and, verified on M16, M81 and M8,
+**on the same pixel grid**: identical image size, identical CRVAL1/CRVAL2 and CRPIX1/CRPIX2 to
+five decimal places. Nothing needs registering. It is verified per group anyway.
+
+On the current holdings: 102 pointings, 5 of them with three usable filters (M16 with
+f814w/f555w/f435w, for instance). Wide and medium bands are preferred, and adjacent channels
+must be at least 40 nm apart — otherwise it would be the same thing twice: for the planetary
+nebulae the first pick was f658n/f656n/f502n, with red and green two nanometres apart.
+
+What the bank is NOT, and this belongs in the judgement: the channels come from separate
+exposures, so their noise is independent. In a colour camera it is coupled through debayering.
+The bank from the user's own cameras (`prepare_scenes_eigene.py --farbe`) belongs mixed in, not
+replaced.
+
+### Scene bank from the user's own cameras, optionally in colour
+
+`prepare_scenes_eigene.py --farbe` keeps the three channels. Registration still runs on a
+greyscale image — triangle matching looks for stars, not colours — but the colour frame is
+what gets accumulated. The training script checks the channel count against the bank and names
+the command that builds the matching bank, instead of failing with a message from deep inside
+PyTorch.
+
 ### Deconvolution no longer eats black rings around the stars
 
 An M51 stack with `--astro-deconv` grew a black ring around **every** star; they looked like
