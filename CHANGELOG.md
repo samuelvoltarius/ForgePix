@@ -8,6 +8,37 @@ All notable changes to ForgePix. Format based on
 
 ## [Unreleased]
 
+### 35 of 70 folders could not be opened at all
+
+`fits_lights` skips files whose name begins with `Stacked_` or `DSO_Stacked_`, so that a finished
+result is not integrated again together with its own subframes. The intent is right, the effect
+was not: if a folder contains **only** such results, nothing remained, and the run ended with "too
+few images for astro" — without a word that files existed.
+
+Measured on the archive, this affected **35 of 70 folders**. And the hazard the filter guards
+against occurs **not once** in this layout: the Seestar puts its subs in `<object>_sub/` and the
+result in `<object>/` — there was no mixed folder at all.
+
+If a folder holds only finished stacks, they are now used and combined into a deeper image; the
+log says so. If subframes sit alongside them, they are still skipped — and that too is stated
+rather than done silently.
+
+### Total integration time of finished stacks was 66× too small
+
+The Seestar writes `STACKCNT` and `TOTALEXP` into its results. The report read only `EXPTIME` and
+announced **"3 minutes of integration"** for six combined M 42 results — they actually hold
+11940 s, that is **199 minutes from 398 subframes**.
+
+Kept separate: the **computation** still uses `EXPTIME`. A finished stack is the mean of its subs
+and carries the signal level of a single sub; scaling it up to `TOTALEXP` would make it too bright
+by the number of subs. Only the **report** uses the true integration time.
+
+### Pre-flight detects differing image sizes
+
+The same folder held 1080×1920 and 2160×3840 side by side — the Seestar writes a larger output
+next to the normal one. That is in `NAXIS1`/`NAXIS2` and is now reported before the run instead of
+surfacing during stacking.
+
 ### Long exposure: triangle matching was missing from the alignment chain
 
 `longexp._star_affine` tried offset voting and then fell straight back to ORB — the middle step,

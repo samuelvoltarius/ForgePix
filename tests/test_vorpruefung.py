@@ -92,7 +92,8 @@ class TestPruefen(unittest.TestCase):
         u = {"anzahl": 40, "gelesen": 40, "kameras": {"ZWO ASI294MC Pro": 40},
              "filter": {"L": 40}, "belichtungen_s": {300.0: 40},
              "temperatur_c": (-10.5, -9.8), "naechte": ["2026-09-06"],
-             "richtungsspanne_grad": 0.01, "gesamt_minuten": 200.0}
+             "richtungsspanne_grad": 0.01, "gesamt_minuten": 200.0,
+             "bildgroessen": {(1080, 1920): 40}, "enthaltene_subs": None}
         u.update(abw)
         return u
 
@@ -139,6 +140,32 @@ class TestPruefen(unittest.TestCase):
     def test_eine_einzelne_aufnahme_hat_keine_spanne(self):
         self.assertIsNone(vorpruefung.uebersicht([{"RA": 1.0, "DEC": 2.0}])
                           ["richtungsspanne_grad"])
+
+    def test_verschiedene_bildgroessen_sind_kritisch(self):
+        """Der Seestar schreibt neben dem normalen Ergebnis auch ein doppelt so grosses.
+        Am echten Ordner M 42 gefunden: 1080x1920 und 2160x3840 nebeneinander."""
+        r = vorpruefung.pruefen(self._u(bildgroessen={(1080, 1920): 3, (2160, 3840): 3}))
+        self.assertEqual(r[0].stufe, regeln.KRITISCH)
+        self.assertIn("Bildgroessen", r[0].titel)
+
+    def test_eine_bildgroesse_loest_nichts_aus(self):
+        self.assertEqual([x for x in vorpruefung.pruefen(self._u())
+                          if "Bildgroessen" in x.titel], [])
+
+    def test_fertige_stapel_zaehlen_ihre_wahre_belichtung(self):
+        """Sechs zusammengefasste M-42-Ergebnisse meldeten "3 Minuten" statt 199 — Faktor 66.
+        Der Seestar schreibt TOTALEXP und STACKCNT in seine fertigen Stapel."""
+        koepfe = [{"EXPTIME": 30.0, "TOTALEXP": 5490.0, "STACKCNT": 183},
+                  {"EXPTIME": 30.0, "TOTALEXP": 4470.0, "STACKCNT": 149}]
+        u = vorpruefung.uebersicht(koepfe)
+        self.assertAlmostEqual(u["gesamt_minuten"], (5490 + 4470) / 60.0, places=1)
+        self.assertEqual(u["enthaltene_subs"], 332)
+        self.assertIn("332 Einzelaufnahmen", vorpruefung.text(u))
+
+    def test_ohne_totalexp_zaehlt_die_belichtungszeit(self):
+        u = vorpruefung.uebersicht([{"EXPTIME": 300.0}, {"EXPTIME": 300.0}])
+        self.assertAlmostEqual(u["gesamt_minuten"], 10.0, places=3)
+        self.assertIsNone(u["enthaltene_subs"])
 
     def test_mehrere_filter(self):
         t = [x.titel for x in vorpruefung.pruefen(self._u(filter={"Ha": 20, "L": 20}))]

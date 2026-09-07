@@ -1720,7 +1720,7 @@ def _gather_session_paths(input_dir, args):
     """Light-Frames aus dem Haupt-Ordner plus optionalen weiteren Sessions/Nächten (args.also)
     zu EINEM Stack zusammenführen (mehr Integration = besseres Ergebnis)."""
     from astro_input import light_paths
-    paths = light_paths(input_dir, list_images)
+    paths = light_paths(input_dir, list_images, log=print)
     extra = getattr(args, "also", None) or []
     for d in extra:
         if d and os.path.isdir(d):
@@ -2119,7 +2119,7 @@ def run_astro(input_dir, work_dir, args):
     report = {"version": VERSION, "input_frames": len(original_paths),
               "quality_kept": len(paths), "registered_frames": len(used_paths),
               "source_files": [os.path.basename(p) for p in used_paths],
-              "integration_seconds": sum(_belichtung(p) or 0 for p in used_paths),
+              "integration_seconds": sum(_gesamtbelichtung(p) or 0 for p in used_paths),
               "method": "drizzle_weighted_mean" if drizzle_info is not None else args.astro_method,
               "calibration": {k: bool(getattr(args, k, None)) for k in ("dark", "flat", "bias")},
               "calibration_validation": getattr(args, "calibration_report", {}),
@@ -2212,7 +2212,23 @@ def _fits_zahl(pfad, *felder):
 
 
 def _belichtung(pfad):
+    """Die Belichtungszeit DIESER Aufnahme. Fuer Dark-Skalierung und Pegelangleich.
+
+    Bewusst NICHT TOTALEXP: ein fertiger Stapel ist ein Mittelwert seiner Subs und hat
+    denselben Signalpegel wie ein einzelner Sub. Wer ihn auf TOTALEXP hochskaliert, macht ihn
+    um den Faktor der Sub-Anzahl zu hell.
+    """
     return _fits_zahl(pfad, "EXPTIME", "EXPOSURE")
+
+
+def _gesamtbelichtung(pfad):
+    """Wie viel Licht steckt in dieser Datei? Fuer den BERICHT, nicht fuers Rechnen.
+
+    Der Seestar schreibt in seine fertigen Stapel `STACKCNT` und `TOTALEXP`. Ohne diese Felder
+    meldete ForgePix fuer sechs zusammengefasste Ergebnisse von M 42 „3 Minuten
+    Gesamtbelichtung" — tatsaechlich stecken darin 11940 s, also 199 Minuten. Ein Faktor 66.
+    """
+    return _fits_zahl(pfad, "TOTALEXP") or _fits_zahl(pfad, "EXPTIME", "EXPOSURE")
 
 
 def _ccd_temp(pfad):
@@ -3299,7 +3315,8 @@ def live_loop(args, input_dir, work_dir):
         zustand = os.path.join(work_dir, "_live_zustand.npz")
         vorschau = os.path.join(work_dir, "_live_preview.jpg")
         from astro_input import light_paths
-        dark, flat, _ = _load_astro_calibration(input_dir, args, light_paths(input_dir, list_images))
+        dark, flat, _ = _load_astro_calibration(input_dir, args,
+                                                light_paths(input_dir, list_images))
         context_id = _live_context_id(args, input_dir, dark, flat)
         ls = livestack.LiveStack.laden(zustand) if os.path.exists(zustand) else None
         if ls is None:

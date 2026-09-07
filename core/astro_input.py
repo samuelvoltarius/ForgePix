@@ -6,16 +6,35 @@ _CALIBRATION = ("dark", "flat", "bias", "offset")
 _SKIP_DIRS = {"registered", "stack", "stack_work", "export", "masters", "cache", ".git"}
 
 
-def fits_lights(folder):
-    """Return light FITS only; JPEG previews never accompany them into an integration."""
+_FERTIGE = ("stacked", "dso_stacked")
+
+
+def fits_lights(folder, log=None):
+    """Return light FITS only; JPEG previews never accompany them into an integration.
+
+    Bereits gestapelte Ergebnisse (`Stacked_…`, `DSO_Stacked_…`) werden ausgelassen, damit ein
+    Ergebnis nicht zusammen mit seinen eigenen Einzelaufnahmen noch einmal eingerechnet wird —
+    das zaehlte dieselben Photonen doppelt.
+
+    **Enthaelt der Ordner aber NUR solche Ergebnisse, werden sie benutzt.** Dann gibt es keine
+    Einzelaufnahmen, die doppelt zaehlen koennten, und mehrere Naechte zu einem tieferen Bild
+    zusammenzufassen ist genau das, was jemand damit vorhat. Vorher blieb in dem Fall nichts
+    uebrig und der Lauf endete mit „Zu wenige Bilder fuer Astro" — ohne ein Wort darueber,
+    dass es Dateien gab. An Alfreds Bestand gemessen betraf das **35 von 70 Ordnern**; der
+    Seestar legt seine Subs in `<Objekt>_sub/` und das Ergebnis in `<Objekt>/`, gemischte
+    Ordner gab es kein einziges Mal.
+    """
     from astropy.io import fits
-    paths = []
+    paths, fertige = [], []
     for name in sorted(os.listdir(folder)):
         p = os.path.join(folder, name)
         if not os.path.isfile(p) or os.path.splitext(name)[1].lower() not in FITS_EXTS:
             continue
         low = name.lower()
-        if low.startswith(_CALIBRATION + ("master", "stacked", "dso_stacked")):
+        if low.startswith(_CALIBRATION + ("master",)):
+            continue
+        if low.startswith(_FERTIGE):
+            fertige.append(p)
             continue
         try:
             header = fits.getheader(p)
@@ -26,6 +45,15 @@ def fits_lights(folder):
             # Keep unreadable candidate visible: processing explains/retries the failure.
             pass
         paths.append(p)
+    if fertige and not paths:
+        if log:
+            log("  Dieser Ordner enthaelt nur fertige Stapel (%d Datei(en)) und keine "
+                "Einzelaufnahmen — sie werden zu einem tieferen Bild zusammengefasst."
+                % len(fertige))
+        return fertige
+    if fertige and log:
+        log("  %d bereits gestapelte Datei(en) ausgelassen: zusammen mit den Einzelaufnahmen "
+            "wuerden dieselben Photonen doppelt gezaehlt." % len(fertige))
     return paths
 
 
@@ -42,10 +70,10 @@ def series_folders(root):
     return result
 
 
-def light_paths(folder, fallback):
+def light_paths(folder, fallback, log=None):
     files = fallback(folder)
     if any(os.path.splitext(p)[1].lower() in FITS_EXTS for p in files):
-        return fits_lights(folder)
+        return fits_lights(folder, log=log)
     return files
 
 

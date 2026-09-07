@@ -8,6 +8,39 @@ Alle nennenswerten Änderungen an ForgePix. Format orientiert an
 
 ## [Unreleased]
 
+### 35 von 70 Ordnern liessen sich gar nicht öffnen
+
+`fits_lights` überspringt Dateien, deren Name mit `Stacked_` oder `DSO_Stacked_` beginnt — damit
+ein fertiges Ergebnis nicht zusammen mit seinen eigenen Einzelaufnahmen noch einmal eingerechnet
+wird. Die Absicht ist richtig, die Wirkung war es nicht: enthält ein Ordner **nur** solche
+Ergebnisse, blieb nichts übrig, und der Lauf endete mit „Zu wenige Bilder für Astro" — ohne ein
+Wort darüber, dass es Dateien gab.
+
+An Alfreds Bestand gemessen betraf das **35 von 70 Ordnern**. Und die Gefahr, gegen die der Filter
+schützt, tritt in diesem Layout **kein einziges Mal** auf: der Seestar legt seine Subs in
+`<Objekt>_sub/` und das Ergebnis in `<Objekt>/` — es gab keinen gemischten Ordner.
+
+Enthält ein Ordner nur fertige Stapel, werden sie jetzt benutzt und zu einem tieferen Bild
+zusammengefasst; das steht im Protokoll. Liegen Subs daneben, bleibt es beim Auslassen — auch das
+wird gesagt, statt still zu geschehen.
+
+### Die Gesamtbelichtung fertiger Stapel war um Faktor 66 zu klein
+
+Der Seestar schreibt `STACKCNT` und `TOTALEXP` in seine Ergebnisse. Der Bericht las nur `EXPTIME`
+und meldete für sechs zusammengefasste M-42-Ergebnisse **„3 Minuten Gesamtbelichtung"** —
+tatsächlich stecken darin 11940 s, also **199 Minuten aus 398 Einzelaufnahmen**.
+
+Getrennt gehalten: das **Rechnen** benutzt weiterhin `EXPTIME`. Ein fertiger Stapel ist der
+Mittelwert seiner Subs und hat denselben Signalpegel wie ein einzelner Sub; wer ihn auf `TOTALEXP`
+hochskalierte, machte ihn um die Sub-Anzahl zu hell. Nur der **Bericht** rechnet mit der wahren
+Gesamtbelichtung.
+
+### Vorprüfung erkennt verschiedene Bildgrößen
+
+Im selben Ordner lagen 1080×1920 und 2160×3840 nebeneinander — der Seestar schreibt neben dem
+normalen Ergebnis auch ein größeres. Das steht in `NAXIS1`/`NAXIS2` und wird jetzt vor dem Lauf
+gemeldet, statt erst beim Stapeln aufzufallen.
+
 ### Langzeitbelichtung: das Dreiecks-Matching fehlte in der Ausrichtungskette
 
 `longexp._star_affine` versuchte Offset-Voting und fiel dann direkt auf ORB zurück — der

@@ -244,7 +244,7 @@ def _serie(paths):
     """Was über die Aufnahmeserie bekannt ist: Anzahl, Gesamtbelichtung, gemischte Zeiten."""
     if not paths:
         return {"anzahl": None, "gesamt_minuten": None, "zeiten_s": None, "gemischt": None}
-    zeiten = []
+    zeiten, gesamt_s, subs = [], 0.0, 0
     for p in paths:
         if os.path.splitext(p)[1].lower() not in (".fit", ".fits", ".fts"):
             continue
@@ -254,13 +254,23 @@ def _serie(paths):
             t = h.get("EXPTIME", h.get("EXPOSURE"))
             if t is not None:
                 zeiten.append(float(t))
+            # Fertige Stapel tragen ihre wahre Gesamtbelichtung im Header (Seestar:
+            # TOTALEXP/STACKCNT). Ohne diese Felder meldete der Bericht fuer sechs
+            # zusammengefasste M-42-Ergebnisse "3 Minuten" statt 199 — Faktor 66.
+            gt = h.get("TOTALEXP")
+            gesamt_s += float(gt) if gt is not None else float(t or 0.0)
+            sc = h.get("STACKCNT")
+            if sc is not None:
+                subs += int(float(sc))
         except Exception:
             continue
     if not zeiten:
-        return {"anzahl": len(paths), "gesamt_minuten": None, "zeiten_s": None, "gemischt": None}
+        return {"anzahl": len(paths), "gesamt_minuten": None, "zeiten_s": None,
+                "gemischt": None, "enthaltene_subs": None}
     einzeln = sorted(set(round(t, 1) for t in zeiten))
-    return {"anzahl": len(paths), "gesamt_minuten": _zahl(sum(zeiten) / 60.0),
-            "zeiten_s": einzeln, "gemischt": len(einzeln) > 1}
+    return {"anzahl": len(paths), "gesamt_minuten": _zahl(gesamt_s / 60.0),
+            "zeiten_s": einzeln, "gemischt": len(einzeln) > 1,
+            "enthaltene_subs": (subs if subs else None)}
 
 
 def erstellen(bild, pfad=None, paths=None, kamera=None, filter_key=None, log=log_print):

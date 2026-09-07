@@ -36,7 +36,7 @@ AZIMUTAL = ("seestar", "dwarf", "vespera", "stellina", "hestia", "origin")
 
 _FELDER = ("INSTRUME", "EXPTIME", "EXPOSURE", "FILTER", "CCD-TEMP", "DATE-OBS", "IMAGETYP",
            "FRAME", "GAIN", "XPIXSZ", "FOCALLEN", "RA", "DEC", "CRVAL1", "CRVAL2",
-           "OBJCTRA", "OBJCTDEC")
+           "OBJCTRA", "OBJCTDEC", "TOTALEXP", "STACKCNT", "NAXIS1", "NAXIS2")
 
 
 def _richtung(h):
@@ -152,6 +152,8 @@ def uebersicht(koepfe, gesamt=None):
     filter_ = collections.Counter()
     zeiten = collections.Counter()
     temperaturen, naechte, richtungen = [], collections.Counter(), []
+    gesamt_s, subs = 0.0, 0
+    groessen = collections.Counter()
     for h in koepfe:
         k = str(h.get("INSTRUME", "")).strip()
         if k:
@@ -162,6 +164,13 @@ def uebersicht(koepfe, gesamt=None):
         t = _zahl(h.get("EXPTIME", h.get("EXPOSURE")))
         if t is not None:
             zeiten[round(t, 1)] += 1
+        # Fertige Stapel tragen ihre wahre Gesamtbelichtung im Header. Ohne diese Felder
+        # meldete ForgePix fuer sechs zusammengefasste M-42-Ergebnisse "3 Minuten" statt 199.
+        gt = _zahl(h.get("TOTALEXP"))
+        gesamt_s += gt if gt is not None else (t or 0.0)
+        sc = _zahl(h.get("STACKCNT"))
+        if sc is not None:
+            subs += int(sc)
         c = _zahl(h.get("CCD-TEMP"))
         if c is not None:
             temperaturen.append(c)
@@ -171,6 +180,9 @@ def uebersicht(koepfe, gesamt=None):
         r = _richtung(h)
         if r is not None:
             richtungen.append(r)
+        b, ho = h.get("NAXIS1"), h.get("NAXIS2")
+        if b and ho:
+            groessen[(int(b), int(ho))] += 1
     # Wie weit liegen die Ausrichtungen auseinander? Ein Wert, keine Liste — es geht nur um die
     # Frage, ob hier ein Feld aufgenommen wurde oder mehrere.
     spanne_grad = None
@@ -187,9 +199,11 @@ def uebersicht(koepfe, gesamt=None):
         "temperatur_c": ((min(temperaturen), max(temperaturen)) if temperaturen else None),
         "naechte": sorted(naechte),
         "richtungsspanne_grad": spanne_grad,
-        "gesamt_minuten": (sum(t * n for t, n in zeiten.items()) / 60.0
+        "gesamt_minuten": ((gesamt_s / 60.0)
                            * (float(gesamt) / max(1, len(koepfe)) if gesamt else 1.0)
-                           if zeiten else None),
+                           if gesamt_s > 0 else None),
+        "enthaltene_subs": (subs if subs else None),
+        "bildgroessen": dict(groessen),
     }
 
 
@@ -221,6 +235,16 @@ def pruefen(uebersicht_, *, align_mode=None, hat_dark=None, hat_flat=None):
             "Aufnahmen einer Serie weggeworfen." % spanne,
             "Nach Objekt trennen und getrennt stapeln. Fuer ein Mosaik ist der Mosaik-Modus "
             "zustaendig, nicht der Astro-Stapel.",
+            None))
+
+    groessen = u.get("bildgroessen") or {}
+    if len(groessen) > 1:
+        raete.append(Rat(
+            KRITISCH, "Verschiedene Bildgroessen in einer Serie",
+            "In den Aufnahmen stecken %s. Der Seestar schreibt zum Beispiel neben dem "
+            "normalen Ergebnis auch ein groesseres — zusammenstapeln laesst sich das nicht."
+            % ", ".join("%dx%d (%dx)" % (b, h, n) for (b, h), n in sorted(groessen.items())),
+            "Nach Bildgroesse trennen und getrennt stapeln.",
             None))
 
     filter_ = u.get("filter") or {}
@@ -303,6 +327,8 @@ def text(u):
     z = []
     if u.get("anzahl"):
         s = "%d Aufnahmen" % u["anzahl"]
+        if u.get("enthaltene_subs"):
+            s += " (fertige Stapel aus %d Einzelaufnahmen)" % u["enthaltene_subs"]
         if u.get("gesamt_minuten"):
             s += ", %.0f Minuten gesamt" % u["gesamt_minuten"]
         z.append("Serie           " + s)
@@ -314,6 +340,8 @@ def text(u):
         z.append("Belichtung      " + "/".join("%g s" % t for t in sorted(u["belichtungen_s"])))
     if u.get("temperatur_c"):
         z.append("Temperatur      %.1f bis %.1f Grad" % u["temperatur_c"])
+    if u.get("bildgroessen"):
+        z.append("Bildgroesse     " + ", ".join("%dx%d" % g for g in sorted(u["bildgroessen"])))
     if u.get("richtungsspanne_grad") is not None:
         z.append("Himmelsfeld     Ausrichtungen bis %.2f Grad auseinander"
                  % u["richtungsspanne_grad"])
