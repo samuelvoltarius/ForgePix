@@ -8,6 +8,27 @@ All notable changes to ForgePix. Format based on
 
 ## [Unreleased]
 
+### The denoiser, measured at full resolution
+
+The four bundled ONNX models are marked experimental and are not enabled on any default path.
+For the denoiser there are now numbers from real runs ([docs/KI_MODELLE.md](docs/KI_MODELLE.md))
+— on two targets, at full resolution, with no scaling:
+
+| Strength | Noise (noisy image) | Noise (deep stack) | Star flux |
+|---|---|---|---|
+| 0.3 | −16.0% | −10.7% | +0.05 to +0.16% |
+| 0.5 | −25.7% | −17.7% | +0.09 to +0.26% |
+| 1.0 | −43.0% | −32.1% | +0.17 to +0.52% |
+
+Star flux stays within 0.6% — the model invents no brightness. The price is the faintest stars:
+on the noisy image, full strength lost 13 of 118 detected stars; on the deep stack, none.
+Recommended 0.3 to 0.5; never full strength before photometry.
+
+Why this had to be re-measured: an earlier verdict on the sharpening model was wrong because the
+test image had been scaled down to 35%. The models work on 256×256 tiles and are trained on stars
+of a certain width — a downscaled image pushes them outside that range. **Measuring a model
+outside its working range produces a number that means nothing and still reads like a finding.**
+
 ### Field rotation: 98% of the Seestar frames were silently discarded
 
 Both training modules aligned frames with `_estimate_star_shift` — **translation only, no

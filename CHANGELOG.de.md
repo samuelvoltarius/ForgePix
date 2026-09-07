@@ -8,6 +8,30 @@ Alle nennenswerten Änderungen an ForgePix. Format orientiert an
 
 ## [Unreleased]
 
+### Der Entrauscher, bei voller Auflösung gemessen
+
+Die vier mitgelieferten ONNX-Modelle sind als experimentell geführt und in keinem Standardweg
+eingeschaltet. Für den Entrauscher liegen jetzt Zahlen aus echten Läufen vor
+([docs/KI_MODELLE.de.md](docs/KI_MODELLE.de.md)) — an zwei Motiven, bei voller Auflösung, ohne
+Skalierung:
+
+| Stärke | Rauschen (verrauschtes Bild) | Rauschen (tiefer Stapel) | Sternfluss |
+|---|---|---|---|
+| 0,3 | −16,0 % | −10,7 % | +0,05 bis +0,16 % |
+| 0,5 | −25,7 % | −17,7 % | +0,09 bis +0,26 % |
+| 1,0 | −43,0 % | −32,1 % | +0,17 bis +0,52 % |
+
+Der Sternfluss bleibt unter 0,6 % Abweichung — das Modell erfindet keine Helligkeit. Der Preis
+sind die schwächsten Sterne: auf dem verrauschten Bild verschwanden bei voller Stärke 13 von 118
+gefundenen Sternen, auf dem tiefen Stapel keiner. Empfehlung 0,3 bis 0,5; volle Stärke nie vor
+einer Photometrie.
+
+Warum das nachgemessen werden musste: eine frühere Beurteilung des Schärfe-Modells war falsch,
+weil das Testbild auf 35 % verkleinert war. Die Modelle arbeiten auf 256×256-Kacheln und sind auf
+Sterne einer bestimmten Breite trainiert — ein verkleinertes Bild schiebt sie aus dem
+Arbeitsbereich. **Ein Modell außerhalb seines Arbeitsbereichs zu messen ergibt eine Zahl, die
+nichts bedeutet und sich trotzdem wie ein Befund liest.**
+
 ### Feldrotation: 98 % der Seestar-Aufnahmen wurden still weggeworfen
 
 Die beiden Trainingsmodule richteten Aufnahmen mit `_estimate_star_shift` aus — **reine
