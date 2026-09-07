@@ -8,6 +8,46 @@ Alle nennenswerten Änderungen an ForgePix. Format orientiert an
 
 ## [Unreleased]
 
+### Eine ganze Nacht fällt nicht mehr unbemerkt heraus
+
+An echten Daten gefunden (M51, 340 Aufnahmen, ASI294MC Pro, 11,3 Stunden aus 5 Nächten):
+
+| Nacht | Gain | Subs | Himmelshintergrund | behalten |
+|---|---|---|---|---|
+| **2023-04-06** | **120** | **136** | **0,1305** | **0 / 136** |
+| 2023-04-21 | 130 | 23 | 0,0390 | 23/23 |
+| 2023-04-22 | 130 | 91 | 0,0370 | 91/91 |
+| 2023-05-27 | 130 | 14 | 0,0470 | 14/14 |
+| 2023-05-28 | 130 | 76 | 0,0440 | 76/76 |
+
+Der 6. April 2023 war Vollmond, der Himmel dort 3,4-mal so hell wie in den anderen Nächten —
+die Verwerfung ist sachlich richtig. Das Protokoll schrieb dazu **136 Einzelzeilen** „heller
+Hintergrund" und nirgends, dass damit eine **ganze Nacht** fehlt: viereinhalb von elf Stunden.
+Wer nicht alle 340 Zeilen liest, hält die Gesamtbelichtung weiter für 11 Stunden.
+
+Neu steht dort eine Zeile, die das Muster nennt:
+
+```
+Die Nacht 2023-04-06 faellt VOLLSTAENDIG heraus: alle 136 Aufnahmen verworfen.
+Ist das nicht gewollt, war der Himmel dort vermutlich heller (Mond) — dann
+diese Nacht getrennt stapeln statt sie zu verlieren.
+```
+
+Auch eine Nacht, von der weniger als die Hälfte übrig bleibt, wird genannt. Bei nur einer Nacht
+in der Serie schweigt die Meldung — dann ist „eine Nacht fällt heraus" keine nützliche Aussage.
+
+### Die Vorprüfung prüft jetzt auch die Verstärkung
+
+`GAIN` wurde längst aus den Kopfdaten gelesen und **nie ausgewertet**, obwohl Kamera,
+Belichtung, Bildgröße, Temperatur und Blickrichtung alle geprüft werden. Bei denselben
+M51-Daten steckten zwei Verstärkungen im selben Ordner — 136× Gain 120, 204× Gain 130 — und
+nichts sagte es.
+
+Die Verstärkung bestimmt, wie viele Elektronen hinter einem Zahlenschritt stehen: derselbe
+Himmel ergibt dann verschiedene Werte, Darks passen nur zu einem Teil, und die
+Ausreißer-Erkennung vergleicht Aufnahmen mit verschiedenem Rauschverhalten miteinander. Fehlt
+das Feld im Header, löst weiterhin nichts aus — eine Nicht-Messung darf keinen Befund erzeugen.
+
 ### Der Astro-Stapel wird auf die volle Beitragszahl zugeschnitten
 
 Beim Ausrichten wandern die Aufnahmen gegeneinander. Am Bildrand tragen darum nur wenige Subs

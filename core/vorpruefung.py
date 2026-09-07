@@ -152,6 +152,7 @@ def uebersicht(koepfe, gesamt=None):
     filter_ = collections.Counter()
     zeiten = collections.Counter()
     temperaturen, naechte, richtungen = [], collections.Counter(), []
+    verstaerkungen = collections.Counter()
     gesamt_s, subs = 0.0, 0
     groessen = collections.Counter()
     zeitpunkte = []
@@ -175,6 +176,9 @@ def uebersicht(koepfe, gesamt=None):
         c = _zahl(h.get("CCD-TEMP"))
         if c is not None:
             temperaturen.append(c)
+        g = _zahl(h.get("GAIN"))
+        if g is not None:
+            verstaerkungen[round(g)] += 1
         d = str(h.get("DATE-OBS", ""))[:10]
         if d:
             naechte[d] += 1
@@ -213,6 +217,7 @@ def uebersicht(koepfe, gesamt=None):
         "filter": dict(filter_),
         "belichtungen_s": dict(zeiten),
         "temperatur_c": ((min(temperaturen), max(temperaturen)) if temperaturen else None),
+        "verstaerkungen": dict(verstaerkungen),
         "naechte": sorted(naechte),
         "richtungsspanne_grad": spanne_grad,
         "gesamt_minuten": ((gesamt_s / 60.0)
@@ -239,6 +244,22 @@ def pruefen(uebersicht_, *, align_mode=None, hat_dark=None, hat_flat=None):
             "sich von selbst."
             % ", ".join("%s (%dx)" % (k, n) for k, n in sorted(kameras.items())),
             "Die Aufnahmen nach Kamera trennen und getrennt stapeln.",
+            None))
+
+    # Die Verstaerkung bestimmt, wieviele Elektronen ein ADU-Schritt bedeutet. Zwei Werte in
+    # einer Serie heissen: dieselbe Himmelshelligkeit steht in den Aufnahmen als verschiedene
+    # Zahl, und ein Dark passt nur zu einem Teil. An echten Daten gesehen (M51, 340 Aufnahmen):
+    # eine Nacht mit Gain 120, vier Naechte mit Gain 130 — und niemand sagte es.
+    verstaerkungen = u.get("verstaerkungen") or {}
+    if len(verstaerkungen) > 1:
+        raete.append(Rat(
+            WICHTIG, "Mehrere Verstaerkungen in einer Serie",
+            "In den Aufnahmen stecken die Gain-Werte %s. Die Verstaerkung bestimmt, wieviele "
+            "Elektronen hinter einem Zahlenschritt stehen: derselbe Himmel ergibt dann "
+            "verschiedene Werte, Darks passen nur zu einem Teil, und die Ausreisser-Erkennung "
+            "vergleicht Aufnahmen mit verschiedenem Rauschverhalten miteinander."
+            % ", ".join("%s (%dx)" % (g, n) for g, n in sorted(verstaerkungen.items())),
+            "Getrennt stapeln, oder die Abweichler weglassen.",
             None))
 
     spanne = u.get("richtungsspanne_grad")
@@ -357,6 +378,9 @@ def text(u):
         z.append("Belichtung      " + "/".join("%g s" % t for t in sorted(u["belichtungen_s"])))
     if u.get("temperatur_c"):
         z.append("Temperatur      %.1f bis %.1f Grad" % u["temperatur_c"])
+    if u.get("verstaerkungen"):
+        z.append("Verstaerkung    " + ", ".join("Gain %g (%dx)" % (g, n) for g, n
+                                                in sorted(u["verstaerkungen"].items())))
     if u.get("bildgroessen"):
         z.append("Bildgroesse     " + ", ".join("%dx%d" % g for g in sorted(u["bildgroessen"])))
     if u.get("richtungsspanne_grad") is not None:

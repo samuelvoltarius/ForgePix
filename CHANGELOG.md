@@ -8,6 +8,43 @@ All notable changes to ForgePix. Format based on
 
 ## [Unreleased]
 
+### A whole night no longer drops out unnoticed
+
+Found on real data (M51, 340 frames, ASI294MC Pro, 11.3 hours across 5 nights):
+
+| night | gain | subs | sky background | kept |
+|---|---|---|---|---|
+| **2023-04-06** | **120** | **136** | **0.1305** | **0 / 136** |
+| 2023-04-21 | 130 | 23 | 0.0390 | 23/23 |
+| 2023-04-22 | 130 | 91 | 0.0370 | 91/91 |
+| 2023-05-27 | 130 | 14 | 0.0470 | 14/14 |
+| 2023-05-28 | 130 | 76 | 0.0440 | 76/76 |
+
+6 April 2023 was a full moon and the sky there was 3.4x brighter than on the other nights, so
+the rejection is correct. The log wrote **136 individual lines** saying "bright background" and
+nowhere that an **entire night** was gone: four and a half of eleven hours. Anyone not reading
+all 340 lines still believes the integration time is 11 hours.
+
+There is now one line that names the pattern:
+
+```
+Die Nacht 2023-04-06 faellt VOLLSTAENDIG heraus: alle 136 Aufnahmen verworfen.
+```
+
+A night that keeps less than half of its frames is reported too. With only one night in the
+series the message stays silent — "a night drops out" says nothing useful there.
+
+### The pre-flight now checks gain as well
+
+`GAIN` was already read from the headers and **never evaluated**, even though camera, exposure,
+image size, temperature and pointing are all checked. In the same M51 data two gains sat in one
+folder — 136x gain 120, 204x gain 130 — and nothing said so.
+
+Gain determines how many electrons lie behind one count: the same sky then produces different
+values, darks match only part of the set, and outlier rejection compares frames with different
+noise behaviour. When the header field is missing nothing is triggered — a non-measurement must
+never produce a finding.
+
 ### The astro stack is cropped to full per-pixel contribution
 
 Registration shifts the frames against each other, so at the border only a few subs contribute

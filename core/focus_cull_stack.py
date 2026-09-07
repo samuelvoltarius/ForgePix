@@ -1934,6 +1934,7 @@ def run_astro(input_dir, work_dir, args):
         phase("grade")
         print("  Sub-Bewertung (erklärbar, klassisch) …")
         _frames, kept = astro_quality.select_subs(paths)
+        _naechte_melden(_frames, kept, paths)
         # Bestes Sub als Registrier-Referenz (Sternzahl / FWHM / Rundheit) statt des mittleren.
         # Die Bewertung sortiert nur Ausreisser aus — die Referenz bestimmt aber, worauf ALLE
         # Frames gefittet werden, und dafuer zaehlt Qualitaet, nicht Position in der Serie.
@@ -2447,6 +2448,57 @@ def _groesstes_rechteck(maske):
                 start = sx
             stapel.append((start, hier))
     return bestes[1:] if bestes[0] else None
+
+
+def _naechte_melden(frames, behalten, paths, log=print):
+    """Sagen, wenn die Verwuerfe sich auf einzelne Naechte ballen.
+
+    Die Einzelzeilen der Sub-Bewertung sind wahr, aber sie zeigen das Muster nicht. An echten
+    Daten gesehen (M51, 340 Aufnahmen aus 5 Naechten): 136 Zeilen "heller Hintergrund" — und
+    nirgends stand, dass damit **eine ganze Nacht komplett** herausfiel, viereinhalb von elf
+    Stunden. Der 06.04.2023 war Vollmond, der Himmel dort 3,4-mal so hell wie in den anderen
+    Naechten. Die Verwerfung war richtig; unsichtbar war sie trotzdem.
+    """
+    if not frames:
+        return
+    try:
+        import vorpruefung
+    except ImportError:
+        return
+    behalten_set = {os.path.abspath(x) for x in (behalten or [])}
+    try:
+        # In EINEM Zug lesen, nicht je Datei einzeln: bei 340 Aufnahmen waeren das 340
+        # separate Oeffnungsvorgaenge fuer eine Zeile Kopfdaten.
+        koepfe = vorpruefung.kopfdaten(paths, max_dateien=len(paths),
+                                       log=lambda *a, **k: None)
+    except Exception:
+        return
+    if len(koepfe) != len(paths):
+        return
+    nach_nacht = {}
+    for pfad, kopf in zip(paths, koepfe):
+        nacht = str((kopf or {}).get("DATE-OBS", ""))[:10]
+        if not nacht:
+            continue
+        eintrag = nach_nacht.setdefault(nacht, [0, 0])
+        eintrag[0] += 1
+        if os.path.abspath(pfad) in behalten_set:
+            eintrag[1] += 1
+    if len(nach_nacht) < 2:
+        return
+    verloren = [(n, v[0]) for n, v in sorted(nach_nacht.items()) if v[1] == 0]
+    if verloren:
+        for nacht, anzahl in verloren:
+            log("  Die Nacht %s faellt VOLLSTAENDIG heraus: alle %d Aufnahmen verworfen."
+                % (nacht, anzahl))
+        log("  Ist das nicht gewollt, war der Himmel dort vermutlich heller (Mond) — dann "
+            "diese Nacht getrennt stapeln statt sie zu verlieren.")
+    else:
+        schwach = [(n, v) for n, v in sorted(nach_nacht.items())
+                   if v[0] >= 5 and v[1] < 0.5 * v[0]]
+        for nacht, v in schwach:
+            log("  Aus der Nacht %s bleibt weniger als die Haelfte uebrig (%d von %d)."
+                % (nacht, v[1], v[0]))
 
 
 def _zuschnitt_auf_beitraege(result, stack_info, args):
