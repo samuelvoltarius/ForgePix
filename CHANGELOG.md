@@ -8,6 +8,20 @@ All notable changes to ForgePix. Format based on
 
 ## [Unreleased]
 
+### The advice becomes clickable — and one piece of it was wrong
+
+After a run, a bar below the image shows what ForgePix measured on the finished stack and what
+follows from it — in words, not as switches. A button applies the settings. It does **not**
+restart automatically: the change should be visible before starting a run that takes minutes to
+hours. Whatever the button cannot set is listed as a raw switch in the text instead of quietly
+disappearing.
+
+This surfaced a real defect: the most frequently triggered rule recommended
+`--astro-bg-extract` — **that option does not exist**, it is called `--bg-extract`. Anyone
+following the advice got an argparse error instead of an image. The advice read perfectly
+plausible, with a measured justification and all. A test now checks every switch a rule can emit
+against the pipeline's `--help`; the counter-check with an invented switch makes it fail.
+
 ### Measurement report and rule set: measure first, then advise
 
 After every astro run the **linear** stack is measured — before any stretch, because afterwards

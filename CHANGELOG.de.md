@@ -8,6 +8,20 @@ Alle nennenswerten Änderungen an ForgePix. Format orientiert an
 
 ## [Unreleased]
 
+### Der Rat wird anklickbar — und einer davon war falsch
+
+Nach dem Lauf zeigt ein Balken unter dem Bild, was ForgePix am fertigen Stapel gemessen hat und
+was daraus folgt — in Worten, nicht als Schalter. Ein Knopf setzt die Einstellungen. Neu
+gestartet wird **nicht** automatisch: die Änderung soll sichtbar sein, bevor ein Lauf beginnt,
+der Minuten bis Stunden dauert. Was der Knopf nicht setzen kann, steht als Schalter im Text,
+statt still zu verschwinden.
+
+Dabei fiel auf: die am häufigsten ausgelöste Regel empfahl `--astro-bg-extract` — **diese Option
+gibt es nicht**, sie heißt `--bg-extract`. Wer dem Rat folgte, bekam von argparse einen Fehler
+statt eines Bildes. Der Rat las sich dabei vollkommen plausibel, mit gemessener Begründung und
+allem. Ein Test prüft jetzt jeden Schalter, den eine Regel aussprechen kann, gegen die `--help`
+der Pipeline; die Gegenprobe mit einem erfundenen Schalter lässt ihn fallen.
+
 ### Messbericht und Regelwerk: erst messen, dann raten
 
 Nach jedem Astro-Lauf wird der **lineare** Stapel vermessen — vor jeder Streckung, weil danach
