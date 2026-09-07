@@ -8,6 +8,19 @@ Alle nennenswerten Änderungen an ForgePix. Format orientiert an
 
 ## [Unreleased]
 
+### Das Hintergrund-Verfahren ist jetzt in der Oberfläche wählbar
+
+`--astro-bg-backend {own,graxpert}` gab es nur auf der Kommandozeile. In der Oberfläche war
+GraXpert allein als **separates Werkzeug für das fertige Bild** erreichbar, nicht als Verfahren
+*während* des Laufs. Neben „Hintergrund entfernen" steht jetzt eine Auswahl: eingebaut
+(RBF/DBE-Stil) oder GraXpert.
+
+Aufgefallen bei einem Vergleich aller 157 Kommandozeilen-Optionen mit dem, was die Oberfläche
+erzeugen kann. 27 sind dort nicht erreichbar; die meisten zu Recht (Hilfsbefehle wie
+`--filter-liste`). Zwei ganze Bereiche haben allerdings **gar keinen** Zugang: **Photometrie**
+(`--photometrie --stern --vergleich --blende --aavso …`) und **Lucky Imaging** (`--lucky …`).
+Beides funktioniert auf der Kommandozeile und ist in der Oberfläche nicht vorhanden.
+
 ### Eine Kommandozeilen-Option ohne jede Wirkung
 
 Eine mechanische Prüfung aller **157** Optionen darauf, ob ihr Ziel überhaupt irgendwo gelesen

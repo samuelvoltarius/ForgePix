@@ -405,6 +405,13 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, ProjectM
         self.astro_stretch_mode.addItem(tr("GHS (Generalised Hyperbolic)"), "ghs")
         self.astro_local_norm = QCheckBox(tr("Lokale Normalisierung (gegen Gradienten/Mehrfach-Sessions)"))
         self.astro_bg = QCheckBox(tr("Hintergrund/Gradient entfernen"))
+        # Womit? Der eingebaute Weg braucht nichts, GraXpert muss installiert sein. Die Option
+        # gab es nur auf der Kommandozeile (--astro-bg-backend); in der Oberflaeche war
+        # GraXpert allein als separates Werkzeug FUER DAS FERTIGE BILD erreichbar, nicht als
+        # Verfahren waehrend des Laufs.
+        self.astro_bg_backend = QComboBox()
+        self.astro_bg_backend.addItem(tr("eingebaut (RBF/DBE-Stil)"), "own")
+        self.astro_bg_backend.addItem(tr("GraXpert"), "graxpert")
         self.astro_fits = QCheckBox(tr("Auch als FITS speichern")); self.astro_fits.setChecked(True)
         self.astro_align = QComboBox()
         self.astro_align.addItem(tr("Nur Verschiebung (ohne Drehung)"), "shift")
@@ -576,6 +583,12 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, ProjectM
                               "der Ausreißer-Verwerfung — macht das Stacken bei Gradienten und beim "
                               "Kombinieren mehrerer Nächte korrekt."), 9, 3)
         ar.addWidget(self.astro_bg, 5, 0, 1, 3)
+        ar.addWidget(QLabel(tr("Verfahren")), 10, 0)
+        ar.addWidget(self.astro_bg_backend, 10, 1, 1, 2)
+        ar.addWidget(help_btn("Womit der Hintergrundverlauf entfernt wird. „Eingebaut“ braucht "
+                              "nichts weiter. „GraXpert“ nutzt das externe Programm (Pfad in "
+                              "den Einstellungen) — ist es nicht installiert, faellt der "
+                              "Lauf auf den eingebauten Weg zurueck."), 10, 3)
         ar.addWidget(help_btn("Entfernt weiche Helligkeits-Gradienten (Lichtverschmutzung/Vignette). "
                               "Für stärkere Tools: das 32-bit-Linear-TIFF in GraXpert/StarNet++/"
                               "PixInsight öffnen."), 5, 3)
@@ -1964,6 +1977,9 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, ProjectM
                          "--astro-color", str(self.astro_color.value())]
             if self.astro_bg.isChecked():
                 args += ["--bg-extract"]
+                _bb = self.astro_bg_backend.currentData()
+                if _bb and _bb != "own":
+                    args += ["--astro-bg-backend", str(_bb)]
             if self.astro_deconv.isChecked():
                 args += ["--astro-deconv", "--astro-deconv-iter", str(self.astro_deconv_iter.value())]
             if self.astro_denoise.value() > 0:

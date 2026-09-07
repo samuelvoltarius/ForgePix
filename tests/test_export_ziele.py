@@ -121,5 +121,23 @@ class TestAlleModiExportieren(unittest.TestCase):
                       "auch die exportiert")
 
 
+class TestOberflaecheErreichtDieOptionen(unittest.TestCase):
+    """Was die Pipeline kann, muss die Oberflaeche auch ansprechen koennen — jedenfalls dort,
+    wo es fuer den Benutzer zaehlt."""
+
+    def test_hintergrund_verfahren_ist_waehlbar(self):
+        """`--astro-bg-backend graxpert` gab es nur auf der Kommandozeile. In der Oberflaeche
+        war GraXpert allein als separates Werkzeug FUER DAS FERTIGE BILD erreichbar, nicht als
+        Verfahren waehrend des Laufs — obwohl es hier installiert ist."""
+        import io as _io
+        pfad = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "ui",
+                            "main_window.py")
+        with _io.open(pfad, encoding="utf-8") as fh:
+            gui = fh.read()
+        self.assertIn("--astro-bg-backend", gui,
+                      "das Hintergrund-Verfahren ist in der Oberflaeche nicht waehlbar")
+        self.assertIn("astro_bg_backend", gui)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

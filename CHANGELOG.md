@@ -8,6 +8,19 @@ All notable changes to ForgePix. Format based on
 
 ## [Unreleased]
 
+### The background method is now selectable in the interface
+
+`--astro-bg-backend {own,graxpert}` existed only on the command line. In the interface, GraXpert
+was reachable solely as a **separate tool for the finished image**, not as the method used
+*during* the run. Next to "remove background" there is now a choice: built-in (RBF/DBE style) or
+GraXpert.
+
+Noticed while comparing all 157 command-line options against what the interface can produce. 27
+are unreachable there; most of them rightly so (utility commands such as `--filter-liste`). Two
+whole areas, however, have **no** access at all: **photometry**
+(`--photometrie --stern --vergleich --blende --aavso …`) and **lucky imaging** (`--lucky …`).
+Both work on the command line and are absent from the interface.
+
 ### One command-line option with no effect at all
 
 A mechanical check of all **157** options for whether their destination is read anywhere found
