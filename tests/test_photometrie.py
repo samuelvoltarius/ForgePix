@@ -56,7 +56,7 @@ class TestPhotometrie(unittest.TestCase):
         shutil.rmtree(self.d, ignore_errors=True)
 
     def _serie(self, n=40, stunden=6.0, periode=3.0, amplitude=0.35, unter="a",
-               zeitstempel=True, saettigen=False, seed=2):
+               zeitstempel=True, saettigen=False, seed=2, drift_px=0.0):
         rng = np.random.default_rng(seed)
         d = os.path.join(self.d, unter)
         os.makedirs(d, exist_ok=True)
@@ -77,7 +77,12 @@ class TestPhotometrie(unittest.TestCase):
                 p = np.zeros((h, w), np.float32)
                 p[y, x] = 1.0
                 f += cv2.GaussianBlur(p, (0, 0), 2.0) * amp * 0.01
-            dx, dy = int(round(2.5 * math.sin(t))), int(round(2.0 * math.cos(t)))
+            # `drift_px` bewegt das Feld linear davon — so wie eine Montierung, die
+            # ueber die Nacht wegwandert. An echten Aufnahmen gemessen: 112 px ueber zwanzig
+            # Subs, bei einem lokalen Suchradius von 7,5 px.
+            weg = drift_px * (i / max(1, n - 1))
+            dx = int(round(2.5 * math.sin(t) + weg))
+            dy = int(round(2.0 * math.cos(t) + weg * 0.6))
             M = np.array([[1, 0, dx], [0, 1, dy]], np.float32)
             f = cv2.warpAffine(f, M, (w, h), borderMode=cv2.BORDER_REPLICATE)
             f = np.clip(f + rng.normal(0, 0.0015, (h, w)).astype(np.float32), 0, 1)
@@ -89,6 +94,48 @@ class TestPhotometrie(unittest.TestCase):
             pfade.append(q)
             wahr.append(dmag)
         return pfade, np.asarray(wahr)
+
+    def test_grosser_versatz_verliert_die_sterne_nicht(self):
+        """Der teuerste Fehler dieses Moduls: die Koordinaten galten starr fuer jede Aufnahme,
+        gesucht wurde nur im Umkreis von etwa 1,5 Blendenradien. An zwanzig echten Aufnahmen
+        wanderten die Sterne um 112 px — es kamen 3 von 20 Messpunkten zustande. Und das war
+        noch der gute Fall: wer stur an der alten Stelle misst, trifft irgendwann den
+        Nachbarstern und bekommt einen Fluss, der plausibel aussieht."""
+        pfade, wahr = self._serie(n=20, drift_px=30.0)
+        k = photometrie.lichtkurve(pfade, ZIEL, VERGLEICH, log=_stille)
+        self.assertIsNotNone(k, "keine einzige Messung bei grossem Versatz")
+        self.assertEqual(len(k["punkte"]), 20,
+                         "nur %d von 20 Messpunkten" % len(k["punkte"]))
+        self.assertGreater(k["versatz_px"], 20.0,
+                           "die Testszene driftet gar nicht genug (%.1f px)" % k["versatz_px"])
+
+    def test_bei_grossem_versatz_stimmt_die_kurve_noch(self):
+        """Punkte zu bekommen genuegt nicht — sie muessen auch den richtigen Stern zeigen.
+
+        30 px sind das Vierfache des lokalen Suchradius und das Sechsfache der Blende. Mehr
+        geht in dieser 200x200-Szene nicht: ab etwa 60 px wandern die Vergleichssterne aus dem
+        Bild, und dann fehlen sie zu Recht. Gemessen ueber die Driftstaerke: 0 px r=0,97 |
+        10 px r=0,98 | 30 px r=0,99 | 60 px r=0,59 (Sterne am Rand) | 120 px nur noch
+        4 Punkte."""
+        pfade, wahr = self._serie(n=20, drift_px=30.0)
+        k = photometrie.lichtkurve(pfade, ZIEL, VERGLEICH, log=_stille)
+        gem = np.asarray([p["delta_mag"] for p in k["punkte"]])
+        gem = gem - gem.mean()
+        w = wahr[:len(gem)]
+        w = w - w.mean()
+        r = float(np.corrcoef(gem, w)[0, 1])
+        self.assertGreater(r, 0.8, "Lichtkurve passt nicht zur Wahrheit (r=%.2f)" % r)
+
+    def test_streuung_wird_auch_bei_ausfaellen_bestimmt(self):
+        """Die Fluesse der Vergleichssterne wurden waehrend der Schleife eingetragen und beim
+        ersten Fehlschlag abgebrochen — die Listen liefen unterschiedlich lang, und die
+        Bedingung fuer die Streuung war auf echten Daten nie erfuellt. Gemeldet wurde dann
+        "nur ein Vergleichsstern", obwohl drei angegeben waren."""
+        pfade, _w = self._serie(n=20, drift_px=30.0)
+        k = photometrie.lichtkurve(pfade, ZIEL, VERGLEICH, log=_stille)
+        self.assertIsNotNone(k["streuung_vergleich"],
+                             "die ehrliche Messgenauigkeit fehlt")
+        self.assertGreater(k["streuung_vergleich"], 0.0)
 
     def test_differentiell_schlaegt_roh_deutlich(self):
         """Der Kern der Sache: die Durchsicht-Schwankung faellt heraus."""

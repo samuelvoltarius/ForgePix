@@ -40,12 +40,23 @@ das bestaetigt, was fuer die ASI294MC Pro schon bekannt war, gilt aber fuer alle
 
 ## Was sich damit trainieren laesst
 
-**Entrauschen (Noise2Noise): 5934 Subs in 53 brauchbaren Serien.**
+**Entrauschen (Noise2Noise): 5455 Subs in 75 brauchbaren Serien.**
+
+> **Berichtigt am 07.09.2026.** Hier stand zuvor „5934 Subs in 53 brauchbaren Serien". Die
+> Zaehlung gruppierte nach Kamera, Belichtung, Nacht und Ordner — aber nicht danach, **wohin das
+> Teleskop zeigte**. Im Ordner `whirl` liegen Aufnahmen von fuenf verschiedenen Zielen, teils in
+> derselben Nacht mit derselben Belichtungszeit; sie galten als eine Serie. Beim Stapeln fielen
+> die Aufnahmen des zweiten Ziels als „nicht ausrichtbar" heraus (an einer Serie gemessen: 76 %).
+> Nach der Trennung gibt es **mehr** Serien und **weniger** brauchbare Subs, weil manche
+> abgetrennte Gruppe unter die Schwelle von 20 Aufnahmen faellt. Die neue Zahl ist die ehrliche.
 
 Das Verfahren braucht keine sauberen Zielbilder — zwei unabhaengig verrauschte
 Aufnahmen derselben Szene genuegen, solange das Rauschen mittelwertfrei und zwischen
 beiden unabhaengig ist. Zwei Subs derselben Nacht erfuellen das. Als Faustregel sind
 hier Serien mit mindestens 20 Aufnahmen derselben Kamera und Belichtung gezaehlt:
+
+*(Die folgende Tabelle stammt aus der Zaehlung VOR der Trennung nach Himmelsrichtung; die
+Zeilen `whirl` und `Whirlpool Galaxy` enthalten daher mehrere Ziele.)*
 
 | Objekt | Belichtung | Subs | Kamera |
 |---|---|---|---|
@@ -86,6 +97,11 @@ ist die Wahrheit exakt und die Maske faellt als Nebenprodukt ab.
 * **Gemischte Belichtungszeiten innerhalb einer Serie.** `Whirlpool Galaxy` hat
   10 s, 60 s und 120 s nebeneinander. Fuer Noise2Noise duerfen nur gleiche Zeiten
   gepaart werden, sonst unterscheidet sich das Signal und nicht nur das Rauschen.
+* **Mehrere ZIELE in einem Ordner.** `whirl` enthaelt Aufnahmen von fuenf verschiedenen
+  Himmelsausschnitten — RA/DEC springen zwischen (202,5 | 47,2), (210,8 | 54,3),
+  (184,7 | 47,3), (112,3 | 20,9) und (189,1 | 26,0). Ohne die Richtung im Schluessel landen
+  sie in einer Serie, und beim Stapeln fallen die Aufnahmen des zweiten Ziels als „nicht
+  ausrichtbar" heraus, ohne dass jemand erfaehrt, dass es sie gab.
 * **Seestar-Serien sind kurz belichtet** (10-30 s) und entsprechend verrauscht. Genau
   das macht sie fuer einen Entrauscher wertvoll — es gibt viel zu lernen.
 

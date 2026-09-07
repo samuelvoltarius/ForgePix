@@ -168,22 +168,70 @@ def lichtkurve(paths, ziel, vergleich, r_blende=5.0, r_innen=9.0, r_aussen=14.0,
 
     punkte = []
     einzeln = [[] for _ in vergleich]
+    # Die Sterne WANDERN. Gesucht wird darum ab der zuletzt gefundenen Position, nicht ab der
+    # eingegebenen. `fluss_messen` sucht nur im Umkreis von etwa 1,5 Blendenradien; ueber eine
+    # ganze Serie ist der Versatz ein Vielfaches davon. An zwanzig echten Aufnahmen gemessen
+    # wanderte der Zielstern von (672|944) auf (690|952), also rund 20 px bei 7,5 px
+    # Suchradius — von der Startposition aus war er nicht mehr zu finden.
+    #
+    # Das ist nicht bloss ein Ausfall. Wer stur an der alten Stelle misst, trifft irgendwann
+    # den Nachbarstern oder halb daneben und bekommt einen Fluss, der plausibel aussieht: eine
+    # glatte, erfundene Lichtkurve. In derselben Serie kamen vorher 3 von 20 Messpunkten
+    # zustande, und die uebrigen 17 galten als "nicht messbar" — die gefaehrlichere Variante
+    # waere gewesen, dass sie NICHT auffallen.
+    pos_ziel = [float(ziel[0]), float(ziel[1])]
+    pos_vergleich = [[float(vx), float(vy)] for vx, vy in vergleich]
+    versatz_max = 0.0
+    ref_grau = None
+    ohne_registrierung = 0
     for jd, p in reihen:
         f = astro._read_float(p)
         if f is None:
             continue
-        mz = fluss_messen(f, ziel[0], ziel[1], r_blende, r_innen, r_aussen)
+        # Erst rechnen, wo die Sterne in DIESER Aufnahme liegen. Die eingegebenen Koordinaten
+        # gelten fuer die erste; danach uebernimmt die vorhandene, getestete Registrierung.
+        # Die laufende Position allein genuegt nicht: faellt eine Aufnahme aus, ist der
+        # Anschluss weg, und der Stern liegt beim naechsten Versuch ausserhalb des Suchradius.
+        grau = astro._gray(f) if f.ndim == 3 else np.asarray(f, np.float32)
+        if ref_grau is None:
+            ref_grau = grau
+        else:
+            M = astro._estimate_star_transform_robust(ref_grau, grau)
+            if M is None:
+                ohne_registrierung += 1
+            else:
+                zurueck = cv2.invertAffineTransform(np.asarray(M, np.float64))
+                def hin(px, py, T=zurueck):
+                    return [float(T[0, 0] * px + T[0, 1] * py + T[0, 2]),
+                            float(T[1, 0] * px + T[1, 1] * py + T[1, 2])]
+                pos_ziel = hin(float(ziel[0]), float(ziel[1]))
+                pos_vergleich = [hin(float(vx), float(vy)) for vx, vy in vergleich]
+        mz = fluss_messen(f, pos_ziel[0], pos_ziel[1], r_blende, r_innen, r_aussen)
         if mz is None or mz["fluss"] <= 0:
             log("    Photometrie: %s — Zielstern nicht messbar" % os.path.basename(p))
             continue
+        versatz_max = max(versatz_max,
+                          math.hypot(mz["x"] - float(ziel[0]), mz["y"] - float(ziel[1])))
+        pos_ziel = [mz["x"], mz["y"]]
         fl_v, ok = [], True
-        for k, (vx, vy) in enumerate(vergleich):
+        gefunden = []
+        for vx, vy in pos_vergleich:
             mv = fluss_messen(f, vx, vy, r_blende, r_innen, r_aussen)
             if mv is None or mv["fluss"] <= 0:
                 ok = False
                 break
+            gefunden.append([mv["x"], mv["y"]])
             fl_v.append(mv["fluss"])
-            einzeln[k].append(mv["fluss"])
+        # Erst eintragen, wenn ALLE Vergleichssterne dieser Aufnahme gemessen sind. Vorher
+        # wurde waehrend der Schleife eingetragen und beim ersten Fehlschlag abgebrochen — die
+        # Listen liefen damit unterschiedlich lang, und die Bedingung fuer die Streuung
+        # (gleiche Laenge) war auf echten Daten nie erfuellt. Gemeldet wurde dann "nicht
+        # bestimmbar (nur ein Vergleichsstern)", obwohl drei angegeben waren: eine falsche
+        # Begruendung fuer eine Zahl, die es haette geben muessen.
+        if ok:
+            for k, wert in enumerate(fl_v):
+                einzeln[k].append(wert)
+            pos_vergleich = gefunden
         if not ok:
             log("    Photometrie: %s — Vergleichsstern nicht messbar" % os.path.basename(p))
             continue
@@ -203,6 +251,12 @@ def lichtkurve(paths, ziel, vergleich, r_blende=5.0, r_innen=9.0, r_aussen=14.0,
 
     if not punkte:
         return None
+    if versatz_max > r_blende:
+        log("    Photometrie: die Sterne sind um bis zu %.0f px gewandert (Blende %.1f px) — "
+            "es wurde mitgefuehrt." % (versatz_max, r_blende))
+    if ohne_registrierung:
+        log("    Photometrie: %d Aufnahme(n) liessen sich nicht auf die erste ausrichten — "
+            "dort wurde ab der zuletzt gefundenen Position gesucht." % ohne_registrierung)
     # Ehrliche Messgenauigkeit: wie stabil sind die Vergleichssterne UNTEREINANDER? Was dort
     # an Streuung uebrig bleibt, ist die Untergrenze fuer alles, was am Ziel gemessen wird.
     streuung = None
@@ -224,10 +278,15 @@ def lichtkurve(paths, ziel, vergleich, r_blende=5.0, r_innen=9.0, r_aussen=14.0,
     if gesaettigt:
         log("    Photometrie: %d von %d Messungen ausgefressen — diese Werte sind ZU KLEIN "
             "und gehoeren nicht in eine Meldung" % (gesaettigt, len(punkte)))
+    if streuung is not None:
+        grund = "%.4f mag" % streuung
+    elif len(vergleich) < 2:
+        grund = "nicht bestimmbar (nur ein Vergleichsstern)"
+    else:
+        grund = "nicht bestimmbar (zu wenige vollstaendige Messungen)"
     log("    Photometrie: %d Messpunkte, Streuung der Vergleichssterne %s"
-        % (len(punkte), ("%.4f mag" % streuung) if streuung is not None
-           else "nicht bestimmbar (nur ein Vergleichsstern)"))
-    return {"punkte": punkte, "streuung_vergleich": streuung,
+        % (len(punkte), grund))
+    return {"punkte": punkte, "streuung_vergleich": streuung, "versatz_px": versatz_max,
             "instrumentell": katalog_helligkeit is None,
             "gesaettigt": gesaettigt, "zeit_brauchbar": zeit_brauchbar,
             "spanne_stunden": spanne_h}
