@@ -7,6 +7,67 @@ All notable changes to ForgePix. Format based on
 [SemVer](https://semver.org/).
 
 ## [Unreleased]
+
+### Measurement report and rule set: measure first, then advise
+
+After every astro run the **linear** stack is measured — before any stretch, because afterwards
+the median, the noise and the channel ratios would be distorted and the report worthless.
+Measured are image dimensions and clipped pixels, sky median, noise and brightness gradient,
+star count, FWHM and roundness, channel ratios, signal-to-noise ratio, equipment from the FITS
+header, and the series. The report goes to the log and to `messbericht.json` in the output
+folder.
+
+A **rule set** runs on those numbers and turns them into advice: reason, action, and the
+concrete switch. Deliberately a rule set and not a model — the same numbers always give the same
+advice, and every rule is a test. Two properties matter more than the individual thresholds: on
+clean data it stays largely silent (on a real M27 stack it reports exactly one item), and
+**missing measurements trigger no rule** — a rule that fires on a missing value invents a
+finding out of a non-measurement.
+
+Verified on 5 real Seestar subs: 4 of 5 used, complete report, three pieces of advice, suggestion
+`--astro-synthstar --astro-bg-extract`.
+
+**The camera is detected from the header** (`INSTRUME`). Without a camera key there would be no
+colour verdict, and in beginner mode nobody types in a camera by hand. On ambiguity the key stays
+empty: `ASI294MC` (IMX294, 4.63 µm) and `ASI294MM` (IMX492, 2.315 µm) differ by one letter and by
+a factor of two in pixel size — a misdetected sensor would be an invented finding that reads like
+a measurement. The report states whether the key was detected or supplied.
+
+### Training material from the user's own nights
+
+- **Noise2Noise pairs** (`core/trainingspaare.py`): two independently noisy exposures of the same
+  scene suffice for learning to denoise; a clean target is not required (Lehtinen et al., 2018).
+  Grouping is by camera, exposure time, night and folder — **not** by object name, because the
+  same galaxy appears as `M51`, `whirl` and `Whirlpool Galaxy` in the archive. Mixed exposure
+  times are never paired: then the signal, not just the noise, would differ, and the network would
+  learn to rescale brightness instead of denoising. Frames that cannot be aligned are dropped
+  rather than paired askew. On real M27 frames: noise ratio 0.99 for `n2n`, 1.36 for `tief`.
+- **Star synthesis with an exact mask** (`core/sternsynthese.py`): stars with known position,
+  known brightness and known profile placed into a real background. The mask therefore comes from
+  the construction and not from a detector — a mask produced by the project's own star finder
+  could only teach a model to imitate that same star finder, faults included.
+- **Scene bank** (`training/prepare_scenes_eigene.py`): builds tiles from the whole raw archive,
+  resumable via a progress log. Series containing more than one camera are skipped, the manifest
+  lists the cameras individually, and `--kamera` narrows the run. Truncated FITS files are sorted
+  out: astropy pads the missing part with zeros — the file reads fine, has the right shape, and is
+  still half empty.
+
+### Further fixes
+
+- **FITS files are no longer asked for EXIF.** `exifread` answered with
+  "File format not recognized." straight to the console; stacking five subs put that line in the
+  log five times and it read like an error. FITS has its own header and no EXIF. Not cosmetic: a
+  log full of meaningless messages stops being read, and then the message that does mean something
+  goes unnoticed too.
+- **Calibration frames are found via the FITS header**, not only via folder names.
+- **PixelMath can address colour channels**: `blau(x)`, `gruen(x)`, `rot(x)`, `rgb(b,g,r)`,
+  `grau(x)`. Indexing and imports remain rejected.
+- **The RAW developer no longer hangs**; the camera is visible in beginner mode.
+- **Live view during the run**, showing the stars used for registration.
+- Green cast in the previews, an ineffective palette selection and the unused own solver fixed.
+- The test suite did not run locally at all: a `MagicMock` on a QObject class caused an access
+  violation.
+
 ### Live stacking: correctness and recovery
 
 - Reject outliers with separate channel weights, preserving neutral colours.

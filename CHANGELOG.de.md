@@ -7,6 +7,70 @@ Alle nennenswerten Änderungen an ForgePix. Format orientiert an
 [SemVer](https://semver.org/lang/de/).
 
 ## [Unreleased]
+
+### Messbericht und Regelwerk: erst messen, dann raten
+
+Nach jedem Astro-Lauf wird der **lineare** Stapel vermessen — vor jeder Streckung, weil danach
+Median, Rauschen und Kanalverhältnisse verzerrt wären und der Bericht wertlos. Gemessen werden
+Bildmaße und ausgebrannte Pixel, Himmelsmedian, Rauschen und Helligkeitsverlauf, Sternanzahl,
+FWHM und Rundheit, Kanalverhältnisse, Signal-Rausch-Abstand, Ausrüstung aus dem FITS-Header und
+die Serie. Der Bericht steht im Protokoll und als `messbericht.json` im Ergebnisordner.
+
+Auf diesen Zahlen läuft ein **Regelwerk**, das daraus einen Rat macht: Grund, Maßnahme und der
+konkrete Schalter. Bewusst als Regelwerk und nicht als Modell — dieselben Zahlen ergeben immer
+denselben Rat, und jede Regel ist ein Test. Zwei Eigenschaften zählen mehr als die einzelnen
+Schwellen: auf sauberen Daten schweigt es (an einem echten M27-Stapel meldet es genau einen
+Punkt), und **fehlende Messwerte lösen keine Regel aus** — eine Regel, die auf einem fehlenden
+Wert anspringt, erfindet einen Befund aus einer Nicht-Messung.
+
+An 5 echten Seestar-Subs geprüft: 4 von 5 verwendet, Bericht vollständig, drei Räte, Vorschlag
+`--astro-synthstar --astro-bg-extract`.
+
+**Die Kamera wird aus dem Header erkannt** (`INSTRUME`). Ohne Kameraschlüssel gäbe es kein
+Farburteil, und im Anfänger-Modus trägt niemand eine Kamera von Hand ein. Bei Mehrdeutigkeit
+bleibt der Schlüssel leer: `ASI294MC` (IMX294, 4,63 µm) und `ASI294MM` (IMX492, 2,315 µm)
+unterscheiden sich um einen Buchstaben und um den Faktor zwei in der Pixelgröße — ein falsch
+erkannter Sensor wäre ein erfundener Befund, der sich wie eine Messung liest. Im Bericht steht,
+ob der Schlüssel erkannt oder vorgegeben wurde.
+
+### Trainingsmaterial aus den eigenen Nächten
+
+- **Noise2Noise-Paare** (`core/trainingspaare.py`): zwei unabhängig verrauschte Aufnahmen
+  derselben Szene genügen zum Entrauschen-Lernen, ein sauberes Zielbild ist nicht nötig
+  (Lehtinen u. a., 2018). Gruppiert wird nach Kamera, Belichtungszeit, Nacht und Ordner —
+  **nicht** nach Objektnamen, weil dieselbe Galaxie im Bestand `M51`, `whirl` und
+  `Whirlpool Galaxy` heißt. Gemischte Belichtungszeiten werden nie gepaart: dann unterschiede
+  sich das Signal und nicht nur das Rauschen, und das Netz lernte Helligkeit umzurechnen statt
+  zu entrauschen. Nicht ausrichtbare Aufnahmen fallen raus statt schief einzugehen. An echten
+  M27-Aufnahmen: Rauschverhältnis 0,99 bei `n2n`, 1,36 bei `tief`.
+- **Sternsynthese mit exakter Maske** (`core/sternsynthese.py`): Sterne mit bekanntem Ort,
+  bekannter Helligkeit und bekanntem Profil in echten Hintergrund setzen. Die Maske stammt damit
+  aus der Konstruktion und nicht aus einem Detektor — eine mit dem eigenen Sternfinder erzeugte
+  Maske könnte einem Modell nur beibringen, denselben Sternfinder nachzuahmen, samt seiner
+  Fehler.
+- **Szenenbank** (`training/prepare_scenes_eigene.py`): baut aus dem gesamten Rohdatenbestand
+  Kacheln, fortsetzbar über ein Fortschrittsprotokoll. Serien mit mehr als einer Kamera werden
+  übersprungen, das Manifest weist die Kameras einzeln aus, und `--kamera` grenzt gezielt ein.
+  Abgeschnittene FITS-Dateien werden aussortiert: astropy füllt den fehlenden Teil mit Nullen
+  auf — die Datei lässt sich also lesen, hat die richtige Form und ist trotzdem zur Hälfte leer.
+
+### Weitere Korrekturen
+
+- **FITS wird nicht mehr nach EXIF gefragt.** `exifread` meldete darauf
+  „File format not recognized." direkt auf die Konsole; beim Stapeln von fünf Subs stand die
+  Zeile fünfmal im Protokoll und las sich wie ein Fehler. FITS hat einen eigenen Header und kein
+  EXIF. Kein Schönheitsfehler: ein Protokoll voller bedeutungsloser Meldungen wird nicht mehr
+  gelesen, und dann fällt auch die Meldung nicht auf, die etwas bedeutet.
+- **Kalibrierbilder werden über den FITS-Header gefunden**, nicht nur über Ordnernamen.
+- **PixelMath kann Farbkanäle ansprechen**: `blau(x)`, `gruen(x)`, `rot(x)`, `rgb(b,g,r)`,
+  `grau(x)`. Indizierung und Importe bleiben abgewiesen.
+- **Der RAW-Entwickler hängt sich nicht mehr auf**; die Kamera ist im Anfänger-Modus sichtbar.
+- **Live-Anzeige während des Laufs**, mit den Sternen, die zur Ausrichtung benutzt werden.
+- Grünstich in den Vorschauen, wirkungslose Palettenwahl und der ungenutzte eigene Solver
+  behoben.
+- Die Testsuite lief lokal gar nicht durch: ein `MagicMock` auf einer QObject-Klasse führte zu
+  einer Speicherzugriffsverletzung.
+
 ### Live-Stacking: Korrektheit und Wiederherstellung
 
 - Farbkanäle behalten beim Ausreißer-Verwerfen getrennte Gewichte; neutrale Pixel erhalten keinen künstlichen Farbstich.
