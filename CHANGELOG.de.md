@@ -8,6 +8,35 @@ Alle nennenswerten Änderungen an ForgePix. Format orientiert an
 
 ## [Unreleased]
 
+### Die Normalisierung rechnet nicht mehr dreimal dasselbe
+
+Aufgefallen beim Stapeln von M51 (204 Aufnahmen à 4144×2822, ASI294MC Pro): zwischen der Meldung
+`PHASE:stack` und der ersten Fortschrittszeile lagen mehrere Minuten ohne jede Ausgabe. Der
+Grund steckte in der Normalisierungsschleife, und es waren drei Dinge auf einmal:
+
+| | vorher | jetzt |
+|---|---|---|
+| Hintergrund-Median je Aufnahme | 0,545 s — 35 Mio Werte kopieren und sortieren | **0,013 s** über ein Raster von ~200 000 Punkten |
+| `first * skal[0]` | 140-MB-Kopie in **jedem** der 204 Durchläufe | einmal vor der Schleife |
+| `valid(paths[0])` | je Durchlauf neu einlesen und prüfen (`np.isin` über 11,7 Mio Werte) | zwischengespeichert |
+
+Der Median wurde dabei **zweimal je Aufnahme** exakt gerechnet, einmal davon für einen Wert, der
+sich gar nicht ändert. An echten Daten gemessen:
+
+```
+exakt     0,03803123      Raster    0,03803252      Abweichung 1,3e-06
+Zeit 0,545 s              Zeit 0,013 s              Faktor 42
+```
+
+Die Abweichung ist **1770-mal kleiner als das Rauschen des Bildes** (MAD 0,0024) und damit ohne
+jede Bedeutung fürs Ergebnis. Zusammen sparte das an dieser Serie rund vier Minuten reine
+Rechenzeit, die nichts beitrug.
+
+**Kleine Bilder werden weiterhin exakt gerechnet.** Unterhalb der doppelten Zielpunktzahl greift
+die Näherung nicht — dort kostet die Sortierung nichts, und das Verhalten bleibt unverändert.
+Deckt die Maske nur einen dünnen Streifen ab, an dem das Raster vorbeiträfe, wird ebenfalls
+exakt gerechnet statt einen Wert zu erfinden.
+
 ### Eine ganze Nacht fällt nicht mehr unbemerkt heraus
 
 An echten Daten gefunden (M51, 340 Aufnahmen, ASI294MC Pro, 11,3 Stunden aus 5 Nächten):

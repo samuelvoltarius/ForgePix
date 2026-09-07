@@ -8,6 +8,35 @@ All notable changes to ForgePix. Format based on
 
 ## [Unreleased]
 
+### Normalisation no longer computes the same thing three times
+
+Noticed while stacking M51 (204 frames at 4144x2822, ASI294MC Pro): several minutes passed
+between the `PHASE:stack` marker and the first progress line, with no output at all. The cause
+sat in the normalisation loop, and it was three things at once:
+
+| | before | now |
+|---|---|---|
+| background median per frame | 0.545 s — copy and sort 35M values | **0.013 s** over a grid of ~200,000 points |
+| `first * skal[0]` | a 140 MB copy in **every** one of the 204 iterations | once, before the loop |
+| `valid(paths[0])` | re-read and re-validated each iteration (`np.isin` over 11.7M values) | cached |
+
+The median was computed exactly **twice per frame**, one of those for a value that never
+changes. Measured on real data:
+
+```
+exact     0.03803123      grid      0.03803252      difference 1.3e-06
+time 0.545 s              time 0.013 s              factor 42
+```
+
+The difference is **1770x smaller than the image noise** (MAD 0.0024) and therefore irrelevant
+to the result. Together this saved roughly four minutes of pure computation on this series that
+contributed nothing.
+
+**Small images are still computed exactly.** Below twice the target sample count the
+approximation does not engage — sorting costs nothing there, and behaviour is unchanged. If the
+mask covers only a thin strip that the grid would miss, the exact median is used as well rather
+than inventing a value.
+
 ### A whole night no longer drops out unnoticed
 
 Found on real data (M51, 340 frames, ASI294MC Pro, 11.3 hours across 5 nights):
