@@ -138,6 +138,35 @@ class TestRatVorschlag(_MitFenster):
         self.assertIn("nicht gemessen", self.w.rat_lbl.text())
 
 
+class TestWarnung(_MitFenster):
+    """Kritische Befunde der Vorpruefung, waehrend der Lauf noch laeuft.
+
+    Wer zwei Kameras in einem Ordner hat, soll das nicht erst nach zwanzig Minuten Rechenzeit
+    in einem Protokoll finden, das er ohnehin nicht liest.
+    """
+
+    def test_warnung_erscheint_ohne_knopf(self):
+        """Hier gibt es nichts zu setzen: zwei Kameras trennt man, indem man die Aufnahmen
+        trennt, nicht mit einem Schalter."""
+        self.w._warnung_zeigen("Mehrere Kameras in einer Serie — trennen und getrennt stapeln.")
+        self.assertIn("Mehrere Kameras", self.w.rat_lbl.text())
+        self.assertFalse(self.w.rat_btn.isEnabled())
+        self.assertFalse(self.w.rat_btn.isVisibleTo(self.w.rat_bar))
+
+    def test_nach_einer_warnung_ist_der_rat_wieder_normal(self):
+        """Sonst bliebe der Knopf nach einer Warnung fuer immer versteckt."""
+        self.w._warnung_zeigen("irgendwas")
+        self.w._rat_zeigen("--bg-extract")
+        self.assertTrue(self.w.rat_btn.isVisibleTo(self.w.rat_bar))
+        self.assertTrue(self.w.rat_btn.isEnabled())
+
+    def test_warnung_hinterlaesst_keine_schalter(self):
+        """Sonst uebernaehme ein Klick danach die Schalter des vorigen Laufs."""
+        self.w._rat_zeigen("--bg-extract --astro-synthstar")
+        self.w._warnung_zeigen("Mehrere Kameras")
+        self.assertEqual(self.w._rat_schalter, [])
+
+
 class TestMarkerAusDerPipeline(_MitFenster):
     """Das Regelwerk und die Oberflaeche muessen dieselbe Sprache sprechen."""
 

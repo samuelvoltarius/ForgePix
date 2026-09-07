@@ -1704,8 +1704,9 @@ def _autodetect_calibration(input_dir):
     # unkalibrierte Verrechnung.
     if not any(found.values()):
         try:
-            from astro_input import kalibrierung_nach_header
-            aus_header = kalibrierung_nach_header(roots, log=log_print)
+            from astro_input import kalibrierung_nach_header, light_paths
+            aus_header = kalibrierung_nach_header(
+                roots, log=log_print, passend_zu=light_paths(input_dir, list_images))
             for key in ("dark", "flat", "bias"):
                 if aus_header.get(key):
                     found[key] = aus_header[key]        # Liste von Dateien statt Ordner
@@ -1854,7 +1855,18 @@ def run_astro(input_dir, work_dir, args):
         for attr, val, label in (("dark", ad, "Dark"), ("flat", af, "Flat"), ("bias", ab, "Bias")):
             if val and not getattr(args, attr, None):
                 setattr(args, attr, val)
-                print(f"  Kalibrierung automatisch erkannt: {label}-Ordner „{os.path.basename(val)}“")
+                # _autodetect_calibration liefert ZWEI Formen: einen Ordnerpfad aus der
+                # Namenssuche oder eine DATEILISTE aus der Header-Suche. Hier stand ein
+                # os.path.basename(val) fuer beide — bei einer Liste stirbt der ganze Lauf mit
+                # "expected str, bytes or os.PathLike object, not list". Die Header-Suche wurde
+                # damit nie durchlaufen: sie kann nur greifen, wenn die Ordnersuche nichts
+                # fand, und dann stuerzte sofort diese Zeile ab.
+                if isinstance(val, (list, tuple)):
+                    print("  Kalibrierung automatisch erkannt: %d %s-Aufnahme(n) ueber die "
+                          "FITS-Kopfdaten" % (len(val), label))
+                else:
+                    print("  Kalibrierung automatisch erkannt: %s-Ordner „%s“"
+                          % (label, os.path.basename(val)))
 
     # --- Vorpruefung -----------------------------------------------------------------
     # Was in den Kopfdaten steht, muss man nicht erst errechnen. Zwei Kameras in einem Ordner
@@ -1878,6 +1890,12 @@ def run_astro(input_dir, work_dir, args):
                 print()
                 print(_rg.text(_vr))
                 print()
+                # Kritisches nach dem PREVIEW:-Prinzip melden, damit die Oberflaeche es zeigen
+                # kann. Wer zwei Kameras in einem Ordner hat, soll das nicht erst nach zwanzig
+                # Minuten Rechenzeit in einem Protokoll finden, das er ohnehin nicht liest.
+                for _r in _vr:
+                    if _r.stufe == _rg.KRITISCH:
+                        print("WARNUNG:%s — %s" % (_r.titel, _r.massnahme))
     except Exception as e:
         print("  Vorpruefung nicht moeglich: %s" % e)
 

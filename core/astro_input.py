@@ -75,7 +75,53 @@ def _bildart(pfad):
     return None
 
 
-def kalibrierung_nach_header(wurzeln, max_dateien=4000, log=None):
+def _kopf(pfad):
+    """Die Vergleichsfelder eines FITS lesen. Leeres Dict, wenn es nicht geht."""
+    try:
+        from astropy.io import fits
+        h = fits.getheader(pfad)
+    except Exception:
+        return {}
+    def z(*n):
+        for k in n:
+            if k in h:
+                try:
+                    return float(h[k])
+                except (TypeError, ValueError):
+                    pass
+        return None
+    return {"kamera": str(h.get("INSTRUME", "")).strip(),
+            "breite": h.get("NAXIS1"), "hoehe": h.get("NAXIS2"),
+            "belichtung": z("EXPTIME", "EXPOSURE"),
+            "filter": str(h.get("FILTER", "")).strip()}
+
+
+def _passt_dazu(kandidat, licht, art):
+    """Gehoert dieses Kalibrierbild zu diesen Lights?
+
+    Sensor und Kamera muessen immer stimmen. Bei Darks zusaetzlich die Belichtungszeit: ein
+    Dark anderer Laenge zieht den falschen Dunkelstrom ab, und das faellt im Ergebnis nicht
+    auf. Bei Flats der Filter.
+    """
+    if not kandidat or not licht:
+        return False
+    if kandidat.get("kamera") and licht.get("kamera") and kandidat["kamera"] != licht["kamera"]:
+        return False
+    for feld in ("breite", "hoehe"):
+        if kandidat.get(feld) and licht.get(feld) and kandidat[feld] != licht[feld]:
+            return False
+    if art == "dark":
+        a, b = kandidat.get("belichtung"), licht.get("belichtung")
+        if a is not None and b is not None and abs(a - b) > 0.51:
+            return False
+    if art == "flat":
+        a, b = kandidat.get("filter"), licht.get("filter")
+        if a and b and a != b:
+            return False
+    return True
+
+
+def kalibrierung_nach_header(wurzeln, max_dateien=4000, log=None, passend_zu=None):
     """Darks, Flats und Bias über den FITS-HEADER finden, nicht über Ordnernamen.
 
     Warum es das braucht: die bisherige Suche kannte nur Ordner, die „dark", „flats" oder
@@ -117,6 +163,27 @@ def kalibrierung_nach_header(wurzeln, max_dateien=4000, log=None):
                 art = _bildart(pfad)
                 if art in gefunden:
                     gefunden[art].append(pfad)
+
+    # Nur behalten, was zu DIESEN Lights gehoert. Gesucht wird im uebergeordneten Ordner, und
+    # zwar rekursiv — wer "D:/astro/M31" waehlt, durchsucht damit "D:/astro" mit allen anderen
+    # Objekten, Kameras und Belichtungszeiten. Ohne diese Auswahl kamen fremde Darks in die
+    # Liste, und der Lauf starb anschliessend an calibration_metadata.validate mit
+    # "Kalibrierung/Aufnahmeserie passt nicht" — statt einfach ohne Kalibrierung zu rechnen.
+    if passend_zu:
+        lichter = [passend_zu] if isinstance(passend_zu, str) else list(passend_zu)
+        licht = {}
+        for p in lichter[:5]:
+            licht = _kopf(p)
+            if licht.get("breite"):
+                break
+        if licht:
+            for art in gefunden:
+                vorher = len(gefunden[art])
+                gefunden[art] = [p for p in gefunden[art] if _passt_dazu(_kopf(p), licht, art)]
+                if log and vorher and not gefunden[art]:
+                    log("    Kalibrierung: %d %s-Aufnahme(n) gefunden, aber keine passt zu "
+                        "dieser Serie (Kamera, Sensorgroesse, Belichtung) — nicht verwendet."
+                        % (vorher, art))
     if log:
         teile = ["%d %s" % (len(v), k) for k, v in gefunden.items() if v]
         log("    Kalibrierung aus den Headern: %s"

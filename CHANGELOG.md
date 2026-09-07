@@ -8,6 +8,38 @@ All notable changes to ForgePix. Format based on
 
 ## [Unreleased]
 
+### Two defects in header-based calibration detection
+
+Finding calibration frames through the FITS header solves a real problem: anyone keeping their
+darks loose among the lights, or naming the folder "Kalibrierung 2026-09", silently got an
+uncalibrated integration. Two defects made this path unusable.
+
+**It crashed on its first hit.** `_autodetect_calibration` returns two shapes: a folder path from
+the name search, or a **file list** from the header search. The message afterwards called
+`os.path.basename(val)` for both — with a list, the entire run died with
+`expected str, bytes or os.PathLike object, not list`. Since the header search only engages when
+the name search found nothing, that crash was the only possible outcome of a hit: **the path was
+never once exercised.**
+
+**It picked up foreign calibration frames.** The search covers the parent folder, recursively —
+choosing `D:stro\M31` searches all of `D:stro` with every other target, camera and exposure
+time. Hits went into the list unchecked, and the run then died in
+`calibration_metadata.validate` with "calibration does not match the series" — instead of simply
+continuing without calibration. Exactly that happened during development: test files in the
+parent folder crashed an entirely unrelated test.
+
+Now only calibration frames matching **these** lights are used: same camera, same sensor size,
+for darks the same exposure time (±0.5 s), for flats the same filter. If nothing matches, the log
+says so and the run proceeds without. A dark of the wrong length is the most treacherous kind — it
+subtracts the wrong dark current, and you cannot see it in the finished image.
+
+### Critical pre-flight findings appear in the interface
+
+A critical finding used to live in the log only. Anyone with two cameras in one folder should not
+have to discover that after twenty minutes of computation, in a text they do not read — it now
+appears as a red bar under the image while the run is still going. Without a button: two cameras
+are separated by separating the frames, not by a switch.
+
 ### Pre-flight: what the headers already say need not be computed
 
 The rule set judges the finished stack. For part of its findings that is too late: that there are

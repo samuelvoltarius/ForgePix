@@ -8,6 +8,39 @@ Alle nennenswerten Änderungen an ForgePix. Format orientiert an
 
 ## [Unreleased]
 
+### Zwei Fehler in der Kalibrier-Erkennung über die Kopfdaten
+
+Die Suche nach Kalibrierbildern über den FITS-Header löst ein echtes Problem: wer seine Darks
+lose zwischen den Lights liegen hat oder den Ordner „Kalibrierung 2026-09" nennt, bekam
+stillschweigend eine unkalibrierte Verrechnung. Zwei Fehler machten diesen Weg unbrauchbar.
+
+**Er stürzte beim ersten Treffer ab.** `_autodetect_calibration` gibt zwei Formen zurück: einen
+Ordnerpfad aus der Namenssuche oder eine **Dateiliste** aus der Header-Suche. Die Meldung danach
+rief `os.path.basename(val)` für beide — bei einer Liste starb der ganze Lauf mit
+`expected str, bytes or os.PathLike object, not list`. Da die Header-Suche nur greift, wenn die
+Ordnersuche nichts fand, war der Absturz die einzig mögliche Folge eines Treffers: **der Weg
+wurde nie durchlaufen.**
+
+**Er nahm fremde Kalibrierbilder.** Gesucht wird im übergeordneten Ordner, und zwar rekursiv —
+wer `D:stro\M31` wählt, durchsucht damit `D:stro` mit allen anderen Objekten, Kameras und
+Belichtungszeiten. Die Treffer landeten ungeprüft in der Liste, und der Lauf starb anschliessend
+an `calibration_metadata.validate` mit „Kalibrierung/Aufnahmeserie passt nicht" — statt einfach
+ohne Kalibrierung weiterzurechnen. Genau das ist beim Entwickeln passiert: Testdateien im
+übergeordneten Ordner haben einen ganz anderen Test zum Absturz gebracht.
+
+Jetzt werden nur Kalibrierbilder genommen, die zu **diesen** Lights passen: gleiche Kamera,
+gleiche Sensorgröße, bei Darks dieselbe Belichtungszeit (±0,5 s), bei Flats derselbe Filter.
+Passt nichts, steht das im Protokoll und es wird ohne gerechnet. Ein Dark der falschen Länge ist
+dabei die tückischste Sorte — es zieht den falschen Dunkelstrom ab, und im fertigen Bild sieht
+man das nicht.
+
+### Kritische Vorprüfungs-Befunde erscheinen in der Oberfläche
+
+Ein kritischer Befund stand bisher nur im Protokoll. Wer zwei Kameras in einem Ordner hat, soll
+das nicht erst nach zwanzig Minuten Rechenzeit in einem Text finden, den er ohnehin nicht liest —
+jetzt erscheint er als roter Balken unter dem Bild, solange der Lauf noch läuft. Ohne Knopf: zwei
+Kameras trennt man, indem man die Aufnahmen trennt, nicht mit einem Schalter.
+
 ### Vorprüfung: was in den Kopfdaten steht, muss man nicht errechnen
 
 Das Regelwerk urteilt über den fertigen Stapel. Für einen Teil der Befunde ist das zu spät: dass

@@ -2544,6 +2544,22 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, ProjectM
             i += 1
         return paare, unbekannt
 
+    def _warnung_zeigen(self, text):
+        """Ein kritischer Befund der Vorpruefung — sichtbar, solange der Lauf noch laeuft.
+
+        Kein Knopf: hier gibt es nichts zu setzen. Zwei Kameras in einem Ordner loest man,
+        indem man die Aufnahmen trennt, nicht mit einem Schalter. Der Balken sagt nur, dass
+        das Ergebnis so nichts wird — frueh genug, um abzubrechen.
+        """
+        self._rat_schalter = []
+        self.rat_lbl.setText("⚠  " + text)
+        self.rat_btn.setEnabled(False)
+        self.rat_btn.setVisible(False)
+        self.rat_bar.setStyleSheet(
+            "background:#2e1a1a;border:1px solid #6a2a2a;border-radius:8px;")
+        self.rat_lbl.setStyleSheet("color:#f0c0c0;font-size:12px;border:none;")
+        self.rat_bar.show()
+
     def _rat_zeigen(self, zeile, quelle="regelwerk"):
         """Den Marker RAT:/WUNSCH:<schalter> in einen lesbaren Vorschlag verwandeln.
 
@@ -2568,6 +2584,10 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, ProjectM
         text = kopf + " " + ", ".join(namen)
         if unbekannt:
             text += "  " + tr("(nicht per Knopf setzbar: %s)") % " ".join(unbekannt)
+        self.rat_bar.setStyleSheet(
+            "background:#2a2510;border:1px solid #4a4020;border-radius:8px;")
+        self.rat_lbl.setStyleSheet("color:#e6d9a8;font-size:12px;border:none;")
+        self.rat_btn.setVisible(True)
         self.rat_lbl.setText(text)
         self.rat_btn.setEnabled(bool(namen))
         self.rat_bar.show()
@@ -2664,6 +2684,8 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, ProjectM
                     self._set_status(tr(label), color="#d4a72c", bg="#2a2510")
             elif s.startswith("RATIONALE:"):
                 self._last_rationale = s[len("RATIONALE:"):].strip() or self._last_rationale
+            elif s.startswith("WARNUNG:"):
+                self._warnung_zeigen(s[len("WARNUNG:"):].strip())
             elif s.startswith("RAT:"):
                 self._rat_zeigen(s[len("RAT:"):].strip(), quelle="regelwerk")
             elif s.startswith("WUNSCH:"):
