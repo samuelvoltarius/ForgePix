@@ -8,6 +8,16 @@ All notable changes to ForgePix. Format based on
 
 ## [Unreleased]
 
+### The pre-flight detects two targets in one folder
+
+The same silent fault that spoiled the training series hits the user too: frames of two objects in
+one directory go into the same stack, and those of the second target drop out as "not alignable" —
+without anyone learning they existed. The pre-flight watched camera and filter, but not pointing.
+
+The spread of pointings is now in the report, and beyond one degree it is a critical finding.
+Verified on a real folder: **8.99 degrees** detected and reported before the computation starts. A
+dithered series of a single target shows 0.00 degrees and triggers nothing.
+
 ### Series are separated by pointing direction
 
 While building the scene bank, one series stood out by losing 76% of its frames as "not

@@ -92,7 +92,7 @@ class TestPruefen(unittest.TestCase):
         u = {"anzahl": 40, "gelesen": 40, "kameras": {"ZWO ASI294MC Pro": 40},
              "filter": {"L": 40}, "belichtungen_s": {300.0: 40},
              "temperatur_c": (-10.5, -9.8), "naechte": ["2026-09-06"],
-             "gesamt_minuten": 200.0}
+             "richtungsspanne_grad": 0.01, "gesamt_minuten": 200.0}
         u.update(abw)
         return u
 
@@ -109,6 +109,36 @@ class TestPruefen(unittest.TestCase):
         self.assertEqual(r[0].stufe, regeln.KRITISCH)
         self.assertIn("Kameras", r[0].titel)
         self.assertIn("Seestar S30", r[0].grund)
+
+    def test_mehrere_himmelsausschnitte_sind_kritisch(self):
+        """Derselbe stille Fehler wie bei den Trainingsserien, nur beim Benutzer: die
+        Aufnahmen des zweiten Ziels fallen beim Stapeln als 'nicht ausrichtbar' heraus, ohne
+        dass jemand erfaehrt, dass es sie gab. An einem echten Ordner gemessen: fuenf Ziele in
+        einem Verzeichnis."""
+        r = vorpruefung.pruefen(self._u(richtungsspanne_grad=9.0))
+        self.assertEqual(r[0].stufe, regeln.KRITISCH)
+        self.assertIn("Himmelsausschnitte", r[0].titel)
+
+    def test_dithering_loest_nichts_aus(self):
+        """Dithering und Nachfuehrfehler bewegen sich im Bogenminutenbereich."""
+        for spanne in (0.0, 0.05, 0.5, 1.0):
+            self.assertEqual([x for x in vorpruefung.pruefen(self._u(richtungsspanne_grad=spanne))
+                              if "Himmelsausschnitte" in x.titel], [], "%.2f Grad" % spanne)
+
+    def test_ohne_richtungsangabe_kein_befund(self):
+        self.assertEqual([x for x in vorpruefung.pruefen(self._u(richtungsspanne_grad=None))
+                          if "Himmelsausschnitte" in x.titel], [])
+
+    def test_spanne_wird_aus_den_kopfdaten_berechnet(self):
+        koepfe = [{"RA": 202.47, "DEC": 47.19}, {"RA": 202.50, "DEC": 47.21},
+                  {"RA": 210.75, "DEC": 54.30}]
+        u = vorpruefung.uebersicht(koepfe)
+        self.assertIsNotNone(u["richtungsspanne_grad"])
+        self.assertGreater(u["richtungsspanne_grad"], 5.0)
+
+    def test_eine_einzelne_aufnahme_hat_keine_spanne(self):
+        self.assertIsNone(vorpruefung.uebersicht([{"RA": 1.0, "DEC": 2.0}])
+                          ["richtungsspanne_grad"])
 
     def test_mehrere_filter(self):
         t = [x.titel for x in vorpruefung.pruefen(self._u(filter={"Ha": 20, "L": 20}))]

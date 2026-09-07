@@ -36,67 +36,7 @@ import cv2
 
 from constants import log_print
 import astro
-
-
-def _richtung(h):
-    """Wohin das Teleskop zeigte, als Gradzahlen — oder None, wenn es nicht dasteht."""
-    def z(*namen):
-        for n in namen:
-            if n in h:
-                try:
-                    return float(h[n])
-                except (TypeError, ValueError):
-                    pass
-        return None
-    ra, dec = z("RA", "CRVAL1", "OBJCTRA"), z("DEC", "CRVAL2", "OBJCTDEC")
-    return None if ra is None or dec is None else (ra, dec)
-
-
-def _winkelabstand(a, b):
-    """Echter Winkelabstand zweier Himmelsrichtungen in Grad (RA/DEC).
-
-    Nicht einfach die Differenz der Zahlen: bei RA zaehlt der Kosinus der Deklination, und der
-    Uebergang von 359,9 auf 0,1 Grad sind 0,2 Grad und nicht 359,8.
-    """
-    ra1, de1 = math.radians(a[0]), math.radians(a[1])
-    ra2, de2 = math.radians(b[0]), math.radians(b[1])
-    d = (math.sin((de2 - de1) / 2) ** 2
-         + math.cos(de1) * math.cos(de2) * math.sin((ra2 - ra1) / 2) ** 2)
-    return math.degrees(2 * math.asin(min(1.0, math.sqrt(max(0.0, d)))))
-
-
-def _felder_bilden(richtungen, toleranz_grad=0.5):
-    """Richtungen zu Feldern zusammenfassen. Gibt je Richtung die Nummer ihres Feldes.
-
-    Warum ueberhaupt: in Alfreds Bestand liegen im Ordner `whirl` Aufnahmen von fuenf
-    verschiedenen Zielen — RA/DEC springen zwischen (202,5 | 47,2), (210,8 | 54,3),
-    (184,7 | 47,3), (112,3 | 20,9) und (189,1 | 26,0). Ohne Richtung im Schluessel landeten
-    sie in EINER Serie; beim Stapeln fielen dann 76 % der Aufnahmen als "nicht ausrichtbar"
-    heraus. Sie sind aber nicht schlecht, sie zeigen etwas anderes.
-
-    Warum kein Raster: eine Rasterung nach `round(ra / 0,5)` zerschneidet ein Feld genau dann,
-    wenn es auf einer Zellgrenze liegt. Genau passiert: RA 210,75 und 210,80 landeten in den
-    Zellen 421 und 422 — aus 84 zusammengehoerenden Aufnahmen wurden 55 und 29. Hier wird
-    stattdessen nach Abstand zusammengefasst.
-
-    0,5 Grad Toleranz: Dithering und Nachfuehrfehler bewegen sich im Bogenminutenbereich, ein
-    Mosaik-Feld oder ein neues Ziel dagegen um Grad. Fehlt die Angabe, bleibt das Feld None und
-    es wird wie zuvor gruppiert.
-    """
-    mitten = []
-    zuordnung = []
-    for r in richtungen:
-        if r is None:
-            zuordnung.append(None)
-            continue
-        for i, m in enumerate(mitten):
-            if _winkelabstand(r, m) <= toleranz_grad:
-                zuordnung.append(i)
-                break
-        else:
-            mitten.append(r)
-            zuordnung.append(len(mitten) - 1)
-    return zuordnung, mitten
+from vorpruefung import _felder_bilden, _richtung, _winkelabstand
 
 
 def serien_finden(ordner, min_subs=20, log=log_print):

@@ -24,6 +24,7 @@ Zwei Befunde sind hier wichtiger als alle anderen, weil sie **still** danebengeh
 Die Ausgabe hat dieselbe Form wie beim Regelwerk (`regeln.Rat`), damit beides gleich aussieht.
 """
 import collections
+import math
 import os
 
 from constants import log_print
@@ -34,7 +35,69 @@ from regeln import HINWEIS, KRITISCH, Rat, WICHTIG
 AZIMUTAL = ("seestar", "dwarf", "vespera", "stellina", "hestia", "origin")
 
 _FELDER = ("INSTRUME", "EXPTIME", "EXPOSURE", "FILTER", "CCD-TEMP", "DATE-OBS", "IMAGETYP",
-           "FRAME", "GAIN", "XPIXSZ", "FOCALLEN")
+           "FRAME", "GAIN", "XPIXSZ", "FOCALLEN", "RA", "DEC", "CRVAL1", "CRVAL2",
+           "OBJCTRA", "OBJCTDEC")
+
+
+def _richtung(h):
+    """Wohin das Teleskop zeigte, als Gradzahlen — oder None, wenn es nicht dasteht."""
+    def z(*namen):
+        for n in namen:
+            if n in h:
+                try:
+                    return float(h[n])
+                except (TypeError, ValueError):
+                    pass
+        return None
+    ra, dec = z("RA", "CRVAL1", "OBJCTRA"), z("DEC", "CRVAL2", "OBJCTDEC")
+    return None if ra is None or dec is None else (ra, dec)
+
+
+def _winkelabstand(a, b):
+    """Echter Winkelabstand zweier Himmelsrichtungen in Grad (RA/DEC).
+
+    Nicht einfach die Differenz der Zahlen: bei RA zaehlt der Kosinus der Deklination, und der
+    Uebergang von 359,9 auf 0,1 Grad sind 0,2 Grad und nicht 359,8.
+    """
+    ra1, de1 = math.radians(a[0]), math.radians(a[1])
+    ra2, de2 = math.radians(b[0]), math.radians(b[1])
+    d = (math.sin((de2 - de1) / 2) ** 2
+         + math.cos(de1) * math.cos(de2) * math.sin((ra2 - ra1) / 2) ** 2)
+    return math.degrees(2 * math.asin(min(1.0, math.sqrt(max(0.0, d)))))
+
+
+def _felder_bilden(richtungen, toleranz_grad=0.5):
+    """Richtungen zu Feldern zusammenfassen. Gibt je Richtung die Nummer ihres Feldes.
+
+    Warum ueberhaupt: in Alfreds Bestand liegen im Ordner `whirl` Aufnahmen von fuenf
+    verschiedenen Zielen — RA/DEC springen zwischen (202,5 | 47,2), (210,8 | 54,3),
+    (184,7 | 47,3), (112,3 | 20,9) und (189,1 | 26,0). Ohne Richtung im Schluessel landeten
+    sie in EINER Serie; beim Stapeln fielen dann 76 % der Aufnahmen als "nicht ausrichtbar"
+    heraus. Sie sind aber nicht schlecht, sie zeigen etwas anderes.
+
+    Warum kein Raster: eine Rasterung nach `round(ra / 0,5)` zerschneidet ein Feld genau dann,
+    wenn es auf einer Zellgrenze liegt. Genau passiert: RA 210,75 und 210,80 landeten in den
+    Zellen 421 und 422 — aus 84 zusammengehoerenden Aufnahmen wurden 55 und 29. Hier wird
+    stattdessen nach Abstand zusammengefasst.
+
+    0,5 Grad Toleranz: Dithering und Nachfuehrfehler bewegen sich im Bogenminutenbereich, ein
+    Mosaik-Feld oder ein neues Ziel dagegen um Grad. Fehlt die Angabe, bleibt das Feld None und
+    es wird wie zuvor gruppiert.
+    """
+    mitten = []
+    zuordnung = []
+    for r in richtungen:
+        if r is None:
+            zuordnung.append(None)
+            continue
+        for i, m in enumerate(mitten):
+            if _winkelabstand(r, m) <= toleranz_grad:
+                zuordnung.append(i)
+                break
+        else:
+            mitten.append(r)
+            zuordnung.append(len(mitten) - 1)
+    return zuordnung, mitten
 
 
 def kopfdaten(paths, max_dateien=400, log=log_print):
@@ -88,7 +151,7 @@ def uebersicht(koepfe, gesamt=None):
     kameras = collections.Counter()
     filter_ = collections.Counter()
     zeiten = collections.Counter()
-    temperaturen, naechte = [], collections.Counter()
+    temperaturen, naechte, richtungen = [], collections.Counter(), []
     for h in koepfe:
         k = str(h.get("INSTRUME", "")).strip()
         if k:
@@ -105,6 +168,16 @@ def uebersicht(koepfe, gesamt=None):
         d = str(h.get("DATE-OBS", ""))[:10]
         if d:
             naechte[d] += 1
+        r = _richtung(h)
+        if r is not None:
+            richtungen.append(r)
+    # Wie weit liegen die Ausrichtungen auseinander? Ein Wert, keine Liste — es geht nur um die
+    # Frage, ob hier ein Feld aufgenommen wurde oder mehrere.
+    spanne_grad = None
+    if len(richtungen) >= 2:
+        mitte = (sum(x for x, _y in richtungen) / len(richtungen),
+                 sum(y for _x, y in richtungen) / len(richtungen))
+        spanne_grad = max(_winkelabstand(r, mitte) for r in richtungen) * 2.0
     return {
         "anzahl": int(gesamt if gesamt is not None else len(koepfe)),
         "gelesen": len(koepfe),
@@ -113,6 +186,7 @@ def uebersicht(koepfe, gesamt=None):
         "belichtungen_s": dict(zeiten),
         "temperatur_c": ((min(temperaturen), max(temperaturen)) if temperaturen else None),
         "naechte": sorted(naechte),
+        "richtungsspanne_grad": spanne_grad,
         "gesamt_minuten": (sum(t * n for t, n in zeiten.items()) / 60.0
                            * (float(gesamt) / max(1, len(koepfe)) if gesamt else 1.0)
                            if zeiten else None),
@@ -134,6 +208,19 @@ def pruefen(uebersicht_, *, align_mode=None, hat_dark=None, hat_flat=None):
             "sich von selbst."
             % ", ".join("%s (%dx)" % (k, n) for k, n in sorted(kameras.items())),
             "Die Aufnahmen nach Kamera trennen und getrennt stapeln.",
+            None))
+
+    spanne = u.get("richtungsspanne_grad")
+    if spanne is not None and spanne > 1.0:
+        raete.append(Rat(
+            KRITISCH, "Mehrere Himmelsausschnitte in einer Serie",
+            "Die Aufnahmen zeigen nicht dasselbe Feld — die Ausrichtungen liegen bis zu "
+            "%.1f Grad auseinander. Beim Stapeln fallen die Aufnahmen des zweiten Ziels als "
+            "'nicht ausrichtbar' heraus, ohne dass jemand erfaehrt, dass es sie gab. An einem "
+            "echten Ordner gemessen: fuenf verschiedene Ziele in einem Verzeichnis, 76 %% der "
+            "Aufnahmen einer Serie weggeworfen." % spanne,
+            "Nach Objekt trennen und getrennt stapeln. Fuer ein Mosaik ist der Mosaik-Modus "
+            "zustaendig, nicht der Astro-Stapel.",
             None))
 
     filter_ = u.get("filter") or {}
@@ -227,6 +314,9 @@ def text(u):
         z.append("Belichtung      " + "/".join("%g s" % t for t in sorted(u["belichtungen_s"])))
     if u.get("temperatur_c"):
         z.append("Temperatur      %.1f bis %.1f Grad" % u["temperatur_c"])
+    if u.get("richtungsspanne_grad") is not None:
+        z.append("Himmelsfeld     Ausrichtungen bis %.2f Grad auseinander"
+                 % u["richtungsspanne_grad"])
     if u.get("naechte"):
         n = u["naechte"]
         z.append("Naechte         %s" % (n[0] if len(n) == 1 else "%s bis %s (%d)"

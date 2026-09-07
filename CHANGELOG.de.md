@@ -8,6 +8,17 @@ Alle nennenswerten Änderungen an ForgePix. Format orientiert an
 
 ## [Unreleased]
 
+### Die Vorprüfung erkennt zwei Ziele in einem Ordner
+
+Derselbe stille Fehler, der die Trainingsserien verdorben hat, trifft auch den Benutzer: liegen
+Aufnahmen von zwei Objekten in einem Verzeichnis, laufen sie in denselben Stapel, und die des
+zweiten Ziels fallen als „nicht ausrichtbar" heraus — ohne dass jemand erfährt, dass es sie gab.
+Die Vorprüfung achtete bisher auf Kamera und Filter, aber nicht auf die Richtung.
+
+Jetzt steht die Spanne der Ausrichtungen im Bericht, und über einem Grad gibt es einen kritischen
+Befund. An einem echten Ordner geprüft: **8,99 Grad** erkannt und gemeldet, bevor die Rechenzeit
+anfängt. Eine geditherte Serie desselben Ziels zeigt 0,00 Grad und löst nichts aus.
+
 ### Serien werden nach Himmelsrichtung getrennt
 
 Beim Bau der Szenenbank fiel eine Serie auf, die 76 % ihrer Aufnahmen als „nicht ausrichtbar"
