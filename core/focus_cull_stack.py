@@ -749,12 +749,17 @@ def copy_exif_to_dirs(src, *dirs):
     copy_exif(src, files)
 
 
-def export_web_jpg(stack_dir, export_dir):
-    """Aus dem (ggf. 16-bit) Stack ein teilbares 8-bit sRGB JPG schreiben."""
+def export_web_jpg(stack_dir, export_dir, only=None):
+    """Aus dem (ggf. 16-bit) Stack ein teilbares 8-bit sRGB JPG schreiben.
+
+    `only=<Dateiname>` nimmt NUR diese Datei. Im Astro-Modus liegen neben dem fertigen Bild
+    auch die linearen Zwischenstaende (16- und 32-bit-TIFF) im selben Ordner — die als JPG zu
+    exportieren ergibt ein praktisch schwarzes Bild, das aussieht wie ein misslungener Export.
+    """
     if not os.path.isdir(stack_dir):
         return
     os.makedirs(export_dir, exist_ok=True)
-    for f in os.listdir(stack_dir):
+    for f in ([only] if only else os.listdir(stack_dir)):
         ext = os.path.splitext(f)[1].lower()
         if ext not in (".tif", ".tiff", ".png", ".jpg", ".jpeg"):
             continue
@@ -885,6 +890,11 @@ def export_targets(stack_dir, export_dir, targets, only=None):
     import stacker
     if not os.path.isdir(stack_dir):
         return
+    # `targets` kommt aus argparse schon als Liste. Wird versehentlich die Zeichenkette
+    # "instagram,web" uebergeben, iterierte die Schleife unten ueber BUCHSTABEN, faende kein
+    # bekanntes Ziel und schriebe wortlos nichts — ein stilles Nichts statt eines Fehlers.
+    if isinstance(targets, str):
+        targets = [x.strip().lower() for x in targets.split(",") if x.strip()]
     os.makedirs(export_dir, exist_ok=True)
     files = [only] if only else os.listdir(stack_dir)
     for f in files:
@@ -2224,6 +2234,26 @@ def run_astro(input_dir, work_dir, args):
         # Nicht verschlucken. Ein stiller Fehler hier hiesse: der Bericht fehlt und niemand
         # merkt es — genau die Sorte Fehler, die in diesem Projekt am meisten gekostet hat.
         print("  Messbericht nicht erstellt: %s" % e)
+
+    # Export-Ziele und Web-JPG. Beides fehlte im Astro-Modus vollstaendig — dem Hauptmodus
+    # des Programms. `--export instagram,whatsapp,...` und `--web-jpg` wurden angenommen,
+    # standen in der Hilfe und taten nichts; es kam nicht einmal eine Meldung.
+    #
+    # Exportiert wird NUR das fertige, gestreckte Bild. Im selben Ordner liegen die linearen
+    # Zwischenstaende (16- und 32-bit-TIFF); ein Instagram-JPG davon waere praktisch schwarz.
+    _fertig = None
+    try:
+        _fertig = next(f for f in sorted(os.listdir(out)) if f.lower().endswith("_astro.jpg"))
+    except (StopIteration, OSError):
+        _fertig = None
+    if _fertig is None and (getattr(args, "web_jpg", False) or getattr(args, "export", None)):
+        print("  (Export uebersprungen: das fertige Bild wurde nicht gefunden)",
+              file=sys.stderr)
+    elif _fertig is not None:
+        if getattr(args, "web_jpg", False):
+            export_web_jpg(out, os.path.join(work_dir, "export"), only=_fertig)
+        if getattr(args, "export", None):
+            export_targets(out, os.path.join(work_dir, "export"), args.export, only=_fertig)
     shutil.rmtree(reg_dir, ignore_errors=True)
     return out
 
@@ -2980,6 +3010,8 @@ def run_lucky(input_path, work_dir, args):
         return None
     if getattr(args, "web_jpg", False):
         export_web_jpg(stack_dir, os.path.join(work_dir, "export"))
+    if getattr(args, "export", None):
+        export_targets(stack_dir, os.path.join(work_dir, "export"), args.export)
     return stack_dir
 
 
@@ -3042,6 +3074,8 @@ def run_hdr(input_dir, work_dir, args):
         return None
     if getattr(args, "web_jpg", False):
         export_web_jpg(stack_dir, os.path.join(work_dir, "export"))
+    if getattr(args, "export", None):
+        export_targets(stack_dir, os.path.join(work_dir, "export"), args.export)
     return stack_dir
 
 

@@ -40,8 +40,10 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "core"))
 
 
-def _stapeln(pfade, skala, log):
+def _stapeln(pfade, skala, log, min_bilder=8):
     """Eine Serie tief stapeln. Gibt (Mono-Ergebnis oder None, Anzahl verworfener Aufnahmen).
+
+    `min_bilder` ist die Untergrenze fuer einen brauchbaren tiefen Stapel.
 
     Es wird STROEMEND gerechnet: eine laufende Summe statt einer Liste aller Aufnahmen. Der
     erste Entwurf hielt alle Aufnahmen und zusaetzlich alle ausgerichteten Kopien im Speicher —
@@ -101,7 +103,13 @@ def _stapeln(pfade, skala, log):
     if verworfen:
         log("    %d von %d Aufnahme(n) verworfen (unlesbar, abgeschnitten oder nicht "
             "ausrichtbar)" % (verworfen, len(pfade)))
-    if anzahl < 2:
+    # Ein Stapel aus zwei Aufnahmen ist kein tiefer Stapel. Die Szenenbank lebt davon, dass
+    # das Rauschen weggemittelt ist; bei zwei Aufnahmen sinkt es nur um den Faktor 1,4. An
+    # echten Daten passiert: die Serie `owl` mischt gebinnte und ungebinnte Aufnahmen, es
+    # blieben 2 von 59 uebrig — und daraus wurden trotzdem 24 Kacheln erzeugt.
+    if anzahl < min_bilder:
+        log("    nur %d von %d Aufnahmen brauchbar — zu duenn fuer einen tiefen Stapel, "
+            "Serie uebersprungen" % (anzahl, len(pfade)))
         return None, verworfen
     return (summe / anzahl).astype(np.float32), verworfen
 

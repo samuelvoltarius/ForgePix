@@ -8,6 +8,44 @@ Alle nennenswerten Änderungen an ForgePix. Format orientiert an
 
 ## [Unreleased]
 
+### Der Astro-Modus hat `--export` und `--web-jpg` ignoriert
+
+Beide Optionen stehen in der Hilfe, werden angenommen — und taten im **Astro-Modus** nichts.
+Kein Export, keine Meldung. `run_lucky` und `run_hdr` riefen `export_web_jpg`, aber nicht
+`export_targets`.
+
+| Betriebsart | `--web-jpg` | `--export` |
+|---|---|---|
+| Makro (`run_own_engine`) | ✓ | ✓ |
+| Langzeit | ✓ | ✓ |
+| Mosaik | ✓ | ✓ |
+| Lucky Imaging | ✓ | **fehlte** |
+| HDR | ✓ | **fehlte** |
+| **Astro** | **fehlte** | **fehlte** |
+
+Beide laufen jetzt in allen sechs Betriebsarten, und ein Test prüft das für jede einzeln.
+
+**Exportiert wird nur das fertige Bild.** Im Astro-Ergebnisordner liegen daneben die linearen
+Zwischenstände (16- und 32-bit-TIFF) und die Abdeckungsmaske; ohne diese Einschränkung entstanden
+daraus ein `..._linear_32bit_instagram.jpg` und ein 12-MB-`..._linear_print.tif`, beide praktisch
+schwarz. An echten Daten geprüft: jetzt genau sechs Dateien, alle mit Bildmittel 58–59 statt 0.
+
+Außerdem nimmt `export_targets` jetzt auch eine Zeichenkette an. Aus argparse kommt eine Liste;
+wer versehentlich `"instagram,web"` übergibt, ließ die Schleife über **Buchstaben** laufen — kein
+bekanntes Ziel, kein Export, keine Meldung.
+
+### Trainingsserien: gebinnt und ungebinnt gehören nicht zusammen
+
+Im Ordner `owl` liegen 1504×1504 und 3008×3008 nebeneinander, dieselbe Nacht, dieselbe
+Belichtungszeit. Die Referenz war zufällig die kleine, und alle großen fielen beim Stapeln als
+„nicht ausrichtbar" heraus: **57 von 59 Aufnahmen**. Die Bildgröße gehört damit in den
+Seriengrundschlüssel — getrennt ergeben dieselben Daten eine brauchbare Serie mit 57 Aufnahmen.
+
+Ein Stapel aus zwei Aufnahmen ist außerdem kein tiefer Stapel — die Szenenbank lebt davon, dass
+das Rauschen weggemittelt ist, und bei zwei Aufnahmen sinkt es nur um den Faktor 1,4. Aus der
+`owl`-Serie wurden trotzdem 24 Kacheln erzeugt. Serien, von denen weniger als acht Aufnahmen
+übrig bleiben, werden jetzt übersprungen, mit Begründung im Protokoll.
+
 ### Kometen-Stacking: es hat eine Bahn erfunden
 
 Der Modus richtet auf den **Kern** aus statt auf die Sterne. Dafür legt er eine Gerade durch die

@@ -87,6 +87,29 @@ class TestSerienFinden(unittest.TestCase):
         s = trainingspaare.serien_finden(self.d, min_subs=20, log=_stille)
         self.assertEqual(len(s), 2, "verschiedene Ordner duerfen nicht vermischt werden")
 
+    def test_verschiedene_bildgroessen_werden_getrennt(self):
+        """Im Ordner `owl` liegen 1504x1504 und 3008x3008 nebeneinander — gebinnt und
+        ungebinnt, dieselbe Nacht, dieselbe Belichtung. Die Referenz war die kleine, und alle
+        grossen fielen beim Stapeln als "nicht ausrichtbar" heraus: 57 von 59 Aufnahmen.
+        Getrennt sind es zwei Serien, und die grosse hat 57 brauchbare Aufnahmen."""
+        from astropy.io import fits
+        import numpy as np
+        ordner = os.path.join(self.d, "gemischt")
+        os.makedirs(ordner, exist_ok=True)
+        for i in range(22):
+            fits.writeto(os.path.join(ordner, "klein_%03d.fit" % i),
+                         np.full((40, 40), 0.1, np.float32),
+                         fits.Header({"IMAGETYP": "Light", "INSTRUME": "K", "EXPTIME": 60.0,
+                                      "DATE-OBS": "2022-03-07T03:%02d:00" % (i % 60)}))
+        for i in range(22):
+            fits.writeto(os.path.join(ordner, "gross_%03d.fit" % i),
+                         np.full((80, 80), 0.1, np.float32),
+                         fits.Header({"IMAGETYP": "Light", "INSTRUME": "K", "EXPTIME": 60.0,
+                                      "DATE-OBS": "2022-03-07T03:%02d:00" % (i % 60)}))
+        s = trainingspaare.serien_finden(ordner, min_subs=20, log=_stille)
+        self.assertEqual(len(s), 2, "gebinnt und ungebinnt landeten in einer Serie")
+        self.assertEqual(sorted(len(v) for v in s.values()), [22, 22])
+
     def test_kalibrierbilder_kommen_nicht_hinein(self):
         self._schreiben("darks", 25, art="Dark Frame")
         self.assertEqual(trainingspaare.serien_finden(self.d, min_subs=20, log=_stille), {})

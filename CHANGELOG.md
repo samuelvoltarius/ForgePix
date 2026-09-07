@@ -8,6 +8,42 @@ All notable changes to ForgePix. Format based on
 
 ## [Unreleased]
 
+### The astro mode ignored `--export` and `--web-jpg`
+
+Both options appear in the help, are accepted — and did nothing in the **astro mode**. No export,
+no message. `run_lucky` and `run_hdr` called `export_web_jpg` but not `export_targets`.
+
+| Mode | `--web-jpg` | `--export` |
+|---|---|---|
+| Macro (`run_own_engine`) | ✓ | ✓ |
+| Long exposure | ✓ | ✓ |
+| Mosaic | ✓ | ✓ |
+| Lucky imaging | ✓ | **missing** |
+| HDR | ✓ | **missing** |
+| **Astro** | **missing** | **missing** |
+
+Both now run in all six modes, and a test checks each of them individually.
+
+**Only the finished image is exported.** The astro output folder also holds the linear
+intermediates (16- and 32-bit TIFF) and the coverage mask; without that restriction they produced
+a `..._linear_32bit_instagram.jpg` and a 12 MB `..._linear_print.tif`, both effectively black.
+Verified on real data: exactly six files now, all with an image mean of 58–59 instead of 0.
+
+`export_targets` also accepts a string now. argparse hands it a list; passing `"instagram,web"` by
+mistake made the loop iterate over **characters** — no known target, no export, no message.
+
+### Training series: binned and unbinned do not belong together
+
+The folder `owl` holds 1504×1504 and 3008×3008 side by side, same night, same exposure time. The
+reference happened to be the small one, and every large frame dropped out during stacking as "not
+alignable": **57 of 59 frames**. Image size therefore belongs in the series key — separated, the
+same data yields a usable series of 57 frames.
+
+A stack of two frames is also not a deep stack — the scene bank depends on the noise being
+averaged away, and with two frames it only drops by a factor of 1.4. The `owl` series nevertheless
+produced 24 tiles. Series with fewer than eight surviving frames are now skipped, with a reason in
+the log.
+
 ### Comet stacking: it invented a track
 
 The mode aligns on the **nucleus** instead of the stars. For that it fits a line through the

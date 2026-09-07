@@ -71,9 +71,16 @@ def serien_finden(ordner, min_subs=20, log=log_print):
             r = _richtung(h)
             if r is None:
                 ohne_richtung += 1
+            # Die BILDGROESSE gehoert in den Schluessel. Im Ordner `owl` liegen 1504x1504
+            # und 3008x3008 nebeneinander (gebinnt und ungebinnt, dieselbe Nacht, dieselbe
+            # Belichtung). Die Referenz war die kleine, und alle grossen fielen beim Stapeln
+            # als "nicht ausrichtbar" heraus: 57 von 59 Aufnahmen. Getrennt sind es zwei
+            # brauchbare Serien.
+            groesse = (h.get("NAXIS1"), h.get("NAXIS2"))
             grob = (str(h.get("INSTRUME", "?")).strip(), t,
                     str(h.get("DATE-OBS", ""))[:10],       # Nacht
-                    wurzel)                                # gleicher Ordner
+                    wurzel,                                # gleicher Ordner
+                    groesse)                               # gleiche Bildgroesse
             vorlaeufig.setdefault(grob, []).append((p, r))
 
     # Zweiter Durchgang: je Grobgruppe die Richtungen nach Abstand zu Feldern zusammenfassen.
