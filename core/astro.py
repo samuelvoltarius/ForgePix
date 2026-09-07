@@ -511,7 +511,18 @@ def _estimate_star_transform(refg, img_g):
 def _estimate_star_shift(refg, img_g):
     """REINE Translation aus dem Offset-Voting der Sternzentren — für align_mode='shift'
     (nachgeführte Montierung ohne Feldrotation). Bewusst KEINE Rotations-Schätzung: der Nutzer
-    hat zugesichert, dass nur Drift/Dither vorliegt. Gibt 2x3-Translationsmatrix oder None."""
+    hat zugesichert, dass nur Drift/Dither vorliegt. Gibt 2x3-Translationsmatrix oder None.
+
+    **Gemessene Warnung — bei Feldrotation scheitert das hier nicht, es liegt daneben.** Bei
+    einer Drehung von 8° gab dieses Verfahren an einer Testszene kein `None` zurück, sondern
+    eine Verschiebung von 3,8 / 6,3 px. Es lehnt den Frame also nicht ab, es registriert ihn
+    falsch — der Stapel bekommt doppelte, verschmierte Sterne, und nichts meldet sich. Erst bei
+    grösseren Winkeln kommt `None`: an einer echten Serie (IC 434, Seestar S30, azimutal) ab
+    etwa dem 25. Sub, und dort fielen dann 98 % der Aufnahmen weg.
+
+    Wer nicht sicher weiss, dass die Montierung parallaktisch nachführt, nimmt
+    `_estimate_star_transform_robust`. Die Vorprüfung (`core/vorpruefung.py`) meldet die
+    Kombination aus azimutaler Kamera und `align_mode='shift'` von sich aus."""
     ref_pts, img_pts = _star_centroids(refg), _star_centroids(img_g)
     if len(ref_pts) < 8 or len(img_pts) < 8:
         return None
