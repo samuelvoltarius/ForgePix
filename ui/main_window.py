@@ -447,7 +447,10 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, ProjectM
         self.astro_starless_stretch.setRange(-1.0, 1.0); self.astro_starless_stretch.setSingleStep(0.05)
         self.astro_starless_stretch.setValue(-1.0)          # -1 = aus
         self.astro_color_stretch = QDoubleSpinBox(); self.astro_color_stretch.setRange(0.0, 3.0)
-        self.astro_color_stretch.setSingleStep(0.1); self.astro_color_stretch.setValue(0.0)
+        # 1.0 wie in der Kommandozeile: an, ohne zusaetzliche Farbverstaerkung. Bei 0
+        # entsaettigt die kanalweise Streckung die Sterne — an M51 gemessen Farbspreizung
+        # 8 statt 25, und 50 % mehr ausgebrannte Flaeche.
+        self.astro_color_stretch.setSingleStep(0.1); self.astro_color_stretch.setValue(1.0)
         self.astro_unpurple = QDoubleSpinBox(); self.astro_unpurple.setRange(0.0, 1.0)
         self.astro_unpurple.setSingleStep(0.1); self.astro_unpurple.setValue(0.0)
         self.dark_skalieren = QCheckBox(tr("Dark auf die Belichtungszeit der Lights umrechnen"))

@@ -1364,10 +1364,21 @@ def main():
     ap.add_argument("--unmix", type=float, default=None, metavar="FAKTOR",
                     help="Entmischung Ha/OIII von Hand setzen (0..0.5). Ohne Angabe nimmt "
                          "ForgePix den Startwert des gewaehlten Filters")
-    ap.add_argument("--astro-color-stretch", type=float, default=0.0, metavar="SAETTIGUNG",
-                    help="Farberhaltend strecken (0=aus, 1.8 empfohlen): nur die Helligkeit laeuft "
-                         "durch die Kurve, die Kanalverhaeltnisse bleiben. Gegen das Ausgewaschene "
-                         "einer kanalweisen Streckung, bei der der staerkste Kanal durchschlaegt")
+    # Vorgabe 1.0 = AN, ohne zusaetzliche Farbverstaerkung. Aus war die falsche Vorgabe:
+    # eine kanalweise Streckung entsaettigt massiv, und die Funktion, die das behebt, lag
+    # brach. An M51 gemessen, Farbspreizung der Sterne in einem Band unterhalb der Saettigung
+    # (die hellsten Pixel sind geklippt und taugen dafuer nicht):
+    #
+    #     mit farberhaltender Streckung   25 und 22    (die beiden Fassungen, die Alfred gut fand)
+    #     ohne                             8 und  8    ("alles weiss und unscharf")
+    #
+    # Dazu 50 % mehr Pixel ueber Helligkeit 200: kleinere farbige Sterne gegen groessere
+    # weisse. Der Wert 1.0 erhaelt nur den Farbton; groesser verstaerkt die Farbe zusaetzlich.
+    ap.add_argument("--astro-color-stretch", type=float, default=1.0, metavar="SAETTIGUNG",
+                    help="Farberhaltend strecken (Vorgabe 1.0 = an ohne Verstaerkung, 0 = aus, "
+                         "1.8 = kraeftiger): nur die Helligkeit laeuft durch die Kurve, die "
+                         "Kanalverhaeltnisse bleiben. Gegen das Ausgewaschene einer kanalweisen "
+                         "Streckung, bei der der staerkste Kanal durchschlaegt")
     ap.add_argument("--astro-starless-stretch", type=float, default=None, metavar="STERNSTAERKE",
                     help="Sterne vor dem Strecken entfernen, den Nebel strecken und die Sterne "
                          "dosiert zurueckholen (0=sternenlos, 0.8 empfohlen, 1=voll). Sonst "

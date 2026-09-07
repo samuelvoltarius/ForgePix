@@ -8,6 +8,49 @@ All notable changes to ForgePix. Format based on
 
 ## [Unreleased]
 
+### The largest stars kept their ring — the area limit was in the wrong place
+
+Star protection only counted regions up to **2000 px** as a star; anything larger was treated
+as an extended object (galaxy, nebula) and left unprotected so it would still be sharpened. The
+brightest stars are exactly what exceeds that limit. Measured on the M51 stack, regions above 8
+sigma:
+
+| | Area | Size | Roundness |
+|---|---|---|---|
+| galaxy | 139664 px | 370x599 | 0.62 |
+| brightest star | 11738 px | 181x190 | 0.95 |
+| next star | 3627 px | 95x103 | 0.92 |
+| median of all | 28 px | | |
+
+The two stars above 2000 px kept their black ring in the finished image — visible, and
+identifiable by their coordinates as exactly those two. There is a factor of 12 between the
+largest star and the galaxy; the limit belongs in between and is now **relative to the image
+area** (0.3 %, here 32114 px) so it fits any sensor size. With that, 1975 of 1976 regions count
+as stars — only the galaxy does not.
+
+A small distant object below the limit is protected too, and therefore not sharpened. That
+costs sharpness but produces no rings; the other way round would be a visible defect.
+
+### Colour-preserving stretch is now the default
+
+`--astro-color-stretch` was 0 (off). Without it each channel runs through the stretch curve on
+its own, the strongest heads for white and the weaker ones catch up — all channels converge and
+stars turn white. The function that avoids this has existed all along; it was simply unused.
+
+Measured on M51, colour spread of stars in a brightness band **below** saturation (the
+brightest pixels are clipped and inherently have no spread — that was a measurement trap of its
+own):
+
+| | Star colour | Pixels brighter than 200 |
+|---|---|---|
+| with colour-preserving stretch | **25** and **22** | 0.354 % and 0.430 % |
+| without | 8 and 8 | 0.541 % and 0.528 % |
+
+So a third of the colour and 50 % more blown-out area. In the LINEAR result the colour is
+equally present in every case (B/G 0.597 against 0.603) — it is lost only in the stretch.
+
+The default is now 1.0: hue is preserved, with no extra boost. The UI follows suit.
+
 ### Training now emulates MEASURED cameras instead of random ranges
 
 The training noise model was built correctly in physical terms — Poisson shot noise, Gaussian

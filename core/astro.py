@@ -2219,11 +2219,25 @@ def _detail_support(lum, thresh=2.5):
     return cv2.GaussianBlur(sup, (0, 0), 2.0)            # weiche Ränder gegen Maskenkanten
 
 
-# Ab dieser Flaeche gilt ein heller Bereich als ausgedehnt (Galaxie, Nebel) und nicht mehr
-# als Stern. Am M51-Stapel gemessen: die hellen Bereiche ueber 8 Sigma sind bei Sternen
-# zweistellig bis wenige hundert Pixel gross, die Galaxie haengt als ein Bereich von
-# Zehntausenden zusammen. Dazwischen liegt eine Groessenordnung Luft.
-_MAX_STERNFLAECHE = 2000
+# Ab welchem ANTEIL der Bildflaeche ein heller Bereich als ausgedehnt gilt (Galaxie, Nebel)
+# und nicht mehr als Stern.
+#
+# Eine feste Grenze von 2000 px lag auf der falschen Seite. Am M51-Stapel (3978x2691) sind
+# die Bereiche ueber 8 Sigma gemessen:
+#
+#     Galaxie          139664 px   370x599   Rundheit 0,62
+#     hellster Stern    11738 px   181x190   Rundheit 0,95  (mit Beugungsspikes)
+#     naechster          3627 px    95x103   Rundheit 0,92
+#     Median aller          28 px
+#
+# Genau die beiden Sterne ueber 2000 px behielten ihren schwarzen Ring, weil sie als
+# "ausgedehnt" galten und der Schutz sie ausliess — im Bild deutlich sichtbar. Zwischen dem
+# groessten Stern und der Galaxie liegt Faktor 12 Luft; die Grenze gehoert dazwischen.
+#
+# Relativ zur Bildflaeche, damit sie bei jeder Sensorgroesse passt: 0,3 % sind hier 32100 px.
+# Ein kleines fernes Objekt darunter wird mitgeschuetzt und also nicht geschaerft — das kostet
+# Schaerfe, macht aber keine Ringe. Andersherum waere es ein sichtbarer Fehler.
+_MAX_STERNFLAECHE_ANTEIL = 0.003
 
 
 def deconvolve(f, psf=None, iterations=15, star_protect=0.85, regularize=0.0,
@@ -2334,7 +2348,8 @@ def deconvolve(f, psf=None, iterations=15, star_protect=0.85, regularize=0.0,
                 # Kompakt = Stern. Die Galaxie haengt als EIN grosser Bereich zusammen und
                 # faellt hier heraus; ihr Kern wird weiter geschaerft.
                 _tab = np.zeros(_n, np.uint8)
-                _tab[1:] = (_stats[1:, cv2.CC_STAT_AREA] <= _MAX_STERNFLAECHE).astype(np.uint8)
+                _grenze = max(2000, int(_MAX_STERNFLAECHE_ANTEIL * lum.shape[0] * lum.shape[1]))
+                _tab[1:] = (_stats[1:, cv2.CC_STAT_AREA] <= _grenze).astype(np.uint8)
                 _sterne = _tab[_marken]
                 _scheiben = cv2.dilate(_sterne, cv2.getStructuringElement(
                     cv2.MORPH_ELLIPSE, (2 * _r + 1, 2 * _r + 1)))

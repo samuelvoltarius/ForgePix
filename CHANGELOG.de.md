@@ -8,6 +8,51 @@ Alle nennenswerten Änderungen an ForgePix. Format orientiert an
 
 ## [Unreleased]
 
+### Die groessten Sterne behielten ihren Ring — die Flaechengrenze lag falsch
+
+Der Stern-Schutz nahm nur Bereiche bis **2000 px** als Stern; alles Groessere galt als
+ausgedehntes Objekt (Galaxie, Nebel) und blieb ungeschuetzt, damit dort weiter geschaerft wird.
+Genau die hellsten Sterne fallen aber ueber diese Grenze. Am M51-Stapel gemessen, Bereiche
+ueber 8 Sigma:
+
+| | Flaeche | Groesse | Rundheit |
+|---|---|---|---|
+| Galaxie | 139664 px | 370x599 | 0,62 |
+| hellster Stern | 11738 px | 181x190 | 0,95 |
+| naechster Stern | 3627 px | 95x103 | 0,92 |
+| Median aller | 28 px | | |
+
+Die beiden Sterne ueber 2000 px behielten im fertigen Bild ihren schwarzen Ring — sichtbar,
+und mit ihren Koordinaten eindeutig denselben zuzuordnen. Zwischen dem groessten Stern und der
+Galaxie liegt Faktor 12 Luft; die Grenze gehoert dazwischen und ist jetzt **relativ zur
+Bildflaeche** (0,3 %, hier 32114 px), damit sie bei jeder Sensorgroesse passt. Danach gelten
+1975 von 1976 Bereichen als Stern — nur die Galaxie nicht.
+
+Ein kleines fernes Objekt unter der Grenze wird mitgeschuetzt und also nicht geschaerft. Das
+kostet Schaerfe, macht aber keine Ringe; andersherum waere es ein sichtbarer Fehler.
+
+### Farberhaltendes Strecken ist jetzt die Vorgabe
+
+`--astro-color-stretch` stand auf 0 (aus). Ohne es laeuft jeder Kanal einzeln durch die
+Streckungskurve, der staerkste laeuft gegen Weiss und die schwaecheren holen auf — alle Kanaele
+konvergieren, die Sterne werden weiss. Die Funktion dagegen gibt es laengst, sie lag nur brach.
+
+An M51 gemessen, Farbspreizung der Sterne in einem Helligkeitsband **unterhalb** der Saettigung
+(die hellsten Pixel sind geklippt und haben naturgemaess keine Spreizung — das war eine eigene
+Messfalle):
+
+| | Sternfarbe | Pixel heller als 200 |
+|---|---|---|
+| mit farberhaltender Streckung | **25** und **22** | 0,354 % und 0,430 % |
+| ohne | 8 und 8 | 0,541 % und 0,528 % |
+
+Also ein Drittel der Farbe und 50 % mehr ausgebrannte Flaeche. Im LINEAREN Ergebnis ist die
+Farbe in allen Faellen gleich vorhanden (B/G 0,597 gegen 0,603) — verloren geht sie erst beim
+Strecken.
+
+Vorgabe ist jetzt 1.0: Farbton bleibt erhalten, ohne zusaetzliche Verstaerkung. Die Oberflaeche
+zieht mit.
+
 ### Das Training bildet jetzt GEMESSENE Kameras nach statt Zufallsbereiche
 
 Das Rauschmodell im Training war physikalisch richtig gebaut — Poisson-Schrotrauschen,
