@@ -1413,6 +1413,19 @@ def main():
                     help="Unschaerfemaskierung innerhalb der DDP-Kurve (0=aus, 0.3-0.8 sinnvoll) "
                          "— nur bei --astro-stretch-mode ddp. Im Original gehört sie dazu, "
                          "weil die Kompression sonst flau wirkt")
+    ap.add_argument("--ki-experimentell", action="store_true",
+                    help="Auch EXPERIMENTELLE eigene Modelle im Ablauf verwenden (Hintergrund, "
+                         "Entrauschen, Schaerfen). Freigegebene Modelle laufen ohnehin "
+                         "automatisch mit; experimentelle sind ungeprueft und bleiben ohne "
+                         "diesen Schalter aus.")
+    ap.add_argument("--ki-aus", action="store_true",
+                    help="Eigene KI-Modelle nicht verwenden, auch keine freigegebenen.")
+    ap.add_argument("--ki-staerke", type=float, default=0.5, metavar="0..1",
+                    help="Wirkstaerke der eigenen KI-Modelle (Vorgabe 0.5).")
+    ap.add_argument("--ki-geraet", default="auto", metavar="GERAET",
+                    help="Rechenwerk fuer die eigenen Modelle: auto, cpu oder gpu.")
+    ap.add_argument("--ki-modellordner", default=None, metavar="ORDNER",
+                    help="Anderer Ordner mit Modellen als assets/models.")
     ap.add_argument("--dark-skalieren", action="store_true",
                     help="Master-Dark auf die Belichtungszeit/Temperatur der Lights umrechnen, wenn "
                          "sie nicht passt (Siril: calibrate -opt). Der Bias wird dabei NICHT "
@@ -2726,6 +2739,81 @@ def _zuschnitt_auf_beitraege(result, stack_info, args, drizzle_info=None):
     return result, stack_info, drizzle_info
 
 
+def _ki_modelle(args, log=print):
+    """Welches eigene Modell fuer welchen Schritt? Gibt {Aufgabe: Modell-Kennung}.
+
+    ForgePix bringt eigene Modelle mit (`assets/models`), aber der Stapel-Ablauf hat sie nie
+    angefasst: `focus_cull_stack.py` importierte `ai_restore` an keiner Stelle. Erreichbar
+    waren sie nur ueber Dialoge in der Oberflaeche, ueber Rezepte und ueber `--model`. Wer
+    stapelt, bekam sie also nie zu sehen — auch dann nicht, wenn das externe Werkzeug fehlte,
+    das denselben Schritt haette machen sollen.
+
+    Die Regel, nach der ausgewaehlt wird:
+
+    * **Freigegeben** (`release_approved`) heisst **automatisch**. Dafuer ist die Freigabe da.
+    * **Experimentell** heisst **nur auf ausdruecklichen Wunsch** (`--ki-experimentell`). Ein
+      ungeprueftes Modell in jedes Bild zu rechnen waere genau die Art Fehler, die durchlaeuft
+      und ein plausibles Ergebnis liefert.
+    * `--ki-aus` schaltet alles ab, auch Freigegebenes.
+
+    Heute ist keines der vier Modelle freigegeben, der Normalbetrieb aendert sich also nicht.
+    Der Unterschied ist, dass es jetzt ueberhaupt einen Weg gibt: mit einem Schalter laufen
+    sie im Ablauf mit, und sobald eines freigegeben wird, greift es von selbst.
+    """
+    if getattr(args, "ki_aus", False):
+        return {}
+    zwischenspeicher = getattr(args, "_ki_auswahl", None)
+    if zwischenspeicher is not None:
+        return zwischenspeicher
+    auswahl = {}
+    try:
+        import ai_restore
+        experimentell = bool(getattr(args, "ki_experimentell", False))
+        for eintrag in ai_restore.list_models(getattr(args, "ki_modellordner", None)):
+            aufgabe = eintrag.get("task")
+            if aufgabe not in ai_restore.TASKS or not eintrag.get("available"):
+                continue
+            if not eintrag.get("release_approved") and not experimentell:
+                continue
+            # Bei mehreren Modellen fuer dieselbe Aufgabe hat das freigegebene Vorrang.
+            bisher = auswahl.get(aufgabe)
+            if bisher is None or (eintrag.get("release_approved") and not bisher[1]):
+                auswahl[aufgabe] = (eintrag["id"], bool(eintrag.get("release_approved")))
+        auswahl = {k: v[0] for k, v in auswahl.items()}
+    except Exception as e:
+        log("  (eigene KI-Modelle nicht verfuegbar: %s)" % e)
+        auswahl = {}
+    args._ki_auswahl = auswahl
+    return auswahl
+
+
+def _ki_anwenden(bild, aufgabe, args, staerke=None, log=print):
+    """Ein eigenes Modell auf das Bild anwenden. Gibt (Ergebnis, True) oder (Bild, False).
+
+    Faellt es aus, wird das gesagt und der klassische Weg genommen — nicht stillschweigend
+    weitergelaufen. Wer eine KI-Verarbeitung anfordert und keine Wirkung sieht, haelt das
+    Ergebnis sonst fuer gerechnet.
+    """
+    kennung = _ki_modelle(args, log).get(aufgabe)
+    if not kennung:
+        return bild, False
+    try:
+        import ai_restore
+        if staerke is None:
+            staerke = float(getattr(args, "ki_staerke", 0.5) or 0.5)
+        log("  Eigenes KI-Modell fuer %s: %s (Staerke %.0f %%)"
+            % (aufgabe, kennung, 100 * staerke))
+        aus = ai_restore.restore(bild, kennung,
+                                 model_dir=getattr(args, "ki_modellordner", None),
+                                 strength=staerke, allow_experimental=True,
+                                 log=lambda *a, **k: None,
+                                 device=getattr(args, "ki_geraet", "auto"))
+        return np.asarray(aus, np.float32), True
+    except Exception as e:
+        log("  (KI-Modell %s fehlgeschlagen: %s) -> klassischer Weg" % (kennung, e))
+        return bild, False
+
+
 def _hoefe_am_ergebnis(stack_dir, messbericht):
     """Ringtiefe und Hoffarbe am geschriebenen 32-bit-Linear nachmessen.
 
@@ -2798,7 +2886,12 @@ def _astro_write(result, work_dir, paths, args, astro, *, drizzle_info=None,
         phase("background")
         backend = getattr(args, "astro_bg_backend", "own")
         gx_path = getattr(args, "graxpert_path", None)
-        if backend == "graxpert":
+        result, _ki = _ki_anwenden(result, "background", args)
+        if _ki:
+            backend = "erledigt"
+        if backend == "erledigt":
+            pass
+        elif backend == "graxpert":
             try:
                 import graxpert_engine
                 if graxpert_engine.available(gx_path):
@@ -2821,10 +2914,12 @@ def _astro_write(result, work_dir, paths, args, astro, *, drizzle_info=None,
             print("  Hintergrund/Gradient entfernen …")
             result = astro.background_extract(result)
     if getattr(args, "astro_deconv", False):
-        print("  Dekonvolution (Richardson-Lucy, PSF aus Sternen) …")
-        result = astro.deconvolve(result, iterations=getattr(args, "astro_deconv_iter", 15),
-                                  star_protect=getattr(args, "astro_deconv_protect", 0.85),
-                                  regularize=getattr(args, "astro_deconv_regularize", 0.0))
+        result, _ki = _ki_anwenden(result, "deblur", args)
+        if not _ki:
+            print("  Dekonvolution (Richardson-Lucy, PSF aus Sternen) …")
+            result = astro.deconvolve(result, iterations=getattr(args, "astro_deconv_iter", 15),
+                                      star_protect=getattr(args, "astro_deconv_protect", 0.85),
+                                      regularize=getattr(args, "astro_deconv_regularize", 0.0))
     if getattr(args, "astro_synthstar", False):
         # Auf den LINEAREN Daten, nicht auf dem gestreckten Bild: die Sternerkennung braucht
         # den linearen Kontrast, und der Fluss, den synthstar erhaelt, ist nur hier physikalisch
@@ -2836,9 +2931,11 @@ def _astro_write(result, work_dir, paths, args, astro, *, drizzle_info=None,
     if _dn > 0:
         # Luminanz-Rauschreduktion auf den LINEAREN Daten (vor dem Strecken — PixInsight-MMT-Prinzip):
         # Multi-Skalen-Soft-Threshold; sonst zieht der Stretch das Hintergrundrauschen ungebremst hoch.
-        print(f"  Rauschreduktion (Multi-Skalen-Wavelet, Stärke {_dn:.2f}) …")
-        import wavelet
-        result = wavelet.wavelet_denoise(result.astype(np.float32), strength=_dn)
+        result, _ki = _ki_anwenden(result, "denoise", args, staerke=min(1.0, _dn))
+        if not _ki:
+            print(f"  Rauschreduktion (Multi-Skalen-Wavelet, Stärke {_dn:.2f}) …")
+            import wavelet
+            result = wavelet.wavelet_denoise(result.astype(np.float32), strength=_dn)
     # Eigene Bildformel als letzter Schritt am LINEAREN Stapel — vor Farbkalibrierung und
     # Streckung, weil dort die Kanalverhaeltnisse noch unverfaelscht sind. PixelMath war bisher
     # nur ein Handwerkzeug in der Oberflaeche; damit liess es sich weder skripten noch in einen

@@ -8,6 +8,50 @@ All notable changes to ForgePix. Format based on
 
 ## [Unreleased]
 
+### The bundled AI models can finally reach the stacking pipeline at all
+
+ForgePix ships four of its own models — background, denoise, deblur, star separation — and
+`core/focus_cull_stack.py` imported `ai_restore` **nowhere**. They were reachable only through
+dialogs in the UI, through recipes, and through `--model`. Anyone stacking never saw one, not
+even when the external tool that was supposed to do the same step was missing.
+
+The models now hook into three points of the pipeline (background, deconvolution, denoising),
+under one rule:
+
+* **approved** (`release_approved`) -> runs **automatically**
+* **experimental** -> only with `--ki-experimentell`
+* `--ki-aus` -> nothing at all, not even approved models
+
+If a model fails, that is stated and the classical path is taken — never a silent continue.
+
+None of the four is approved today, so normal operation does not change. That is deliberate,
+and measured. On M51 (800x800 crops, against the classical path):
+
+| | classical | own model |
+|---|---|---|
+| Background, gradient | 0.91 -> **0.43 %** | 0.91 -> 0.99 % |
+| Denoise, fine structure at equal noise | 0.001692 -> 0.001308 | 0.001692 -> **0.001503** |
+| Sharpen, fine structure on the galaxy | **x2.4** | x1.18 |
+| Sharpen, star FWHM in the star field | 4.79 (unchanged) | **4.51** |
+
+The background model is worse than doing nothing, and the deblur model is clearly weaker than
+Richardson-Lucy on extended objects. The denoise model, however, keeps **15 % more fine
+structure** at the same noise reduction.
+
+And one finding that points beyond today: **the deblur model produces no rings.** Radial
+profile around stars, excess over the sky:
+
+    r:        1      2      3      4      5      6      7      8
+    without +0.342 +0.236 +0.138 +0.066 +0.030 +0.014 +0.007 +0.004
+    model   +0.376 +0.250 +0.137 +0.061 +0.023 +0.009 +0.005 +0.004
+
+It sharpens the core and falls monotonically beyond it — exactly what Richardson-Lucy cannot
+do in principle. The effect is weak today (NAFNet width 16). A larger model could replace
+deconvolution and restore the star sharpening that the ring protection currently costs.
+
+New switches: `--ki-experimentell`, `--ki-aus`, `--ki-staerke`, `--ki-geraet`,
+`--ki-modellordner`.
+
 ### The bright ring around every star — the other half of the deconvolution rings
 
 The black ring was gone, the bright one was not. Richardson-Lucy oscillates in both directions

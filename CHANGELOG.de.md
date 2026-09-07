@@ -8,6 +8,53 @@ Alle nennenswerten Änderungen an ForgePix. Format orientiert an
 
 ## [Unreleased]
 
+### Die eigenen KI-Modelle kommen im Stapel-Ablauf ueberhaupt erst an
+
+ForgePix liefert vier eigene Modelle mit — Hintergrund, Entrauschen, Schaerfen,
+Sterntrennung — und `core/focus_cull_stack.py` importierte `ai_restore` an **keiner Stelle**.
+Erreichbar waren sie nur ueber Dialoge in der Oberflaeche, ueber Rezepte und ueber `--model`.
+Wer stapelt, bekam nie eines zu sehen, auch dann nicht, wenn das externe Werkzeug fehlte, das
+denselben Schritt haette machen sollen.
+
+Die Modelle haengen jetzt an drei Stellen des Ablaufs (Hintergrund, Dekonvolution,
+Entrauschen), nach einer Regel:
+
+* **freigegeben** (`release_approved`) -> laeuft **automatisch** mit
+* **experimentell** -> nur mit `--ki-experimentell`
+* `--ki-aus` -> gar nichts, auch nichts Freigegebenes
+
+Faellt ein Modell aus, wird das gesagt und der klassische Weg genommen — nicht stillschweigend
+weitergelaufen.
+
+Heute ist keines der vier freigegeben, der Normalbetrieb aendert sich also nicht. Das ist
+Absicht, und zwar gemessen. An M51 (800x800-Ausschnitte, gegen den klassischen Weg):
+
+| | klassisch | eigenes Modell |
+|---|---|---|
+| Hintergrund, Gradient | 0,91 -> **0,43 %** | 0,91 -> 0,99 % |
+| Entrauschen, Feinstruktur bei gleichem Rauschen | 0,001692 -> 0,001308 | 0,001692 -> **0,001503** |
+| Schaerfen, Feinstruktur Galaxie | **x2,4** | x1,18 |
+| Schaerfen, Sterne FWHM im Sternfeld | 4,79 (unveraendert) | **4,51** |
+
+Das Hintergrund-Modell ist schlechter als gar nichts, das Schaerfen-Modell auf ausgedehnten
+Objekten deutlich schwaecher als Richardson-Lucy. Das Entrauschen-Modell dagegen behaelt bei
+gleicher Rauschunterdrueckung **15 % mehr Feinstruktur**.
+
+Und ein Befund, der ueber den Tag hinausweist: **das Schaerfen-Modell macht keine Ringe.**
+Radialprofil um die Sterne, Ueberschuss ueber den Himmel:
+
+    r:        1      2      3      4      5      6      7      8
+    ohne  +0.342 +0.236 +0.138 +0.066 +0.030 +0.014 +0.007 +0.004
+    KI    +0.376 +0.250 +0.137 +0.061 +0.023 +0.009 +0.005 +0.004
+
+Es schaerft den Kern und faellt dahinter durchgehend ab — genau das, was Richardson-Lucy
+prinzipiell nicht kann. Heute ist die Wirkung schwach (NAFNet width 16). Ein groesseres Modell
+koennte die Dekonvolution ersetzen und die Sternschaerfung zurueckbringen, die der Ringschutz
+gerade kostet.
+
+Neue Schalter: `--ki-experimentell`, `--ki-aus`, `--ki-staerke`, `--ki-geraet`,
+`--ki-modellordner`.
+
 ### Der helle Ring um jeden Stern — der zweite Teil der Dekonvolutionsringe
 
 Der schwarze Ring war weg, der helle nicht. Richardson-Lucy schwingt an Punktquellen in beide
