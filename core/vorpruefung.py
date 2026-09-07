@@ -54,16 +54,24 @@ def kopfdaten(paths, max_dateien=400, log=log_print):
         from astropy.io import fits
     except ImportError:
         return []
-    aus = []
+    aus, unlesbar = [], 0
     for p in stichprobe:
         try:
             h = fits.getheader(p)
         except Exception:
+            unlesbar += 1
             continue
         aus.append({k: h[k] for k in _FELDER if k in h})
     if len(stichprobe) < len(fits_pfade):
         log("    Vorpruefung: %d von %d Aufnahmen als Stichprobe gelesen"
             % (len(stichprobe), len(fits_pfade)))
+    # Unlesbare Kopfdaten melden. Ohne diese Zeile faellt die ganze Vorpruefung stillschweigend
+    # aus, wenn keine Datei lesbar ist — und niemand erfaehrt, warum nichts dasteht. Genau die
+    # Sorte Fehler, die dieses Projekt schon mehrfach teuer bezahlt hat.
+    if unlesbar:
+        log("    Vorpruefung: %d von %d Kopfdaten nicht lesbar%s"
+            % (unlesbar, len(stichprobe),
+               " — die Vorpruefung entfaellt." if not aus else "."))
     return aus
 
 

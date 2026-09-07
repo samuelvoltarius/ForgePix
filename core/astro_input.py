@@ -179,8 +179,19 @@ def kalibrierung_nach_header(wurzeln, max_dateien=4000, log=None, passend_zu=Non
         if licht:
             for art in gefunden:
                 vorher = len(gefunden[art])
-                gefunden[art] = [p for p in gefunden[art] if _passt_dazu(_kopf(p), licht, art)]
-                if log and vorher and not gefunden[art]:
+                behalten, unlesbar = [], 0
+                for p in gefunden[art]:
+                    k = _kopf(p)
+                    if not k:
+                        unlesbar += 1          # nicht lesbar ist NICHT dasselbe wie unpassend
+                        continue
+                    if _passt_dazu(k, licht, art):
+                        behalten.append(p)
+                gefunden[art] = behalten
+                if log and unlesbar:
+                    log("    Kalibrierung: %d %s-Aufnahme(n) nicht lesbar — uebergangen."
+                        % (unlesbar, art))
+                if log and vorher and not behalten:
                     log("    Kalibrierung: %d %s-Aufnahme(n) gefunden, aber keine passt zu "
                         "dieser Serie (Kamera, Sensorgroesse, Belichtung) — nicht verwendet."
                         % (vorher, art))
