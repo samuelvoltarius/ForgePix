@@ -2282,6 +2282,29 @@ def deconvolve(f, psf=None, iterations=15, star_protect=0.85, regularize=0.0,
         hi = cv2.GaussianBlur(hi, (0, 0), 2.0)
         m = hi[..., None] if out.ndim == 3 else hi
         out = out * (1 - m) + f.astype(np.float32) * m
+    # Kein Unterschwinger unter den Himmel. Das ist der eigentliche Riegel gegen die
+    # RL-Ringe — nicht die Regularisierung.
+    #
+    # `ratio` darf bis auf 0,3 fallen, ein Pixel also auf 30 %. Rund um einen hellen Stern
+    # schiebt Richardson-Lucy Licht aus den Flanken in den Kern; das Umfeld faellt dabei unter
+    # den Himmelspegel. Im LINEAREN Bild ist das winzig — an M51 gemessen 0,0019 bei einem
+    # Hintergrund von 0,0381, also 5 %. Die Streckung ist nahe Null aber fast senkrecht und
+    # macht daraus Schwarz: im fertigen JPG lag der Ring bei jedem gemessenen Stern auf 0,000,
+    # der Median der Ringtiefe bei -0,114 gegen +0,034 ohne Dekonvolution.
+    #
+    # Regularisierung hilft dagegen NICHT — bei reg = 0 / 0,02 / 0,05 / 0,1 blieb die Ringtiefe
+    # bei -0,0019. Der Fehler ist nicht mangelnde Glaettung, sondern dass ueberhaupt Licht aus
+    # dem Himmel genommen wird. Physikalisch soll die Dekonvolution Licht UMVERTEILEN, nicht
+    # den Hintergrund abtragen.
+    #
+    # Untergrenze ist darum das Minimum aus Originalpixel und Hintergrundflaeche: in einem
+    # Staubband (Original unter dem Himmel) bleibt alles erlaubt, an einer Sternflanke
+    # (Original ueber dem Himmel) darf es hoechstens bis auf den Himmel heruntergehen.
+    if deringing:
+        _flaeche = _bg_surface(f)
+        _boden = np.minimum(f.astype(np.float32),
+                            _flaeche[..., None] if out.ndim == 3 else _flaeche)
+        out = np.maximum(out, _boden)
     psf_sz = psf.shape[0] if (psf is not None and not tiled_psf) else "tiled"
     log(f"    Dekonvolution: Richardson-Lucy {iterations} Iter., PSF {psf_sz}, "
         f"reg={regularize}, deringing={deringing}, Stern-Schutz {star_protect}")

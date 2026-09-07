@@ -67,6 +67,16 @@ KATALOG = {
     "--astro-denoise": ("Entrauschen", (0.0, 1.0)),
     "--astro-deconv": ("Dekonvolution (schaerfen anhand der gemessenen Sternform)", None),
     "--bin": ("Pixel zusammenfassen (verbessert den Rauschabstand)", (1, 3)),
+    # Der einzige Eintrag, dessen Wert kein Zahlenbereich ist, sondern eine Formel. Geprueft
+    # wird sie nicht gegen eine Spanne, sondern gegen die Positivliste von `pixelmath`.
+    #
+    # Das ist der Grund, warum das ueberhaupt verantwortbar ist: der Rechner laesst nur
+    # Grundrechenarten, Vergleiche und die aufgezaehlten Funktionen zu. Attributzugriff,
+    # Indizes, Importe und jeder andere Funktionsaufruf fliegen mit einer Meldung heraus. Ein
+    # Ausdruck vom Sprachmodell kann darum nichts anrichten, was ein getippter nicht auch
+    # koennte — die Sicherheit ist baulich, nicht Vertrauenssache.
+    "--astro-pixelmath": ("eigene Bildformel auf den linearen Stapel anwenden; das "
+                          "Stapelergebnis heisst A", "ausdruck"),
 }
 
 
@@ -76,9 +86,25 @@ def katalog_text():
     for s, (was, spanne) in KATALOG.items():
         if spanne is None:
             z.append("%-30s %s" % (s, was))
+        elif spanne == "ausdruck":
+            z.append("%-30s %s" % (s + " FORMEL", was))
         else:
             z.append("%-30s %s (%g bis %g)" % (s + " ZAHL", was, spanne[0], spanne[1]))
-    return "\n".join(z)
+    try:
+        import pixelmath
+        z.append("")
+        z.append("In FORMEL sind erlaubt: Grundrechenarten, Vergleiche und die Funktionen "
+                 + ", ".join(sorted(pixelmath._FUNCTIONS)) + ".")
+        z.append("Das Stapelergebnis heisst A. Sonst nichts — kein Punkt, keine eckigen "
+                 "Klammern, keine anderen Funktionen. Beispiele:")
+        for name in sorted(pixelmath.REZEPTE):
+            ausdruck, beschreibung = pixelmath.REZEPTE[name]
+            if "B" in ausdruck or "Ha" in ausdruck or "OIII" in ausdruck:
+                continue
+            z.append("  %-46s %s" % (ausdruck, beschreibung))
+    except Exception:
+        pass
+    return chr(10).join(z)
 
 
 def _json_aus(text):
@@ -95,6 +121,29 @@ def _json_aus(text):
         return json.loads(t)
     except (ValueError, TypeError):
         return None
+
+
+def _formel_pruefen(formel):
+    """Eine Bildformel gegen die Positivliste pruefen, ohne sie auf echten Daten zu rechnen.
+
+    Geprueft wird an einem winzigen Beispielbild: der Rechner meldet dabei jeden nicht
+    erlaubten Baustein — unbekannte Namen, Attributzugriff, Indizes, fremde Funktionen. Ein
+    Ausdruck, der hier durchkommt, kann auch am echten Stapel nichts anderes tun als rechnen.
+
+    Returns:
+        (True, None) oder (False, Begruendung).
+    """
+    try:
+        import numpy as np
+        import pixelmath
+    except ImportError as e:
+        return False, "Bildformeln nicht verfuegbar (%s)" % e
+    probe = np.full((8, 8, 3), 0.3, np.float32)
+    try:
+        pixelmath.evaluate(str(formel), {"A": probe})
+    except Exception as e:
+        return False, str(e)[:120]
+    return True, None
 
 
 def pruefen(einstellungen):
@@ -116,6 +165,17 @@ def pruefen(einstellungen):
             verworfen.append("%s (nicht im Katalog)" % eintrag)
             continue
         _was, spanne = KATALOG[schalter]
+        if spanne == "ausdruck":
+            formel = " ".join(teile[1:]).strip()
+            if not formel:
+                verworfen.append("%s (ohne Formel)" % eintrag)
+                continue
+            gueltig_formel, grund = _formel_pruefen(formel)
+            if not gueltig_formel:
+                verworfen.append("%s (%s)" % (eintrag, grund))
+                continue
+            gueltig.append("%s %s" % (schalter, formel))
+            continue
         if spanne is None:
             if len(teile) > 1:
                 verworfen.append("%s (dieser Schalter nimmt keinen Wert)" % eintrag)

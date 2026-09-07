@@ -8,6 +8,84 @@ All notable changes to ForgePix. Format based on
 
 ## [Unreleased]
 
+### Deconvolution no longer eats black rings around the stars
+
+An M51 stack with `--astro-deconv` grew a black ring around **every** star; they looked like
+bubbles. For that same run the report showed nothing but better numbers:
+
+| | without deconvolution | with |
+|---|---|---|
+| signal-to-noise | 5.4 | **7.5** |
+| sky noise | 0.00054 | **0.00038** |
+| gradient | 7.9 % | **6.8 %** |
+| ring depth around stars | **+0.034** | **−0.114** |
+
+Everything was measured except the thing that broke.
+
+**The mechanism.** `ratio = est / lum` may fall to 0.3, so a pixel may drop to 30 %.
+Richardson-Lucy moves light from the stellar wings into the core and pushes the surroundings
+below the sky level. In the **linear** image this is tiny — 0.0019 against a background of
+0.0381, i.e. 5 %. The stretch is nearly vertical near zero and turns that into black.
+
+**Regularisation does not help.** Measured at reg = 0 / 0.02 / 0.05 / 0.1 the ring depth stayed
+at −0.0019. The fault is not too little smoothing but that light is taken out of the sky at all.
+There is now a floor: the result may never fall below the minimum of the original pixel and the
+background surface. Measured: −0.00199 → **+0.00086**.
+
+### The report now sees star halos
+
+The point of the case above is not the single fault but that nothing noticed it. `messbericht`
+now measures ring depth and `regeln` reports it. The value is **relative to the sky level**: the
+first attempt took the −0.005 from the *stretched* image as an absolute limit — on the linear
+stack at −0.00217 the rule would never have fired. Relative to the sky both are about −6 %.
+
+The rule explicitly does **not** recommend regularisation, because it demonstrably does nothing.
+Advice without effect is worse than none.
+
+### Drizzle and post-processing no longer exclude each other
+
+`_astro_write` refused background extraction, deconvolution, star correction and denoising as
+soon as coverage had gaps — and a drizzle stack always has them. Yet the two together are exactly
+the recommended path for undersampled data. The crop now also works on the drizzle path
+(`drizzle_info["weights"]` is the same thing as `stack_info["beitraege"]`) and runs **before** the
+coverage check, removing the very gaps it trips over.
+
+### Two switches that existed only on paper
+
+* **`--filter-liste`** was in the help ("list of all keys: --filter-liste") and still failed
+  **every** time with `the following arguments are required: --input`. Pure listings no longer
+  need an input folder.
+* **`--astro-pcc`** could be recommended by the rule engine but not set by the interface — the
+  control existed, it was simply missing from the mapping table. Found by the mechanical check
+  `test_rat_vorschlag`, which exists for exactly this.
+
+### Image expressions: four missing functions, CLI, recipes, advisor
+
+`core/pixelmath.py` has existed for a while and is wired into the interface. It lacked four
+functions that appear in almost every astro expression: **`med`** (`A - med(A)` — subtract the
+background, the most common expression there is), **`mad`**, **`mtf`** (the midtone curve) and
+**`blur`** (for building masks).
+
+Every error also produced the **same** message: `med(A)` (a typo) and `__import__("os")` (an
+escape attempt) were both answered with "unknown image name or disallowed operation". The message
+now names what actually went wrong.
+
+Also new:
+
+* **`--astro-pixelmath EXPRESSION|RECIPE`** — a step *inside* the pipeline, on the linear stack
+  before colour calibration and stretching.
+* **`--pixelmath`** and **`--pixelmath-liste`** for standalone use, plus eight named recipes.
+* **The advisor may propose expressions.** This is defensible because `pixelmath` checks every
+  node against an allow-list: attribute access, indexing, imports and foreign calls do not get
+  through. An expression from a language model can do nothing a typed one could not — the safety
+  is structural, not a matter of trust. Rejected proposals are named with a reason.
+
+### `--astro-bg-faktor`
+
+The threshold above which a frame is dropped for a bright sky was hardwired to 1.6 and
+unreachable from outside. On M51 this dropped two entire moonlit nights — 136 frames, 4.5 of 11.3
+hours. With a higher value plus `--astro-weight` they contribute by weight instead of vanishing.
+
 ### Trail detection never fired on real data
 
 `analyze_frame` calls `detect_trail`, the result lands as `"trail"` in the report, and

@@ -135,7 +135,7 @@ Symbols: ✅ present · 🟡 partial · ❌ absent · ➖ not meaningful for For
 
 | PixInsight | ForgePix | |
 |---|---|---|
-| **PixelMath** | ❌ — **the biggest real gap.** Arbitrary expressions over images, the universal tool | ❌ |
+| **PixelMath** | `core/pixelmath.py` — arbitrary expressions over images, kept safe by an allow-list instead of `eval`. Channel access `blau/gruen/rot`, `rgb()`, plus `med`, `mad`, `mtf`, `blur`, `clip`, `where` | ✅ |
 | CloneStamp | 🟡 retouch brush in the interface (from another frame, not from the same image) | 🟡 |
 | GradientsMergeMosaic | 🟡 `mosaic.py` (panorama, not built for sky mosaics) | 🟡 |
 | GradientsHdr / GradientsHdrComposition | ❌ | ❌ |

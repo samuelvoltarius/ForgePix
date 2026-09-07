@@ -279,10 +279,11 @@ class TestInDerPipeline(unittest.TestCase):
         """Sonst misst der Bericht weiter ueber den verrauschten Rand — und das Regelwerk
         gibt seinen Rat auf verdorbenen Zahlen."""
         q = self._quelle()
-        schnitt = q.index("result, stack_info = _zuschnitt_auf_beitraege(result, stack_info, args)"
-                          "\n    out = _astro_write(")
+        schnitt = q.index("result, stack_info, drizzle_info = _zuschnitt_auf_beitraege(")
+        schreiben = q.index("out = _astro_write(", schnitt)
         bericht = q.index("_b = messbericht.erstellen(")
-        self.assertLess(schnitt, bericht)
+        self.assertLess(schnitt, schreiben, "erst schneiden, dann schreiben")
+        self.assertLess(schnitt, bericht, "erst schneiden, dann messen")
 
     def test_kein_stiller_verzicht(self):
         """Jeder Weg, auf dem NICHT zugeschnitten wird, muss das sagen."""

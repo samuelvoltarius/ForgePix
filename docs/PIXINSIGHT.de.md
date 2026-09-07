@@ -138,7 +138,7 @@ Zeichen: ✅ vorhanden · 🟡 teilweise · ❌ nicht vorhanden · ➖ für Forg
 
 | PixInsight | ForgePix | |
 |---|---|---|
-| **PixelMath** | ❌ — **die grösste echte Lücke.** Beliebige Ausdrücke über Bilder, das Universalwerkzeug schlechthin | ❌ |
+| **PixelMath** | `core/pixelmath.py` — beliebige Ausdrücke über Bilder, sicher über eine Positivliste statt `eval`. Kanalzugriff `blau/gruen/rot`, `rgb()`, dazu `med`, `mad`, `mtf`, `blur`, `clip`, `where` | ✅ |
 | CloneStamp | 🟡 Retusche-Pinsel in der Oberfläche (aus einer anderen Aufnahme, nicht aus demselben Bild) | 🟡 |
 | GradientsMergeMosaic | 🟡 `mosaic.py` (Panorama, nicht auf Himmelsmosaike ausgelegt) | 🟡 |
 | GradientsHdr / GradientsHdrComposition | ❌ | ❌ |
@@ -175,10 +175,16 @@ Der Vergleich läuft in beide Richtungen. Diese Punkte gibt es dort nicht oder n
 - **Alles in einer Oberfläche, die für Anfänger gebaut ist** — ein Klartext-Bildstil statt
   fünfzig Prozessfenster.
 
-## Die drei ehrlichen Lücken
+## Die ehrlichen Lücken
 
-1. **PixelMath.** Ein Ausdrucksrechner über Bilder ist das Werkzeug, mit dem sich in PixInsight
-   alles bauen lässt, was kein eigener Prozess ist. Das fehlt hier vollständig.
+*Berichtigt am 07.09.2026: hier stand, PixelMath fehle vollständig. Das war falsch —
+`core/pixelmath.py` gibt es, es hängt in der Oberfläche unter „PixelMath: Bildformeln“ und hat
+eigene Tests. Was tatsächlich fehlte, waren `med`, `mad`, `mtf` und `blur` (nachgetragen) und
+ein Zugang außerhalb der Oberfläche.*
+
+1. **PixelMath nur in der Oberfläche.** Es gibt keinen Kommandozeilen-Schalter, also ist es
+   nicht skriptbar, nicht in der Stapelverarbeitung erreichbar, und das Regelwerk kann keinen
+   Ausdruck empfehlen.
 2. **Allgemeine Maskenlogik.** Die Bausteine stehen (`core/masken.py`), aber nur die
    Astro-Schritte sind daran angebunden. In PixInsight lässt sich JEDER Prozess durch JEDE Maske
    anwenden.

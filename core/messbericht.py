@@ -163,6 +163,70 @@ def _sterne(bild, pfad=None):
             "quelle": "nur gezaehlt" if anzahl is not None else None}
 
 
+def _ringe(bild, sterne_max=250):
+    """Haben die Sterne einen dunklen Hof? Gibt die Ringtiefe relativ zum Hintergrund.
+
+    **Warum das noetig ist.** Die Dekonvolution schiebt Licht aus den Sternflanken in den Kern
+    und drueckt das Umfeld dabei unter den Himmelspegel. Im linearen Bild ist der Effekt winzig
+    — an M51 gemessen 0,0019 bei einem Hintergrund von 0,0381, also 5 %. Die Streckung ist nahe
+    Null fast senkrecht und macht daraus Schwarz: im fertigen Bild lag der Ring bei JEDEM
+    gemessenen Stern auf 0,000.
+
+    Der Punkt ist nicht der eine Fehler, sondern dass ihn nichts bemerkte. Der Bericht meldete
+    fuer denselben Lauf **bessere** Zahlen als ohne Dekonvolution — Signal/Rauschen 7,5 statt
+    5,4, Himmelsrauschen 0,00038 statt 0,00054, Gradient 6,8 statt 7,9 % — waehrend das Bild
+    sichtbar schlechter war. Gemessen wurde alles ausser dem, was kaputtging.
+
+    Returns:
+        Die Ringtiefe **relativ zum Himmelspegel**, nicht absolut. Der absolute Wert taugt
+        nicht als Schwelle: gemessen wird der LINEARE Stapel, sichtbar wird der Ring erst nach
+        dem Strecken. An M51 lag er linear bei -0,00217 und im fertigen JPG bei -0,114 — mit
+        einer absoluten Schwelle aus dem gestreckten Bild waere die Regel nie angesprungen.
+        Bezogen auf den Himmel (0,0381) sind es beide Male rund -6 %.
+
+        Negativ = Hof (schlecht), um Null oder positiv = in Ordnung. `None`, wenn sich keine
+        geeigneten Sterne finden lassen — eine Nicht-Messung, kein Befund.
+    """
+    try:
+        from scipy import ndimage
+    except ImportError:
+        return None
+    g = np.asarray(bild, np.float32)
+    g = g.mean(axis=2) if g.ndim == 3 else g
+    if g.size < 10000:
+        return None
+    hintergrund = float(np.median(g))
+    schwelle = float(np.percentile(g, 99.8))
+    if not np.isfinite(schwelle) or schwelle <= hintergrund:
+        return None
+    # Bei stark gesaettigten Bildern liegt das Perzentil auf dem Anschlag und die Maske waere
+    # riesig. Dann etwas tiefer ansetzen, damit einzelne Sterne getrennt bleiben.
+    if float(np.mean(g >= schwelle)) > 0.01:
+        schwelle = hintergrund + 0.5 * (schwelle - hintergrund)
+    # `>=`, nicht `>`. Nach einer Dekonvolution sind die Sternkerne gesaettigt; dann ist das
+    # 99,8-Perzentil selbst 1,0 und `> 1.0` findet ueberhaupt nichts — die Messung fiele
+    # ausgerechnet an den Bildern aus, fuer die sie gebaut wurde.
+    marken, anzahl = ndimage.label(g >= schwelle)
+    if not anzahl:
+        return None
+    zentren = ndimage.center_of_mass(g, marken, range(1, min(anzahl, sterne_max) + 1))
+    yy, xx = np.mgrid[-14:15, -14:15]
+    radius = np.hypot(yy, xx)
+    ringzone = (radius > 5) & (radius < 11)
+    tiefen = []
+    for cy, cx in zentren:
+        cy, cx = int(cy), int(cx)
+        if not (16 < cy < g.shape[0] - 16 and 16 < cx < g.shape[1] - 16):
+            continue
+        umfeld = g[cy - 14:cy + 15, cx - 14:cx + 15]
+        werte = umfeld[ringzone]
+        if werte.size:
+            tiefen.append(float(np.percentile(werte, 5)) - hintergrund)
+    if len(tiefen) < 5 or hintergrund <= 1e-9:
+        return None
+    return _zahl(np.median(tiefen) / hintergrund)
+
+
 def _ausgebrannt(bild, grenze=0.995):
     """Anteil Pixel am oberen Anschlag, in Prozent. Über 0,1 % sind Sternkerne verloren."""
     a = np.asarray(bild, np.float32)
@@ -311,6 +375,7 @@ def erstellen(bild, pfad=None, paths=None, kamera=None, filter_key=None, log=log
         "sterne": _sterne(a, pfad),
         "farbe": _farbe(a, kamera),
         "signal_zu_rauschen": _signal(a),
+        "ringtiefe": _ringe(a),
         "ausruestung": _ausruestung(pfad, kamera, filter_key),
         "serie": _serie(paths),
     }
@@ -358,6 +423,11 @@ def text(bericht):
              % (wert(bericht["signal_zu_rauschen"], "%.1f"),
                 "   ACHTUNG: Signal schwaecher als das Rauschen"
                 if (bericht["signal_zu_rauschen"] or 99) < 1 else ""))
+    _ring = bericht.get("ringtiefe")
+    if _ring is not None:
+        z.append("Sternhoefe      %+.1f %% des Himmelspegels%s"
+                 % (100.0 * _ring,
+                    "   ACHTUNG: dunkler Ring um die Sterne" if _ring < -0.03 else ""))
     teile = [t for t in (au.get("kamera"),
                          "%.0f mm" % au["brennweite_mm"] if au.get("brennweite_mm") else None,
                          "%.2f um" % au["pixelgroesse_um"] if au.get("pixelgroesse_um") else None,

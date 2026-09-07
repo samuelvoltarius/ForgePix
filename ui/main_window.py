@@ -2520,6 +2520,7 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, ProjectM
             "--astro-unclip-stars": (tr("Ausgefressene Sternkerne einfärben"), False,
                                      haken("astro_unclip")),
             "--astro-deconv": (tr("Dekonvolution"), False, haken("astro_deconv")),
+            "--astro-pcc": (tr("Sternbasierter Farbabgleich"), False, haken("astro_pcc")),
             "--astro-drizzle-true": (tr("Drizzle aus den Originalmessungen"), False,
                                      haken("astro_drizzle_true")),
             "--astro-starless-stretch": (tr("Sternlos strecken"), True,

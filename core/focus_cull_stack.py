@@ -1151,12 +1151,81 @@ def run_own_engine(selected_dir, work_dir, args):
     return stack_dir
 
 
+def _pixelmath_lauf(args):
+    """`--pixelmath` ausfuehren: Bilder laden, Formel anwenden, Ergebnis schreiben.
+
+    PixelMath gab es bisher nur in der Oberflaeche. Damit war es weder skriptbar noch in der
+    Stapelverarbeitung erreichbar, und das Regelwerk konnte keinen Ausdruck empfehlen — ein
+    Universalwerkzeug hinter einer Schaltflaeche.
+    """
+    import pixelmath
+
+    ausdruck = str(args.pixelmath)
+    try:
+        ausdruck, beschreibung = pixelmath.rezept(ausdruck)
+        print("  Rezept %r: %s" % (args.pixelmath, beschreibung))
+    except ValueError:
+        beschreibung = None          # kein Rezeptname -> als Ausdruck nehmen
+    print("  Formel: %s" % ausdruck)
+
+    # `--input` ist EINE Zeichenkette, keine Liste. Ohne diese Zeile iteriert die Schleife
+    # ueber die BUCHSTABEN des Pfades — derselbe Fehler wie einst in `export_targets`, wo eine
+    # Zeichenkette statt einer Liste ein stilles Nichts ergab. Hier faellt er wenigstens auf
+    # ("mehr als 26 Bilder"), aber richtig ist er deshalb nicht.
+    eingaben = args.input if isinstance(args.input, (list, tuple)) else [args.input]
+    quellen = []
+    for eintrag in (eingaben or []):
+        if os.path.isdir(eintrag):
+            quellen += sorted(os.path.join(eintrag, n) for n in os.listdir(eintrag)
+                              if os.path.splitext(n)[1].lower() in
+                              (".tif", ".tiff", ".png", ".jpg", ".jpeg", ".fit", ".fits"))
+        else:
+            quellen.append(eintrag)
+    if not quellen:
+        raise ForgePixFehler("PixelMath: keine Eingabebilder. --input erwartet Dateien "
+                             "oder einen Ordner.")
+
+    if args.pixelmath_namen:
+        namen = [n.strip() for n in str(args.pixelmath_namen).split(",") if n.strip()]
+        if len(namen) != len(quellen):
+            raise ForgePixFehler("PixelMath: %d Namen fuer %d Bilder — das passt nicht "
+                                 "zusammen." % (len(namen), len(quellen)))
+    else:
+        if len(quellen) > 26:
+            raise ForgePixFehler("PixelMath: mehr als 26 Bilder brauchen eigene Namen "
+                                 "(--pixelmath-namen).")
+        namen = [chr(ord("A") + i) for i in range(len(quellen))]
+
+    import astro as _astro
+    bilder = {}
+    for name, pfad in zip(namen, quellen):
+        bild = _astro._read_float(pfad)
+        if bild is None or getattr(bild, "size", 0) == 0:
+            raise ForgePixFehler("PixelMath: %s laesst sich nicht lesen." % pfad)
+        bilder[name] = bild
+        print("    %s = %s  %s" % (name, os.path.basename(pfad), bild.shape))
+
+    ergebnis = pixelmath.evaluate(ausdruck, bilder)
+
+    ziel = args.pixelmath_out or os.path.join(os.path.dirname(quellen[0]) or ".",
+                                              "pixelmath.tif")
+    aus = np.clip(np.asarray(ergebnis, np.float32), 0.0, 1.0)
+    imwrite(ziel, (aus * 65535.0).astype(np.uint16))
+    print("  geschrieben: %s  (%dx%d)" % (ziel, aus.shape[1], aus.shape[0]))
+    print("RESULT:%s" % ziel)
+    return 0
+
+
 def main():
     # Als Allererstes: UTF-8-Ausgabe erzwingen. Sonst stirbt unter Windows schon
     # `--help` an einem „σ" im Hilfetext (Locale-Codepage cp1252 kann es nicht).
     force_utf8_stdio()
     ap = argparse.ArgumentParser(description="ForgePix — Fokus-Stacking (eigene Engine)")
-    ap.add_argument("--input", required=True, help="Ordner mit den Aufnahmen")
+    # NICHT required: sonst laesst sich keine der reinen Auflistungen aufrufen. `--filter-liste`
+    # stand in der Hilfe ("Liste aller Schluessel: --filter-liste") und scheiterte trotzdem
+    # immer an "the following arguments are required: --input" — eine Option, die es nur auf
+    # dem Papier gab. Gefordert wird --input weiter unten, sobald wirklich gerechnet wird.
+    ap.add_argument("--input", help="Ordner mit den Aufnahmen")
     ap.add_argument("--work", help="Arbeits-/Projektordner (Default: <input>/../stack_work)")
     ap.add_argument("--dip-ratio", type=float, default=0.4,
                     help="Inneren Frame verwerfen, wenn peak < ratio*min(Nachbarn) (Default 0.4)")
@@ -1271,6 +1340,25 @@ def main():
                     help="Aufnahmefilter (bestimmt, welche Emissionslinien ueberhaupt ankommen "
                          "und wie stark entmischt wird). 'auto' liest das FITS-Feld FILTER aus. "
                          "Liste aller Schluessel: --filter-liste")
+    ap.add_argument("--astro-pixelmath", metavar="AUSDRUCK|REZEPT",
+                    help="Bildformel auf den LINEAREN Stapel anwenden, als letzter Schritt vor "
+                         "Farbkalibrierung und Streckung. Das Stapelergebnis heisst A. "
+                         "Beispiel: --astro-pixelmath scnr oder \"A - med(A)\". "
+                         "Anders als --pixelmath (das allein laeuft) ist dies ein Schritt IM "
+                         "Ablauf. Rezepte: --pixelmath-liste")
+    ap.add_argument("--pixelmath", metavar="AUSDRUCK|REZEPT",
+                    help="Bildformel auf die Eingabebilder anwenden, z. B. "
+                         "\"A - med(A)\" oder ein Rezeptname wie scnr. Die Bilder heissen "
+                         "A, B, C ... in der Reihenfolge von --input; mit --pixelmath-namen "
+                         "lassen sich eigene Namen vergeben (Ha,OIII,SII). "
+                         "Liste der Rezepte: --pixelmath-liste")
+    ap.add_argument("--pixelmath-namen", metavar="NAME,NAME,...",
+                    help="Namen fuer die Bilder in der Formel statt A, B, C.")
+    ap.add_argument("--pixelmath-out", metavar="DATEI",
+                    help="Wohin das Ergebnis geschrieben wird (Standard: pixelmath.tif neben "
+                         "dem ersten Eingabebild).")
+    ap.add_argument("--pixelmath-liste", action="store_true",
+                    help="Die benannten Bildformeln auflisten und beenden.")
     ap.add_argument("--filter-liste", action="store_true",
                     help="Alle bekannten Aufnahmefilter auflisten und beenden")
     ap.add_argument("--unmix", type=float, default=None, metavar="FAKTOR",
@@ -1483,6 +1571,12 @@ def main():
                          "tree=hierarchisch paarweise (1+2,3+4,… gutmütiger bei vielen Frames)")
     ap.add_argument("--detector", choices=["ORB", "SIFT", "AKAZE"], default="ORB",
                     help="Feature-Detektor fürs Alignment (SIFT robuster, langsamer)")
+    ap.add_argument("--astro-bg-faktor", type=float, default=1.6,
+                    help="Astro: Aufnahmen verwerfen, deren Himmelshintergrund ueber diesem "
+                         "Vielfachen des Medians liegt (Standard 1.6). An M51 gemessen fielen "
+                         "damit zwei ganze Mondnaechte heraus — 136 Aufnahmen, 4,5 von 11,3 "
+                         "Stunden. Mit einem hoeheren Wert plus --astro-weight tragen sie "
+                         "gewichtet bei, statt zu fehlen.")
     ap.add_argument("--autocrop", action=argparse.BooleanOptionalAction, default=True,
                     help="Schwarze Ausrichtungs-Ränder automatisch wegschneiden (Standard AN; "
                          "--no-autocrop behält den vollen Rahmen).")
@@ -1584,6 +1678,19 @@ def main():
     ap.add_argument("--watch-settle", type=int, default=5,
                     help="Sekunden ohne Änderung, bevor gestackt wird (Default 5)")
     args = ap.parse_args()
+
+    _NUR_AUFLISTEN = ("pixelmath_liste", "filter_liste")
+    if not args.input and not any(getattr(args, n, False) for n in _NUR_AUFLISTEN):
+        ap.error("the following arguments are required: --input")
+
+    if getattr(args, "pixelmath_liste", False):
+        import pixelmath as _pm
+        print("Benannte Bildformeln (--pixelmath <Name>):" + chr(10))
+        print(_pm.rezepte_text())
+        return
+
+    if getattr(args, "pixelmath", None):
+        return _pixelmath_lauf(args)
 
     if getattr(args, "filter_liste", False):
         import filters as _flt
@@ -1933,7 +2040,8 @@ def run_astro(input_dir, work_dir, args):
         import astro_quality
         phase("grade")
         print("  Sub-Bewertung (erklärbar, klassisch) …")
-        _frames, kept = astro_quality.select_subs(paths)
+        _frames, kept = astro_quality.select_subs(
+            paths, bg_factor=float(getattr(args, "astro_bg_faktor", 1.6) or 1.6))
         _naechte_melden(_frames, kept, paths)
         # Bestes Sub als Registrier-Referenz (Sternzahl / FWHM / Rundheit) statt des mittleren.
         # Die Bewertung sortiert nur Ausreisser aus — die Referenz bestimmt aber, worauf ALLE
@@ -2165,7 +2273,8 @@ def run_astro(input_dir, work_dir, args):
     # man erst spaeter, wuerde weiter ueber den verrauschten Rand gemessen — und das Regelwerk
     # gaebe seinen Rat auf verdorbenen Zahlen (gemessen: Gradient 41,9 % statt 24,7 %,
     # G/R 0,68 am Rand gegen 0,96 in der Mitte).
-    result, stack_info = _zuschnitt_auf_beitraege(result, stack_info, args)
+    result, stack_info, drizzle_info = _zuschnitt_auf_beitraege(
+        result, stack_info, args, drizzle_info)
     out = _astro_write(result, work_dir, used_paths, args, astro,
         drizzle_info=drizzle_info, stack_info=stack_info, observation=observation)
     from constants import VERSION
@@ -2501,7 +2610,7 @@ def _naechte_melden(frames, behalten, paths, log=print):
                 % (nacht, v[1], v[0]))
 
 
-def _zuschnitt_auf_beitraege(result, stack_info, args):
+def _zuschnitt_auf_beitraege(result, stack_info, args, drizzle_info=None):
     """Den Rahmen wegschneiden, in dem nur wenige Aufnahmen beigetragen haben.
 
     Beim Ausrichten wandern die Aufnahmen gegeneinander. Am Bildrand tragen darum nur wenige
@@ -2526,16 +2635,26 @@ def _zuschnitt_auf_beitraege(result, stack_info, args):
     # Wieviel Beitrag die duennste Stelle im behaltenen Bild mindestens haben muss. Das Rauschen
     # geht mit 1/Wurzel(n): 0,8 heisst hoechstens das 1,12-fache Rauschen am Rand.
     _ANTEIL = 0.8
-    if not getattr(args, "autocrop", True) or stack_info is None:
-        return result, stack_info
-    _anzahl = stack_info.get("beitraege")
+    if not getattr(args, "autocrop", True):
+        return result, stack_info, drizzle_info
+    # Beide Wege liefern dasselbe: wieviel Beitrag steht hinter jedem Pixel. Beim Drizzle
+    # heisst es `weights` und hat einen Wert je Kanal — dort zaehlt der schwaechste.
+    _anzahl = None
+    if stack_info is not None:
+        _anzahl = stack_info.get("beitraege")
+    if _anzahl is None and drizzle_info is not None:
+        _w = drizzle_info.get("weights")
+        if _w is not None:
+            _w = np.asarray(_w, np.float32)
+            _anzahl = _w.min(axis=2) if _w.ndim == 3 else _w
     if _anzahl is None:
-        print("  Zuschnitt nicht moeglich: das Stapelverfahren liefert keine "
-              "Beitragszahl je Pixel.")
-        return result, stack_info
+        if stack_info is not None or drizzle_info is not None:
+            print("  Zuschnitt nicht moeglich: das Stapelverfahren liefert keine "
+                  "Beitragszahl je Pixel.")
+        return result, stack_info, drizzle_info
     if not np.isfinite(_anzahl).any():
         print("  Zuschnitt nicht moeglich: die Beitragszahl enthaelt keine gueltigen Werte.")
-        return result, stack_info
+        return result, stack_info, drizzle_info
 
     _voll = np.asarray(_anzahl, np.float32)
     _hoch, _breit = _voll.shape[:2]
@@ -2561,7 +2680,7 @@ def _zuschnitt_auf_beitraege(result, stack_info, args):
     if _kasten is None:
         print("  Zuschnitt uebersprungen: nirgends erreichen die Beitraege %.0f %% — die "
               "Abdeckung ist ueberall duenn." % (100 * _ANTEIL))
-        return result, stack_info
+        return result, stack_info, drizzle_info
     y0, y1, x0, x1 = (_kasten[0] * _k, min(_kasten[1] * _k, _hoch),
                       _kasten[2] * _k, min(_kasten[3] * _k, _breit))
     _warum = ""
@@ -2570,28 +2689,50 @@ def _zuschnitt_auf_beitraege(result, stack_info, args):
                   "Bildfeldrotation oder grosse Dither-Spruenge hin.")
 
     if (y0, x0) == (0, 0) and (y1, x1) == (_hoch, _breit):
-        return result, stack_info
+        return result, stack_info, drizzle_info
 
     _mitte = float(np.median(_glatt[_hoch // 3:2 * _hoch // 3, _breit // 3:2 * _breit // 3]))
     _duenn = float(_glatt[y0:y1, x0:x1].min())
     _faktor = (_mitte / max(_duenn, 1e-9)) ** 0.5 if _mitte > 0 else float("nan")
     result = result[y0:y1, x0:x1]
-    stack_info = dict(stack_info)
-    stack_info["coverage"] = np.asarray(stack_info["coverage"])[y0:y1, x0:x1]
-    stack_info["beitraege"] = _voll[y0:y1, x0:x1]
+    if stack_info is not None:
+        stack_info = dict(stack_info)
+        stack_info["coverage"] = np.asarray(stack_info["coverage"])[y0:y1, x0:x1]
+        stack_info["beitraege"] = _voll[y0:y1, x0:x1]
+    if drizzle_info is not None:
+        drizzle_info = dict(drizzle_info)
+        for _feld in ("weights", "coverage", "coverage_channels"):
+            _wert = drizzle_info.get(_feld)
+            if _wert is not None:
+                drizzle_info[_feld] = np.asarray(_wert)[y0:y1, x0:x1]
     print("  Zuschnitt: %d px oben, %d unten, %d links, %d rechts (%dx%d -> %dx%d, %.0f %% "
           "der Flaeche). Duennste Stelle jetzt %.0f %% der Mitte, dort rauscht es noch das "
           "%.2f-fache. %s"
           % (y0, _hoch - y1, x0, _breit - x1, _breit, _hoch, x1 - x0, y1 - y0,
              100.0 * (y1 - y0) * (x1 - x0) / (_hoch * _breit),
              100.0 * _duenn / max(_mitte, 1e-9), _faktor, _warum))
-    return result, stack_info
+    return result, stack_info, drizzle_info
 
 
 def _astro_write(result, work_dir, paths, args, astro, *, drizzle_info=None,
                  stack_info=None, observation=None):
     """Astro-Ergebnis schreiben: optional Hintergrund-Extraktion, dann 16-bit-Linear +
     32-bit-Linear (GraXpert/StarNet/PixInsight) + gestreckte Vorschau-JPG."""
+    # ZUERST zuschneiden, dann die Abdeckung pruefen. Die Pruefung unten verweigert
+    # Hintergrund-Entfernung, Dekonvolution, Sternkorrektur und Entrauschen, sobald die
+    # Abdeckung Luecken hat — und genau die schneidet dieser Schritt weg. Stand er dahinter,
+    # schlossen sich Drizzle und Nachbearbeitung gegenseitig aus, obwohl beides zusammen der
+    # empfohlene Weg fuer unterabgetastetes Material ist. (Ueber `run_astro` ist meist schon
+    # zugeschnitten; dann findet dieser zweite Aufruf nichts mehr zu tun.)
+    # Randstreifen wegschneiden, in denen nur wenige Aufnahmen beigetragen haben.
+    #
+    # Die Abdeckungsmaske ist binaer ("mindestens eine Aufnahme") und sieht diese Streifen
+    # nicht. An einem echten Stapel aus 133 Aufnahmen gemessen: die aeusseren 5 px rauschen
+    # 1,6-mal so stark wie die Mitte, bei 80 px noch 1,3-mal — nach dem Strecken ein sichtbarer
+    # farbiger Saum. `--autocrop` ist als Standard dokumentiert, wurde im Astro-Modus aber
+    result, stack_info, drizzle_info = _zuschnitt_auf_beitraege(
+        result, stack_info, args, drizzle_info)
+
     if drizzle_info is not None:
         coverage_channels = np.asarray(drizzle_info["coverage_channels"], bool)
         if coverage_channels.shape != result.shape:
@@ -2608,13 +2749,6 @@ def _astro_write(result, work_dir, paths, args, astro, *, drizzle_info=None,
                 getattr(args, "astro_deconv", False), getattr(args, "astro_synthstar", False),
                 float(getattr(args, "astro_denoise", 0.0) or 0.0) > 0)):
             raise ForgePixFehler("Der Stack enthält Abdeckungslücken. Zuerst den linearen Stack speichern und auf vollständig bedeckte Bereiche zuschneiden, bevor Hintergrundkorrektur, Dekonvolution oder Entrauschen angewendet wird.")
-    # Randstreifen wegschneiden, in denen nur wenige Aufnahmen beigetragen haben.
-    #
-    # Die Abdeckungsmaske ist binaer ("mindestens eine Aufnahme") und sieht diese Streifen
-    # nicht. An einem echten Stapel aus 133 Aufnahmen gemessen: die aeusseren 5 px rauschen
-    # 1,6-mal so stark wie die Mitte, bei 80 px noch 1,3-mal — nach dem Strecken ein sichtbarer
-    # farbiger Saum. `--autocrop` ist als Standard dokumentiert, wurde im Astro-Modus aber
-    result, stack_info = _zuschnitt_auf_beitraege(result, stack_info, args)
 
     _filt = aufnahmefilter(args, paths)
     if _filt is not None and getattr(args, "dualband", False):
@@ -2667,6 +2801,25 @@ def _astro_write(result, work_dir, paths, args, astro, *, drizzle_info=None,
         print(f"  Rauschreduktion (Multi-Skalen-Wavelet, Stärke {_dn:.2f}) …")
         import wavelet
         result = wavelet.wavelet_denoise(result.astype(np.float32), strength=_dn)
+    # Eigene Bildformel als letzter Schritt am LINEAREN Stapel — vor Farbkalibrierung und
+    # Streckung, weil dort die Kanalverhaeltnisse noch unverfaelscht sind. PixelMath war bisher
+    # nur ein Handwerkzeug in der Oberflaeche; damit liess es sich weder skripten noch in einen
+    # Ablauf einbauen, und das Regelwerk konnte nichts empfehlen.
+    _pm = getattr(args, "astro_pixelmath", None)
+    if _pm:
+        try:
+            import pixelmath
+            try:
+                _ausdruck, _was = pixelmath.rezept(_pm)
+                print("  Bildformel, Rezept %r: %s" % (_pm, _was))
+            except ValueError:
+                _ausdruck = str(_pm)
+            print("  Bildformel: %s" % _ausdruck)
+            result = np.asarray(pixelmath.evaluate(_ausdruck, {"A": result}), np.float32)
+        except Exception as e:
+            # Nicht stillschweigend weiterlaufen: wer eine Formel angibt und keine Wirkung
+            # sieht, haelt das Ergebnis fuer berechnet.
+            raise ForgePixFehler("Bildformel fehlgeschlagen: %s" % e)
     stack_dir = os.path.join(work_dir, "stack")
     os.makedirs(work_dir, exist_ok=True)
     try:

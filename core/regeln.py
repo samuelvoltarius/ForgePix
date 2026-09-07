@@ -137,9 +137,37 @@ def pruefen(bericht, komet=False, bereits=None):
     if _w(bericht, "farbe", "passt") is False:
         raete.append(Rat(
             WICHTIG, "Farbverhalten passt nicht zur Kamera",
-            _w(bericht, "farbe", "urteil", standard=""),
-            "Flat pruefen und den eingestellten Aufnahme-Filter mit dem tatsaechlichen "
-            "vergleichen.",
+            _w(bericht, "farbe", "urteil", standard="")
+            + "  Es gibt dafuer einen exakten Weg: die Sterne im Bild haben bekannte Farben. "
+              "Die photometrische Farbkalibrierung misst sie gegen den Gaia-Katalog und leitet "
+              "die Kanalverhaeltnisse daraus ab, statt sie zu schaetzen — sie braucht weder "
+              "ein Flat noch eine hinterlegte Kamerakennlinie.",
+            "Farbe an den Sternen kalibrieren statt raten. Flat und eingestellten Filter "
+            "trotzdem pruefen — die Kalibrierung behebt die Farbe, nicht die Ursache.",
+            "--astro-pcc"))
+
+    # --- Dunkle Hoefe um die Sterne ----------------------------------------------
+    # Der Bericht misst sonst alles ausser dem, was kaputtging: fuer denselben Lauf meldete er
+    # Signal/Rauschen 7,5 statt 5,4 und weniger Rauschen — bei einem Bild, in dem jeder Stern
+    # einen schwarzen Ring hatte.
+    ring = _w(bericht, "ringtiefe")
+    if ring is not None and ring < -0.08:
+        raete.append(Rat(
+            KRITISCH, "Dunkle Hoefe um die Sterne",
+            "Um die Sterne liegt ein dunkler Ring, %.0f %% unter dem Himmelspegel. Das ist der "
+            "typische Unterschwinger der Dekonvolution: sie schiebt Licht aus den Flanken in "
+            "den Kern und nimmt es dem Umfeld weg. Im linearen Bild ist der Effekt winzig, "
+            "die Streckung ist nahe Null aber fast senkrecht und macht Schwarz daraus."
+            % (100.0 * ring),
+            "Dekonvolution schwaecher einstellen oder weglassen. Die Regularisierung hilft "
+            "hier NICHT — an echten Daten blieb die Ringtiefe von reg=0 bis reg=0,1 gleich.",
+            None))
+    elif ring is not None and ring < -0.03:
+        raete.append(Rat(
+            WICHTIG, "Ansatz von Hoefen um die Sterne",
+            "Um die Sterne liegt ein leichter dunkler Saum, %.0f %% unter dem Himmelspegel."
+            % (100.0 * ring),
+            "Weniger Iterationen bei der Dekonvolution.",
             None))
 
     # --- Ausgebrannte Sterne -----------------------------------------------------

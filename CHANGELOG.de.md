@@ -8,6 +8,90 @@ Alle nennenswerten Änderungen an ForgePix. Format orientiert an
 
 ## [Unreleased]
 
+### Die Dekonvolution frisst keine schwarzen Ringe mehr um die Sterne
+
+Ein M51-Stapel mit `--astro-deconv` bekam um **jeden** Stern einen schwarzen Ring; die Sterne
+sahen aus wie Bläschen. Der Messbericht meldete für genau diesen Lauf lauter bessere Zahlen:
+
+| | ohne Dekonvolution | mit |
+|---|---|---|
+| Signal/Rauschen | 5,4 | **7,5** |
+| Himmelsrauschen | 0,00054 | **0,00038** |
+| Gradient | 7,9 % | **6,8 %** |
+| Ringtiefe um die Sterne | **+0,034** | **−0,114** |
+
+Gemessen wurde alles außer dem, was kaputtging.
+
+**Der Mechanismus.** `ratio = est / lum` darf bis auf 0,3 fallen, ein Pixel also auf 30 %.
+Richardson-Lucy schiebt Licht aus den Sternflanken in den Kern und drückt das Umfeld unter den
+Himmelspegel. Im **linearen** Bild ist das winzig — 0,0019 bei einem Hintergrund von 0,0381,
+also 5 %. Die Streckung ist nahe Null fast senkrecht und macht daraus Schwarz.
+
+**Die Regularisierung hilft nicht.** Gemessen mit reg = 0 / 0,02 / 0,05 / 0,1 blieb die
+Ringtiefe bei −0,0019. Der Fehler ist nicht zu wenig Glättung, sondern dass überhaupt Licht aus
+dem Himmel genommen wird. Neu ist darum eine Untergrenze: das Ergebnis darf nirgends unter das
+Minimum aus Originalpixel und Hintergrundfläche fallen. In einem Staubband (Original unter dem
+Himmel) bleibt alles erlaubt, an einer Sternflanke höchstens bis auf den Himmel. Gemessen:
+−0,00199 → **+0,00086**.
+
+### Der Messbericht sieht Sternhöfe
+
+Der eigentliche Punkt am obigen Fall ist nicht der eine Fehler, sondern dass ihn nichts bemerkte.
+Neu misst `messbericht` die Ringtiefe und `regeln` beanstandet sie. Der Wert ist **relativ zum
+Himmelspegel**: der erste Anlauf nahm die −0,005 aus dem *gestreckten* Bild als absolute
+Schranke — am linearen Stapel mit −0,00217 wäre die Regel nie angesprungen. Bezogen auf den
+Himmel sind es in beiden Fällen rund −6 %.
+
+Die Regel empfiehlt ausdrücklich **nicht** die Regularisierung, weil die nachweislich nichts
+bewirkt. Ein Rat ohne Wirkung ist schlimmer als keiner.
+
+### Drizzle und Nachbearbeitung schließen sich nicht mehr aus
+
+`_astro_write` verweigerte Hintergrund-Entfernung, Dekonvolution, Sternkorrektur und Entrauschen,
+sobald die Abdeckung Lücken hatte — und ein Drizzle-Stack hat immer welche. Beides zusammen ist
+aber genau der empfohlene Weg für unterabgetastetes Material. Der Zuschnitt arbeitet jetzt auch
+auf dem Drizzle-Weg (`drizzle_info["weights"]` ist dasselbe wie `stack_info["beitraege"]`) und
+läuft **vor** der Abdeckungsprüfung — er schneidet genau die Lücken weg, an denen sie scheitert.
+
+### Zwei Schalter, die es nur auf dem Papier gab
+
+* **`--filter-liste`** stand in der Hilfe („Liste aller Schlüssel: --filter-liste") und scheiterte
+  trotzdem **immer** an `the following arguments are required: --input`. Reine Auflistungen
+  brauchen jetzt keinen Eingabeordner mehr.
+* **`--astro-pcc`** konnte das Regelwerk empfehlen, aber die Oberfläche nicht setzen — das
+  Bedienelement gab es, es fehlte nur in der Zuordnungstabelle. Gefunden von der mechanischen
+  Prüfung `test_rat_vorschlag`, die genau dafür da ist.
+
+### Bildformeln: vier fehlende Funktionen, Kommandozeile, Rezepte, Berater
+
+`core/pixelmath.py` gab es längst und hängt in der Oberfläche unter „PixelMath: Bildformeln".
+Es fehlten aber vier Funktionen, die im Astro-Alltag in fast jedem Ausdruck vorkommen: **`med`**
+(`A - med(A)` — den Hintergrund abziehen, der häufigste Ausdruck überhaupt), **`mad`**, **`mtf`**
+(die Midtone-Kurve) und **`blur`** (Masken bauen).
+
+Dazu bekam jeder Fehlerfall bisher **dieselbe** Meldung: `med(A)` (ein Tippfehler) und
+`__import__("os")` (ein Ausbruchsversuch) wurden beide mit „Unbekannter Bildname oder nicht
+erlaubte Rechenoperation" quittiert. Jetzt nennt die Meldung, was tatsächlich nicht ging.
+
+Neu ist außerdem:
+
+* **`--astro-pixelmath AUSDRUCK|REZEPT`** — ein Schritt *im* Ablauf, am linearen Stapel vor
+  Farbkalibrierung und Streckung.
+* **`--pixelmath`** und **`--pixelmath-liste`** für den Einzelaufruf, plus acht benannte Rezepte
+  (`scnr`, `hintergrund-ab`, `sternmaske`, `strecken`, `hoo`, `sho` …).
+* **Der Berater darf Formeln vorschlagen.** Das ist verantwortbar, weil `pixelmath` jeden Knoten
+  gegen eine Positivliste prüft: Attributzugriff, Indizes, Importe und fremde Funktionen kommen
+  nicht durch. Ein Ausdruck vom Sprachmodell kann nichts anrichten, was ein getippter nicht auch
+  könnte — die Sicherheit ist baulich, nicht Vertrauenssache. Abgelehnte Vorschläge werden mit
+  Begründung genannt, nicht verschluckt.
+
+### `--astro-bg-faktor`
+
+Die Schwelle, ab der eine Aufnahme wegen zu hellem Himmel herausfällt, war fest auf 1,6 verdrahtet
+und von außen nicht erreichbar. An M51 gemessen fielen damit zwei ganze Mondnächte heraus — 136
+Aufnahmen, 4,5 von 11,3 Stunden. Mit einem höheren Wert plus `--astro-weight` tragen sie
+gewichtet bei, statt zu fehlen.
+
 ### Die Strichspur-Erkennung hat an echten Daten nie angeschlagen
 
 `analyze_frame` ruft `detect_trail` auf, das Ergebnis landet als `"trail"` im Befund, und
