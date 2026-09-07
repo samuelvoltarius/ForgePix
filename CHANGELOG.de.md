@@ -8,6 +8,40 @@ Alle nennenswerten Änderungen an ForgePix. Format orientiert an
 
 ## [Unreleased]
 
+### Die Strichspur-Erkennung hat an echten Daten nie angeschlagen
+
+`analyze_frame` ruft `detect_trail` auf, das Ergebnis landet als `"trail"` im Befund, und
+`select_subs` verwirft die Aufnahme daraufhin — die Verkabelung stimmte also. Nur fand die
+Erkennung nichts. Über alle 340 M51-Aufnahmen gemessen:
+
+| | Treffer |
+|---|---|
+| alte Fassung | **0 von 340** |
+| neue Fassung | **1 von 340** — genau die eine mit einer Spur, kein Fehlalarm |
+
+Die eine Aufnahme (20230528-025013) trägt eine lehrbuchhafte Satellitenspur quer durchs Bild und
+landete als sichtbarer Strich durch die Galaxie im fertigen Stapel.
+
+**Warum sie durchfiel.** Die alte Fassung nahm `np.std` über das ganze Bild als Rauschmaß:
+
+| | |
+|---|---|
+| Hintergrund | 9,801 |
+| robustes Sigma (MAD) | 0,278 |
+| `np.std` über alles | **1,548** |
+| `np.std` ohne die hellsten 0,47 % der Pixel | **0,253** |
+
+**0,47 % der Pixel — die Sterne — machen die ganze Überhöhung aus**, das hellste Pixel liegt
+883 Sigma über dem Hintergrund. `bg + 4·std` ist damit faktisch viermal die Streuung der
+Sternhelligkeiten statt viermal das Rauschen. Die Spur mit einem Überschuss von 2,42 (8,7
+robuste Sigma) lag bei 12,09, die Schwelle bei 15,99 — darunter. Im ganzen Bild kamen nur 1399
+Pixel (0,08 %) über die Schwelle, obwohl allein die Spur rund 1900 Pixel lang ist. Der Fehler
+wird größer, je mehr helle Sterne im Feld stehen: die Erkennung war in reichen Feldern am
+blindesten.
+
+Neu ist zusätzlich ein **gerichtetes Öffnen** vor der Hough-Abstimmung. Ohne es stehen Tausende
+Sterne in der Maske und beherrschen die Abstimmung; eine einzelne dünne Linie geht darin unter.
+
 ### Die Normalisierung rechnet nicht mehr dreimal dasselbe
 
 Aufgefallen beim Stapeln von M51 (204 Aufnahmen à 4144×2822, ASI294MC Pro): zwischen der Meldung

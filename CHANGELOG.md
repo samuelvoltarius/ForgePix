@@ -8,6 +8,40 @@ All notable changes to ForgePix. Format based on
 
 ## [Unreleased]
 
+### Trail detection never fired on real data
+
+`analyze_frame` calls `detect_trail`, the result lands as `"trail"` in the report, and
+`select_subs` rejects the frame accordingly — so the wiring was correct. The detection simply
+found nothing. Measured across all 340 M51 frames:
+
+| | hits |
+|---|---|
+| old version | **0 of 340** |
+| new version | **1 of 340** — exactly the one with a trail, no false positives |
+
+That one frame (20230528-025013) carries a textbook satellite trail right across the image and
+ended up as a visible streak through the galaxy in the finished stack.
+
+**Why it slipped through.** The old version used `np.std` over the whole image as its noise
+measure:
+
+| | |
+|---|---|
+| background | 9.801 |
+| robust sigma (MAD) | 0.278 |
+| `np.std` over everything | **1.548** |
+| `np.std` without the brightest 0.47 % of pixels | **0.253** |
+
+**0.47 % of the pixels — the stars — account for the entire inflation**; the brightest pixel sits
+883 sigma above the background. `bg + 4*std` is therefore four times the spread of stellar
+brightness rather than four times the noise. The trail, at an excess of 2.42 (8.7 robust sigma),
+sat at 12.09 while the threshold was 15.99. Only 1399 pixels (0.08 %) in the whole image cleared
+the threshold, although the trail alone is about 1900 pixels long. The error grows with the
+number of bright stars: detection was blindest in rich fields.
+
+New in addition is a **directional opening** before the Hough vote. Without it thousands of stars
+sit in the mask and dominate the vote; a single thin line disappears among them.
+
 ### Normalisation no longer computes the same thing three times
 
 Noticed while stacking M51 (204 frames at 4144x2822, ASI294MC Pro): several minutes passed

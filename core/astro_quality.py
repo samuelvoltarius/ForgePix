@@ -72,12 +72,62 @@ def detect_stars(gray, max_stars=120):
     return stars, bg
 
 
+# Gerichtete Strukturelemente fuer das Oeffnen: nur laengliche Strukturen sollen uebrig
+# bleiben. Sterne sind rund und kompakt und fallen dabei weg — sonst beherrschen sie die
+# Hough-Abstimmung, weil es Tausende davon gibt und nur eine Spur.
+_SPUR_KERNE = None
+
+
+def _spur_kerne():
+    global _SPUR_KERNE
+    if _SPUR_KERNE is None:
+        kerne = []
+        for winkel in range(0, 180, 15):
+            k = np.zeros((25, 25), np.uint8)
+            k[12, :] = 1
+            M = cv2.getRotationMatrix2D((12.0, 12.0), winkel, 1.0)
+            kk = (cv2.warpAffine(k.astype(np.float32), M, (25, 25)) > 0.3).astype(np.uint8)
+            if int(kk.sum()) >= 15:
+                kerne.append(kk)
+        _SPUR_KERNE = kerne
+    return _SPUR_KERNE
+
+
 def detect_trail(gray):
-    """Satelliten-/Flugzeugspur: lange dünne Linie im Bild (Hough)."""
-    bg = float(np.median(gray)); sigma = float(np.std(gray)) + 1e-6
-    mask = (gray > bg + 4 * sigma).astype(np.uint8) * 255
-    lines = cv2.HoughLinesP(mask, 1, np.pi / 180, threshold=60,
-                            minLineLength=int(0.30 * max(gray.shape)), maxLineGap=8)
+    """Satelliten-/Flugzeugspur: lange duenne Linie im Bild (Hough).
+
+    **Warum hier nicht `np.std` steht.** Die alte Fassung nahm `np.std` ueber das GANZE Bild
+    als Rauschmass. Das ist keine Rauschmessung: die Sterne gehen voll ein. An der einen
+    M51-Aufnahme mit einer echten Satellitenspur gemessen (20230528-025013):
+
+        Hintergrund                9,801
+        robustes Sigma (MAD)       0,278
+        np.std ueber alles         1,548     <- 5,6-mal zu gross
+        np.std ohne die hellsten 0,47 % der Pixel   0,253   <- das echte Rauschen
+
+    Also machen **0,47 % der Pixel — die Sterne — die ganze Ueberhoehung aus**; das hellste
+    Pixel liegt 883 Sigma ueber dem Hintergrund. `bg + 4*std` ist damit faktisch viermal die
+    Streuung der Sternhelligkeiten statt viermal das Rauschen:
+
+        Ueberschuss der Spur       2,42      = 8,7 robuste Sigma
+        Schwelle bg + 4*std       15,99      -> die Spur bei 12,09 liegt DARUNTER
+
+    Eine Spur mit 8,7 Sigma fiel durch, und zwar umso sicherer, je mehr helle Sterne im Feld
+    stehen. Ueber alle 340 M51-Aufnahmen gemessen fand die alte Fassung **0**, die neue **1** —
+    genau die eine, die wirklich eine hat, ohne einen einzigen Fehlalarm.
+
+    Der zweite Teil ist das gerichtete Oeffnen. Ohne es stehen Tausende Sterne in der Maske und
+    beherrschen die Hough-Abstimmung; eine einzelne duenne Linie geht darin unter.
+    """
+    g = np.asarray(gray, np.float32)
+    bg = float(np.median(g))
+    sigma = float(np.median(np.abs(g - bg)) * 1.4826) + 1e-6
+    maske = ((g > bg + 4.0 * sigma) * 255).astype(np.uint8)
+    lang = np.zeros_like(maske)
+    for kk in _spur_kerne():
+        lang = np.maximum(lang, cv2.morphologyEx(maske, cv2.MORPH_OPEN, kk))
+    lines = cv2.HoughLinesP(lang, 1, np.pi / 360.0, threshold=40,
+                            minLineLength=int(0.25 * max(g.shape)), maxLineGap=20)
     return lines is not None and len(lines) > 0
 
 
