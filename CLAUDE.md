@@ -24,6 +24,36 @@ Zeile. Ein paar davon, damit die Form erkennbar wird:
   **ohne Zusammenfassung und ohne das Wort FAILED**. Wer nur danach schaute, hielt den Lauf für
   bestanden. 27 von 692 Tests waren gelaufen.
 
+Am 07.09.2026 kamen an einem Tag sieben weitere Formen desselben Musters dazu — alle gefunden,
+indem echte Daten durch die tatsächlichen Programmwege geschickt wurden, keine einzige durch
+Lesen des Codes:
+
+| Was | Wirkung | Wie es sich meldete |
+|---|---|---|
+| Zwei Kameras in einem Ordner | Stapel aus zwei Sensoren, matschige Sterne | gar nicht |
+| Zwei Ziele in einem Ordner | 76 % der Aufnahmen „nicht ausrichtbar" | eine Zeile im Protokoll |
+| Gebinnt + ungebinnt gemischt | 57 von 59 Aufnahmen weg | dieselbe Zeile |
+| Platzhalter (FWHM 99, Exz. 9) im Median | die Sub-Bewertung schaltete sich selbst ab | gar nicht |
+| `--export`/`--web-jpg` im Astro-Modus | Optionen ohne jede Wirkung | gar nicht |
+| `--astro-banding-vertical` | nirgends gelesen | gar nicht |
+| Photometrie mit festen Koordinaten | 3 von 20 Messpunkten, Rest womöglich am Nachbarstern | „nicht messbar" |
+
+**Zwei Lehren daraus, die im Code stehen sollten:**
+
+* **Ein Platzhalter für „nicht gemessen" darf nie in eine Statistik.** FWHM 99,0 und
+  Exzentrizität 9,0 heißen „keine Sterne gefunden". Im Median machten sie die Schwellen
+  unerreichbar, und die schlechten Aufnahmen fielen nur noch zufällig heraus — weil 9,0 über der
+  Elongationsgrenze 1,7 liegt.
+* **Eine Prüfung darf ihre Toleranz nicht aus der geprüften Größe ableiten.** Meine erste
+  Kometen-Bahnprüfung erlaubte einen Rest von `0,2 × Wanderung`. Eine Unsinns-Bahn erzeugt eine
+  riesige Wanderung — und hebt damit ihre eigene Schwelle an. 387,5 px Rest gegen 395 px
+  Toleranz: durchgelassen.
+
+Zwei mechanische Prüfungen haben sich als Test bewährt und sollten bleiben:
+`test_banding_richtung.test_jede_option_wird_irgendwo_gelesen` (jede argparse-Option muss
+irgendwo gelesen werden) und `test_regeln.TestSchalterExistieren` (jeder Schalter, den eine Regel
+empfiehlt, muss in der `--help` stehen).
+
 Daraus folgt die Arbeitsweise:
 
 1. **Erst messen, dann urteilen.** Zahlen an echten Daten, nicht Plausibilität am Code.
