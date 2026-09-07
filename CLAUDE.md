@@ -81,7 +81,7 @@ Daraus folgt die Arbeitsweise:
 python -m unittest discover -s tests -q
 ```
 
-Die Suite ist die Abnahme (Stand: 848 Tests). Sie muss vor jedem Commit grün sein.
+Die Suite ist die Abnahme (Stand: 969 Tests). Sie muss vor jedem Commit grün sein.
 Nach einem Lauf **die Zusammenfassungszeile lesen**, nicht nur nach „FAILED" suchen — siehe oben,
 warum.
 
@@ -147,6 +147,9 @@ Zwischen Oberfläche und Pipeline laufen **maschinenlesbare Marker** über die S
 * **Heredocs zerlegen `\n` und `\\`.** Beim Schreiben von Python über `python - <<'EOF'` werden
   Zeichenketten mit Escapes zerrissen. Nimm das Write-Werkzeug oder baue das Zeichen über
   `chr(92)` zusammen.
+* **Deutsche Anführungszeichen brauchen ihr richtiges Ende.** „Wunsch" schließt die
+  Python-Zeichenkette, weil das zweite Zeichen ein ASCII-`"` ist. Richtig ist „Wunsch“
+  (U+201E / U+201C). Das ist heute dreimal passiert und jedes Mal erst beim Parsen aufgefallen.
 * **`%` in argparse-Hilfetexten** muss `%%` heißen, sonst stirbt `--help` komplett.
 * **`patch.object` mit `MagicMock` auf einer QObject-Klasse** stürzt unter PySide6 ab. Nimm eine
   echte leere Funktion (`tests/gui_support.py`).
