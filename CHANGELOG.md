@@ -25,7 +25,7 @@ clean data it stays largely silent (on a real M27 stack it reports exactly one i
 finding out of a non-measurement.
 
 Verified on 5 real Seestar subs: 4 of 5 used, complete report, three pieces of advice, suggestion
-`--astro-synthstar --astro-bg-extract`.
+`--astro-synthstar --bg-extract`.
 
 **The camera is detected from the header** (`INSTRUME`). Without a camera key there would be no
 colour verdict, and in beginner mode nobody types in a camera by hand. On ambiguity the key stays

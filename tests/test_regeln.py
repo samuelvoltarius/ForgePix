@@ -115,6 +115,36 @@ class TestEinzelneRegeln(unittest.TestCase):
                          "das wird automatisch behandelt, ist also kein Mangel")
 
 
+class TestSchalterExistieren(unittest.TestCase):
+    """Jeder Schalter, den eine Regel empfehlen kann, muss die Pipeline auch kennen.
+
+    Das ist kein Formalismus. `--astro-bg-extract` stand hier, die Option heisst aber
+    `--bg-extract` — ausgeloest wurde die Regel am haeufigsten von allen. Wer dem Rat folgte,
+    bekam von argparse einen Fehler statt eines Bildes. Der Rat las sich dabei vollkommen
+    plausibel, mit gemessener Begruendung und allem. Genau daran faellt so etwas nicht auf,
+    und genau darum prueft es ab jetzt eine Maschine.
+    """
+
+    def test_jeder_empfohlene_schalter_existiert(self):
+        import inspect
+        import re
+        import subprocess
+        import sys
+        wurzel = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
+        hilfe = subprocess.run(
+            [sys.executable, "-X", "utf8", os.path.join(wurzel, "core", "focus_cull_stack.py"),
+             "--help"],
+            capture_output=True, text=True, encoding="utf-8", timeout=300).stdout
+        self.assertIn("--input", hilfe, "die Hilfe liess sich nicht lesen")
+        quelle = inspect.getsource(regeln.pruefen)
+        schalter = set()
+        for treffer in re.findall(r'"(--[a-z0-9-]+(?: [^"]*)?)"', quelle):
+            schalter.update(t for t in treffer.split() if t.startswith("--"))
+        self.assertTrue(schalter, "es wurde gar kein Schalter gefunden — Test waere wertlos")
+        fehlend = sorted(s for s in schalter if s not in hilfe)
+        self.assertEqual(fehlend, [], "Regelwerk empfiehlt unbekannte Schalter: %s" % fehlend)
+
+
 class TestAusgabe(unittest.TestCase):
 
     def test_reihenfolge_nach_dringlichkeit(self):
@@ -130,7 +160,7 @@ class TestAusgabe(unittest.TestCase):
                                         bild__ausgebrannt_prozent=1.5))
         e = regeln.einstellungen(raete)
         self.assertEqual(len(e), len(set(e)), "doppelte Schalter")
-        self.assertIn("--astro-bg-extract", e)
+        self.assertIn("--bg-extract", e)
 
     def test_text_ohne_raete(self):
         self.assertIn("Keine Auffaelligkeiten", regeln.text([]))

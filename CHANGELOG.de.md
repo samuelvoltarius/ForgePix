@@ -24,7 +24,7 @@ Punkt), und **fehlende Messwerte lösen keine Regel aus** — eine Regel, die au
 Wert anspringt, erfindet einen Befund aus einer Nicht-Messung.
 
 An 5 echten Seestar-Subs geprüft: 4 von 5 verwendet, Bericht vollständig, drei Räte, Vorschlag
-`--astro-synthstar --astro-bg-extract`.
+`--astro-synthstar --bg-extract`.
 
 **Die Kamera wird aus dem Header erkannt** (`INSTRUME`). Ohne Kameraschlüssel gäbe es kein
 Farburteil, und im Anfänger-Modus trägt niemand eine Kamera von Hand ein. Bei Mehrdeutigkeit

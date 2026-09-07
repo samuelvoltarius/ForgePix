@@ -79,13 +79,13 @@ def pruefen(bericht):
             "Unterschiede auf — an echten Daten stieg ein flacher Stack (0,0 %%) im fertigen "
             "JPG auf 35,6 %%." % grad,
             "Hintergrund-Entfernung einschalten.",
-            "--astro-bg-extract"))
+            "--bg-extract"))
     elif grad is not None and grad > 3.0:
         raete.append(Rat(
             HINWEIS, "Leichter Helligkeitsverlauf",
             "Der Himmel schwankt um %.0f %% ueber die Flaeche." % grad,
             "Hintergrund-Entfernung ist sinnvoll.",
-            "--astro-bg-extract"))
+            "--bg-extract"))
 
     # --- Farbe -------------------------------------------------------------------
     if _w(bericht, "farbe", "passt") is False:

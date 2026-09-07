@@ -2078,9 +2078,16 @@ def run_astro(input_dir, work_dir, args):
         print(messbericht.text(_b))
         print()
         print(regeln.text(_r))
-        if regeln.einstellungen(_r):
+        _schalter = regeln.einstellungen(_r)
+        if _schalter:
             print()
-            print("  Vorschlag: " + " ".join(regeln.einstellungen(_r)))
+            # Zwei Zeilen mit Absicht. Die erste ist fuer Menschen. Die zweite ist ein Marker
+            # nach dem PREVIEW:-Prinzip — die Oberflaeche liest die Schalter daraus, statt eine
+            # deutsche Formulierung zu erkennen, die sich bei der naechsten Uebersetzung aendert.
+            # Das Wort "Vorschlag:" ist hier bewusst NICHT verwendet: die GUI deutet jede Zeile
+            # damit als Begruendung und wuerde dem Benutzer sonst rohe Schalter als Grund zeigen.
+            print("  Empfohlene Einstellungen: " + " ".join(_schalter))
+            print("RAT:" + " ".join(_schalter))
     except Exception as e:
         # Nicht verschlucken. Ein stiller Fehler hier hiesse: der Bericht fehlt und niemand
         # merkt es — genau die Sorte Fehler, die in diesem Projekt am meisten gekostet hat.
