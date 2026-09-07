@@ -67,6 +67,68 @@ Modell keine Helligkeit.
 **Empfehlung:** 0,3 bis 0,5. Volle Stärke nur, wenn schwache Sterne nicht zählen — und nie vor
 einer Photometrie.
 
+## Die drei anderen Modelle — und der Vergleich mit dem klassischen Weg
+
+Gemessen an demselben tiefen IC-434-Stapel (40 Aufnahmen), volle Auflösung.
+
+### Schärfen
+
+| | FWHM | Sterne gefunden | Rauschen | Sternfluss |
+|---|---|---|---|---|
+| vorher | 2,631 px | 26 | | |
+| Modell, Stärke 0,5 | 2,646 px | 26 | +0,9 % | +3,5 % |
+| Modell, Stärke 1,0 | 2,544 px | 29 | +3,0 % | +6,9 % |
+| klassisch, RL 15 Iterationen | 2,355 px | 39 | +15,2 % | −0,2 % |
+| klassisch, RL 30 Iterationen | **2,220 px** | **42** | +25,5 % | −3,3 % |
+
+Das Modell schärft — die frühere gegenteilige Aussage war ein Messfehler und ist damit
+widerlegt. Aber es schärft **schwach**: −3,3 % FWHM gegen −15,6 % bei der klassischen
+Richardson-Lucy-Dekonvolution, und es findet 29 Sterne statt 42. Richardson-Lucy erkauft das mit
+Rauschen (+25,5 %), das Modell ist darin schonender.
+
+Ein Punkt spricht gegen das Modell: **es erhöht den Sternfluss um 6,9 %.** Richardson-Lucy tut
+das nicht (−0,2 %). Ein Schärfeverfahren soll Helligkeit umverteilen, nicht vermehren; für
+Photometrie ist das Modell damit unbrauchbar.
+
+### Sterne trennen
+
+Gemessen wird der Sternfluss **über dem Himmelsniveau**, der nach der Trennung übrig bleibt.
+Weniger ist besser.
+
+| | Sternfluss übrig |
+|---|---|
+| Modell, Stärke 0,5 | 67,7 % |
+| Modell, Stärke 1,0 | 35,3 % |
+| klassisch (`remove_stars`) | **4,8 %** |
+
+Der klassische Weg ist hier **siebenmal gründlicher**. Das Modell lässt bei voller Stärke mehr
+als ein Drittel des Sternlichts stehen.
+
+### Hintergrund
+
+Gemessen wird der Helligkeitsverlauf über die Bildfläche. Weniger ist besser.
+
+| Bild | vorher | Modell 0,5 | Modell 1,0 | klassisch |
+|---|---|---|---|---|
+| C 31 (4 Aufnahmen) | 4,63 % | 5,50 % | **6,37 %** | **1,55 %** |
+| IC 434 (40 Aufnahmen) | 2,69 % | 2,33 % | 2,37 % | **0,29 %** |
+| IC 434 + künstlicher Verlauf | 101,87 % | 54,82 % | 15,14 % | **0,29 %** |
+
+Auf einem groben künstlichen Verlauf arbeitet das Modell (102 % → 15 %) — es ist also nicht
+kaputt. Auf **echten** Verläufen taugt es nichts: bei C 31 macht es den Verlauf sogar schlechter
+(4,63 % → 6,37 %). Der klassische Weg schlägt es in allen drei Fällen deutlich.
+
+## Fazit
+
+Von den vier Modellen hat nur der **Entrauscher** eine Daseinsberechtigung. Beim Schärfen, beim
+Sternetrennen und beim Hintergrund ist der klassische, bereits eingebaute Weg besser — teils um
+ein Vielfaches. Dass alle vier als experimentell und nicht freigegeben geführt werden, ist nach
+diesen Zahlen richtig.
+
+Das ist kein Argument gegen das Nachtrainieren, sondern eines dafür, es dort anzusetzen, wo es
+etwas bringt. Und es ist ein Beleg dafür, dass die klassischen Verfahren dieses Projekts nicht
+die schwache Notlösung sind, für die ein „KI"-Etikett sie gern ausgibt.
+
 ## Was noch nicht gemessen ist
 
 Ehrlich benannt, damit niemand mehr hineinliest, als dasteht:
@@ -75,10 +137,10 @@ Ehrlich benannt, damit niemand mehr hineinliest, als dasteht:
   ASI294MC- oder ASI533MC-Daten genauso arbeitet, ist offen — anderer Pixelmaßstab, andere
   Sternbreite, anderes Ausleserauschen.
 * **Nur Breitband (IRCUT).** Schmalband hat ein anderes Verhältnis von Signal zu Untergrund.
-* **Kein Vergleich mit dem klassischen Weg.** Ob das Modell besser ist als die eingebaute
-  klassische Rauschminderung, sagt keine dieser Zahlen.
-* **Schärfen, Sterne trennen und Hintergrund** sind hier noch nicht bei voller Auflösung an
-  echten Daten vermessen.
+* **Beim Entrauschen fehlt der Vergleich mit dem klassischen Weg.** Für Schärfen, Sternetrennen
+  und Hintergrund steht er oben; für das Entrauschen nicht.
+* **Nur ein Motiv je Vergleich.** Die drei Vergleichsmessungen stammen alle vom selben
+  IC-434-Stapel. Beim Hintergrund waren es drei Bilder, bei den anderen beiden eines.
 
 ## Ein Detail zur Normierung
 

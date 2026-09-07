@@ -1856,6 +1856,31 @@ def run_astro(input_dir, work_dir, args):
                 setattr(args, attr, val)
                 print(f"  Kalibrierung automatisch erkannt: {label}-Ordner „{os.path.basename(val)}“")
 
+    # --- Vorpruefung -----------------------------------------------------------------
+    # Was in den Kopfdaten steht, muss man nicht erst errechnen. Zwei Kameras in einem Ordner
+    # oder vier Aufnahmen erfaehrt man sonst erst nach zwanzig Minuten Rechnen — und der Stapel
+    # aus zwei Sensoren laeuft durch, sieht aus wie ein Bild und hat matschige Sterne.
+    try:
+        import vorpruefung
+        _koepfe = vorpruefung.kopfdaten(paths)
+        if _koepfe:
+            _u = vorpruefung.uebersicht(_koepfe, gesamt=len(paths))
+            _vt = vorpruefung.text(_u)
+            if _vt:
+                print()
+                print(_vt)
+            _vr = vorpruefung.pruefen(
+                _u, align_mode=getattr(args, "astro_align", None),
+                hat_dark=bool(getattr(args, "dark", None)),
+                hat_flat=bool(getattr(args, "flat", None)))
+            if _vr:
+                import regeln as _rg
+                print()
+                print(_rg.text(_vr))
+                print()
+    except Exception as e:
+        print("  Vorpruefung nicht moeglich: %s" % e)
+
     # Sub-Qualität bewerten + schlechte aussortieren (FWHM/Sterne/Guiding/Wolken/Spuren)
     _bestref = None          # ohne Sub-Bewertung (--no-astro-qc) bleibt es beim mittleren Sub
     if not getattr(args, "no_astro_qc", False):

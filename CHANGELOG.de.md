@@ -8,6 +8,29 @@ Alle nennenswerten Änderungen an ForgePix. Format orientiert an
 
 ## [Unreleased]
 
+### Vorprüfung: was in den Kopfdaten steht, muss man nicht errechnen
+
+Das Regelwerk urteilt über den fertigen Stapel. Für einen Teil der Befunde ist das zu spät: dass
+nur vier Aufnahmen da sind, dass zwei Kameras im Ordner liegen oder dass Ha und L gemischt
+wurden, steht in den FITS-Kopfdaten. Das nach zwanzig Minuten Rechnen zu erfahren, ist eine
+vermeidbare Enttäuschung.
+
+`core/vorpruefung.py` liest vor dem Stapeln nur Kopfdaten — kein einziges Bild, Sekunden statt
+Minuten — und stellt Anzahl, Kamera, Filter, Belichtung, Temperaturspanne und Nächte voran. Bei
+sehr vielen Aufnahmen wird gleichmäßig ausgedünnt; die Gesamtzahl bleibt richtig.
+
+Zwei Befunde zählen dabei mehr als die übrigen, weil sie **still** danebengehen:
+
+- **Mehrere Kameras in einer Serie** (kritisch). Verschiedene Sensoren haben verschiedene
+  Pixelmaßstäbe und damit verschieden breite Sterne. Der Stapel läuft durch, das Ergebnis sieht
+  aus wie ein Bild, und die Sterne sind Matsch — nichts daran meldet sich von selbst.
+- **Azimutale Montierung mit `--astro-align shift`.** Der Seestar dreht sein Bildfeld im Lauf der
+  Nacht; siehe die Messung oben. Gemeldet wird das nur, wenn reine Verschiebung ausdrücklich
+  eingestellt ist — im Standard (`rotate`) ist alles in Ordnung.
+
+An echten Daten geprüft: „5 Aufnahmen, 2 Minuten gesamt · Seestar S30 · IRCUT · 30 s · 14,6 bis
+18,3 Grad · 2025-12-26 bis 2025-12-27" plus zwei Hinweise, alles vor dem ersten gelesenen Bild.
+
 ### Stufe 4: die lokale KI wird gefunden statt mitgeliefert
 
 ForgePix liefert **kein** Sprachmodell mit. Das Programm ist rund 30 MB groß; ein brauchbares

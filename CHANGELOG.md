@@ -8,6 +8,28 @@ All notable changes to ForgePix. Format based on
 
 ## [Unreleased]
 
+### Pre-flight: what the headers already say need not be computed
+
+The rule set judges the finished stack. For part of its findings that is too late: that there are
+only four frames, that two cameras sit in one folder, or that Ha and L were mixed, is in the FITS
+headers. Learning it after twenty minutes of computation is an avoidable disappointment.
+
+`core/vorpruefung.py` reads headers only before stacking — not a single image, seconds instead of
+minutes — and states the count, camera, filter, exposure, temperature span and nights up front.
+With very many frames it samples evenly; the total count stays correct.
+
+Two findings matter more than the rest, because they go wrong **silently**:
+
+- **Several cameras in one series** (critical). Different sensors have different pixel scales and
+  therefore differently wide stars. The stack runs through, the result looks like an image, and
+  the stars are mush — nothing about it announces itself.
+- **Alt-azimuth mount with `--astro-align shift`.** The Seestar rotates its field over the night;
+  see the measurement above. This is only reported when translation-only alignment is explicitly
+  selected — on the default (`rotate`) everything is fine.
+
+Verified on real data: "5 frames, 2 minutes total · Seestar S30 · IRCUT · 30 s · 14.6 to 18.3
+degrees · 2025-12-26 to 2025-12-27" plus two findings, all before the first image was read.
+
 ### Stage 4: the local AI is found, not bundled
 
 ForgePix ships **no** language model. The program is about 30 MB; a usable small model is 300 to
