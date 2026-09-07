@@ -16,6 +16,17 @@ import torch.nn.functional as F
 from training.vendor.nafnet_upstream import NAFNet
 
 TASKS = ("denoise", "background", "deblur", "starless")
+
+# Gemessene Vollskala-Spanne der echten Kameras. Faellt die Datei aus, bleibt der alte,
+# willkuerliche Bereich — ein fehlender Messwert darf kein Training verhindern.
+try:
+    from . import sensoren as _sensoren
+except ImportError:
+    try:
+        import sensoren as _sensoren
+    except ImportError:
+        _sensoren = None
+_SENSOR_BEREICH = _sensoren.bereich() if _sensoren is not None else (250.0, 125000.0)
 # Grundform. `--width` und `--channels` ueberschreiben sie; die Vorgabe bleibt, was bisher
 # trainiert wurde, damit alte Laeufe reproduzierbar bleiben.
 #
@@ -28,6 +39,11 @@ CONFIG = dict(img_channel=1, width=16, middle_blk_num=2,
               enc_blk_nums=[1, 1, 2], dec_blk_nums=[1, 1, 1])
 CONTRACT = dict(channels=1, tile_size=256, halo=32,
                 normalization="affine_percentile_v1", output="complete_target")
+
+
+# Eigener Generator fuer das Ziehen aus der Bank im Hauptspeicher. Aus einem festen
+# Startwert, damit ein Lauf wiederholbar bleibt.
+_cpu_generator = torch.Generator().manual_seed(9241773)
 
 
 def sample(batch, device, generator, task, scene_bank=None):
@@ -76,8 +92,17 @@ not calibrated manufacturer camera profiles or real aberration ground truth.
             stars += spike * amplitude * .015
     clean = diffuse + stars
     if scene_bank is not None and task != "starless":
-        indices = torch.randint(len(scene_bank), (batch,), device=device, generator=generator)
-        scenes = scene_bank[indices]
+        # Die Bank liegt im Hauptspeicher (siehe `_bank`). Indizes darum auf der CPU ziehen
+        # und nur den Stapel hinueberschieben — sonst scheitert die Indizierung daran, dass
+        # Indizes und Daten auf verschiedenen Geraeten liegen.
+        # `device` kommt als Text ("cuda"/"cpu"), nicht als torch.device — darum str().
+        if scene_bank.device.type == "cpu" and str(device) != "cpu":
+            indices = torch.randint(len(scene_bank), (batch,), generator=_cpu_generator)
+            scenes = scene_bank[indices].to(device, non_blocking=True)
+        else:
+            indices = torch.randint(len(scene_bank), (batch,), device=device,
+                                    generator=generator)
+            scenes = scene_bank[indices]
         if float(rand(1).item()) < .5:
             scenes = scenes.flip(-1)
         if float(rand(1).item()) < .5:
@@ -111,13 +136,26 @@ not calibrated manufacturer camera profiles or real aberration ground truth.
         # Identity cases have no stars; never label a stellar input as starless.
         return torch.where(identity, diffuse, inp), target
     else:
-        electrons = 10 ** (rand(*shape)*2.7+2.4)
+        # Vollskala in Elektronen aus den GEMESSENEN Kameras statt aus einem willkuerlichen
+        # Bereich. Vorher: 10**(rand*2.7+2.4), also 250 bis 125000 Elektronen — Faktor 500,
+        # ueber den ein Modell seine Kapazitaet verteilen muss. Gemessen liegen die drei
+        # Kameras zwischen 5243 (Seestar S30) und 18415 (ASI533MC Pro); mit Streuung wird
+        # daraus rund 2400 bis 40000, Faktor 17. Siehe training/sensoren.py fuer das
+        # Messverfahren und warum ein erster Anlauf ohne Sockelabzug falsch war.
+        _lo, _hi = _SENSOR_BEREICH
+        electrons = 10 ** (rand(*shape)*(math.log10(_hi)-math.log10(_lo))+math.log10(_lo))
         sigma = 10 ** (rand(*shape)*1.6-3.5)
         shot = torch.poisson(clean.clamp_min(0)*electrons,generator=generator)/electrons
         inp = clean + shot-clean.clamp_min(0) + normal(clean.shape)*sigma
         white = normal(clean.shape)
         correlated = F.avg_pool2d(F.pad(white,(1,1,1,1),mode="reflect"),3,1)*3
         inp += correlated*sigma*.35 + normal((batch,1,size,1))*sigma*.1
+        # Hotpixel. Gemessen: ASI294 0,0071 %, Seestar 0,031 %, ASI533 0,144 % — also ueber
+        # zwei Groessenordnungen. Sie fehlten im Rauschmodell vollstaendig, und ein Modell,
+        # das sie nie gesehen hat, laesst sie stehen oder verschmiert sie zu Flecken.
+        _anteil = 10 ** (rand(*shape)*2.3-4.15)          # 0,007 % bis 1,4 %
+        _treffer = (torch.rand(inp.shape, device=device, generator=generator) < _anteil).float()
+        inp = inp + _treffer * (torch.rand(inp.shape, device=device, generator=generator)*.7+.05)
         target = clean
     return torch.where(identity, target, inp), target
 
@@ -188,7 +226,10 @@ def train(args):
                     "Die Szenenbank hat %d Kanal/Kanaele, --channels sagt %d. "
                     "Eine Farbbank baut `prepare_scenes_eigene.py --farbe`."
                     % (a.shape[1], args.channels))
-            return a.to(device)
+            # NICHT `.to(device)`: die Bank ist 12,8 GB gross und wuerde neben dem Modell
+            # liegen, obwohl je Schritt nur `batch` Kacheln gebraucht werden. Sie bleibt hier
+            # und `sample` holt sich den Stapel.
+            return a
 
         train_bank = _bank("train.npy")
         val_bank = _bank("validation.npy")

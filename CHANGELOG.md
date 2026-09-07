@@ -8,6 +8,39 @@ All notable changes to ForgePix. Format based on
 
 ## [Unreleased]
 
+### Training now emulates MEASURED cameras instead of random ranges
+
+The training noise model was built correctly in physical terms — Poisson shot noise, Gaussian
+read noise, correlated noise, row noise — but its parameters came from arbitrary ranges: full
+scale 250 to 125000 electrons, a factor of 500. A model spreads its capacity across sensors it
+will never see. Hot pixels were missing entirely.
+
+`training/sensoren.py` now holds values MEASURED from real frames:
+
+| | Full scale | Gain | Hot pixels |
+|---|---|---|---|
+| ZWO ASI294MC Pro | 17694 e- | 0.270 e-/ADU | 0.0071 % |
+| ZWO ASI533MC Pro | 18415 e- | 0.281 e-/ADU | 0.1438 % |
+| Seestar S30 | 5243 e- | 0.080 e-/ADU | 0.0309 % |
+
+The training range shrinks from a factor of 500 to a factor of 17 (2383 to 40513 electrons),
+and hot pixels are in the model for the first time — they span two orders of magnitude.
+
+The measurement needs no extra exposures: temporal noise from the DIFFERENCE of two
+consecutive frames (sky, object and fixed pattern cancel), gain from sky divided by variance.
+The **pedestal** is what matters: a first attempt without it produced 2.1 and 4.4 e-/ADU for
+the same camera at identical settings. Two series sharing gain AND offset settings determine
+gain and pedestal together; cross-checked over four series with two offset and two gain
+settings this gives a consistent 0.28 to 0.30 e-/ADU.
+
+Not included and therefore not claimed: read noise on its own. That needs bias frames.
+
+### The scene bank no longer occupies compute memory
+
+The bank grew from 851 to 48955 tiles and weighs 12.8 GB. It was placed alongside the model in
+full, although only `batch` tiles are needed per step — at batch size 4 that is 1 MB instead of
+12.8 GB. A width-256 model (roughly 21 GB) now fits even when the machine is not empty.
+
 ### The bundled AI models can finally reach the stacking pipeline at all
 
 ForgePix ships four of its own models — background, denoise, deblur, star separation — and

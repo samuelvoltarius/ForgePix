@@ -8,6 +8,43 @@ Alle nennenswerten Änderungen an ForgePix. Format orientiert an
 
 ## [Unreleased]
 
+### Das Training bildet jetzt GEMESSENE Kameras nach statt Zufallsbereiche
+
+Das Rauschmodell im Training war physikalisch richtig gebaut — Poisson-Schrotrauschen,
+gaussches Ausleserauschen, korreliertes Rauschen, Zeilenrauschen —, aber seine Parameter kamen
+aus willkuerlichen Bereichen: Vollskala 250 bis 125000 Elektronen, ein Faktor 500. Ein Modell
+verteilt seine Kapazitaet damit ueber Sensoren, die es nie zu sehen bekommt. Hotpixel fehlten
+ganz.
+
+`training/sensoren.py` haelt jetzt Kennwerte, die an echten Aufnahmen GEMESSEN sind:
+
+| | Vollskala | Gain | Hotpixel |
+|---|---|---|---|
+| ZWO ASI294MC Pro | 17694 e- | 0,270 e-/ADU | 0,0071 % |
+| ZWO ASI533MC Pro | 18415 e- | 0,281 e-/ADU | 0,1438 % |
+| Seestar S30 | 5243 e- | 0,080 e-/ADU | 0,0309 % |
+
+Der Trainingsbereich schrumpft damit von Faktor 500 auf Faktor 17 (2383 bis 40513 Elektronen),
+und Hotpixel sind erstmals ueberhaupt im Modell — sie streuen ueber zwei Groessenordnungen.
+
+Das Messverfahren, ohne Zusatzaufnahmen: das zeitliche Rauschen aus der DIFFERENZ zweier
+aufeinanderfolgender Aufnahmen (Himmel, Objekt und festes Muster fallen heraus), der Gain aus
+Himmel geteilt durch Varianz. Entscheidend ist dabei der **Sockel**: ein erster Anlauf ohne ihn
+lieferte fuer dieselbe Kamera bei identischer Einstellung 2,1 und 4,4 e-/ADU. Mit zwei Serien
+gleicher Gain- UND Offset-Einstellung lassen sich Gain und Sockel zusammen bestimmen; ueber
+vier Serien mit zwei Offset- und zwei Gain-Einstellungen gegengeprueft ergibt das durchgehend
+0,28 bis 0,30 e-/ADU.
+
+Nicht enthalten und darum auch nicht behauptet: das reine Ausleserauschen. Dafuer braucht es
+Bias-Aufnahmen.
+
+### Die Szenenbank belegt den Rechenspeicher nicht mehr
+
+Die Bank ist von 851 auf 48955 Kacheln gewachsen und wiegt 12,8 GB. Sie wurde komplett neben
+das Modell gelegt, obwohl je Schritt nur `batch` Kacheln gebraucht werden — bei Stapelgroesse 4
+sind das 1 MB statt 12,8 GB. Damit passt ein width-256-Modell (rund 21 GB) auch dann, wenn der
+Rechner nicht leer ist.
+
 ### Die eigenen KI-Modelle kommen im Stapel-Ablauf ueberhaupt erst an
 
 ForgePix liefert vier eigene Modelle mit — Hintergrund, Entrauschen, Schaerfen,
