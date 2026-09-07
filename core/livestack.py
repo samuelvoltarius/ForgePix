@@ -53,6 +53,7 @@ class LiveStack:
         self.ref_grau = None
         self.ref_pegel = None
         self.pfade = []
+        self.letzte_sterne = None
         if referenz is not None:
             self._referenz_setzen(referenz)
 
@@ -73,7 +74,11 @@ class LiveStack:
         if not self.registrieren or self.ref_grau is None:
             return f, np.ones(f.shape[:2], dtype=bool)
         try:
-            M = astro._estimate_star_shift(self.ref_grau, astro._gray(f))
+            grau = astro._gray(f)
+            M = astro._estimate_star_shift(self.ref_grau, grau)
+            # Die erkannten Sterne dieses Frames merken — sie werden in der Vorschau
+            # markiert, damit sichtbar ist, worauf gerade ausgerichtet wird.
+            self.letzte_sterne = astro._star_centroids(grau / (float(grau.max()) + 1e-9))
         except Exception:
             M = None
         if M is None:
@@ -174,8 +179,14 @@ class LiveStack:
             return None
         return self.summe / np.maximum(self.gewicht, 1e-9)
 
-    def vorschau_schreiben(self, pfad, strecken=True, skala=0.5):
-        """Zwischenstand als JPG — das ist der Sinn des Ganzen: beim Aufnehmen zusehen."""
+    def vorschau_schreiben(self, pfad, strecken=True, skala=0.5, sterne_zeigen=True):
+        """Zwischenstand als JPG — das ist der Sinn des Ganzen: beim Aufnehmen zusehen.
+
+        `sterne_zeigen` markiert die Sterne, auf die zuletzt ausgerichtet wurde. Damit sieht
+        man, WORAUF das Programm anspringt: Kreise auf echten Sternen heisst, die Ausrichtung
+        arbeitet; Kreise im Rauschen oder auf einer Satellitenspur erklaeren sofort, warum
+        Frames verworfen werden.
+        """
         erg = self.ergebnis()
         if erg is None:
             return False
@@ -183,6 +194,8 @@ class LiveStack:
         # Live-Vorschau grünstichig, während der spätere Export neutral ist (gemessen
         # 36,97 gegen 0,96 an echten M27-Daten). Siehe dort die Begründung.
         v = astro.vorschau_ansicht(erg) if strecken else erg
+        if sterne_zeigen and getattr(self, "letzte_sterne", None) is not None:
+            v = astro.sterne_einzeichnen(v, self.letzte_sterne)
         if skala and skala != 1.0:
             v = cv2.resize(v, (0, 0), fx=skala, fy=skala)
         return bool(imwrite(pfad, np.clip(v * 255, 0, 255).astype(np.uint8),

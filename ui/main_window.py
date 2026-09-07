@@ -2138,6 +2138,7 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, ProjectM
         self.log.clear()
         # erst Pixmap leeren, DANN Text setzen — umgekehrt löscht setPixmap den Text sofort wieder
         self.preview.setPixmap(QPixmap()); self.preview.setText(tr("— läuft —"))
+        self._live_anzeige_starten()
         self.open_btn.setEnabled(False); self.retouch_btn.setEnabled(False)
         self.cmp_btn.setEnabled(False); self.openfolder_btn.setEnabled(False)
         self.export_btn.setEnabled(False); self.tools_btn.setEnabled(False)
@@ -2362,7 +2363,45 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, ProjectM
         if saw_result or "Fertig. Ergebnis in:" in clean:  # auch im Watch-/Batch-Modus laufend
             self._show_result()
 
+    def _live_anzeige_starten(self):
+        """Das Zwischenbild waehrend des Laufs anzeigen — beim Aufnehmen zusehen.
+
+        Die Pipeline SCHRIEB `_live_preview.jpg` schon an vier Stellen (Registrieren, Stapeln,
+        Live-Modus, Langzeit), aber niemand hat es je angezeigt: in der Bildspalte stand nur
+        „— laeuft —", bis alles fertig war. Bei einer Nacht mit 200 Aufnahmen sind das Minuten
+        vor einem leeren Rahmen.
+
+        Nachgeladen wird nur, wenn sich die Aenderungszeit der Datei bewegt hat — sonst
+        skaliert die Oberflaeche jede Sekunde ein Bild neu, ohne dass sich etwas geaendert hat.
+        """
+        from PySide6.QtCore import QTimer
+        self._live_mtime = None
+        if getattr(self, "_live_timer", None) is None:
+            self._live_timer = QTimer(self)
+            self._live_timer.timeout.connect(self._live_anzeige_aktualisieren)
+        self._live_timer.start(1000)
+
+    def _live_anzeige_beenden(self):
+        if getattr(self, "_live_timer", None) is not None:
+            self._live_timer.stop()
+
+    def _live_anzeige_aktualisieren(self):
+        pfad = os.path.join(self._work_dir(), "_live_preview.jpg")
+        try:
+            mtime = os.path.getmtime(pfad)
+        except OSError:
+            return
+        if mtime == getattr(self, "_live_mtime", None):
+            return
+        bild = QPixmap(pfad)
+        if bild.isNull():
+            return                      # halb geschriebene Datei: beim naechsten Mal wieder
+        self._live_mtime = mtime
+        self.preview.setPixmap(bild.scaled(self.preview.size(), Qt.KeepAspectRatio,
+                                           Qt.SmoothTransformation))
+
     def _on_finished(self, code, _status):
+        self._live_anzeige_beenden()
         stop_file = getattr(self, "_live_stop_file", None)
         if stop_file and os.path.exists(stop_file):
             os.unlink(stop_file)

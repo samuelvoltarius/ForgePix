@@ -2725,6 +2725,33 @@ def autostretch(f, black_clip=None, strength=6.0, protect_core=True, saturation=
     return np.clip(out, 0, 1)
 
 
+def sterne_einzeichnen(ansicht, punkte, farbe=(0.35, 1.0, 0.35), radius=6, dicke=1,
+                       max_marken=400):
+    """Die Sterne markieren, die zum Ausrichten benutzt wurden.
+
+    Damit sieht man beim Zuschauen, WORAUF das Programm gerade ausrichtet — und erkennt sofort,
+    wenn es auf Rauschen oder auf einen Satelliten anspringt statt auf Sterne. Ohne diese
+    Rueckmeldung ist ein Frame, der still verworfen wird, nicht von einem zu unterscheiden, bei
+    dem die Erkennung danebenlag.
+
+    `ansicht` ist das bereits gestreckte Anzeigebild (0..1, BGR); es wird nicht veraendert.
+    `punkte` sind (x, y)-Paare in Bildkoordinaten DIESER Ansicht.
+    """
+    if ansicht is None or punkte is None or len(punkte) == 0:
+        return ansicht
+    out = np.array(ansicht, np.float32, copy=True)
+    if out.ndim == 2:
+        out = cv2.cvtColor(out, cv2.COLOR_GRAY2BGR)
+    h, w = out.shape[:2]
+    for i, (x, y) in enumerate(punkte):
+        if i >= max_marken:
+            break
+        xi, yi = int(round(float(x))), int(round(float(y)))
+        if 0 <= xi < w and 0 <= yi < h:
+            cv2.circle(out, (xi, yi), int(radius), farbe, int(dicke), cv2.LINE_AA)
+    return np.clip(out, 0, 1)
+
+
 def vorschau_ansicht(f, strength=6.0, saturation=1.05, neutralisieren=True):
     """Ein LINEARES Astro-Ergebnis so aufbereiten, wie es angesehen werden soll.
 
