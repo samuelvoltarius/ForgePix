@@ -114,8 +114,10 @@ class TestFragen(unittest.TestCase):
         echt = focus_cull_stack._vlm_chat
         focus_cull_stack._vlm_chat = lambda *a, **k: antwort
         self.addCleanup(lambda: setattr(focus_cull_stack, "_vlm_chat", echt))
+        # Modellname ausdruecklich: sonst fragte `fragen` den Server nach seinen Modellen und
+        # der Test braeuchte Netz.
         return berater.fragen("Bericht", "Rat", "waermer bitte",
-                              "http://beispiel/v1", log=_stille)
+                              "http://beispiel/v1", model="qwen", log=_stille)
 
     def test_gute_antwort(self):
         e = self._mit_antwort('{"einstellungen": ["--astro-saturation 1.3"], '
@@ -146,10 +148,39 @@ class TestFragen(unittest.TestCase):
         echt = focus_cull_stack._vlm_chat
         focus_cull_stack._vlm_chat = kaputt
         self.addCleanup(lambda: setattr(focus_cull_stack, "_vlm_chat", echt))
-        e = berater.fragen("B", "R", "waermer", "http://beispiel/v1", log=_stille)
+        e = berater.fragen("B", "R", "waermer", "http://beispiel/v1", model="qwen",
+                           log=_stille)
         self.assertEqual(e["einstellungen"], [])
         self.assertEqual(e["quelle"], "keine")
         self.assertIn("Verbindung abgelehnt", e["begruendung"])
+
+    def test_ohne_modellnamen_wird_der_server_gefragt(self):
+        """Vorher fiel die Oberflaeche bei leerem Modellfeld auf "gpt-4o-mini" zurueck — auch
+        bei einem lokalen Server. Am laufenden vLLM geprueft: 404, "The model `gpt-4o-mini`
+        does not exist." Die KI-Funktion tat kommentarlos nichts."""
+        import focus_cull_stack
+        gefragt = []
+        echt_w = focus_cull_stack.vlm_modelle
+        echt_c = focus_cull_stack._vlm_chat
+        focus_cull_stack.vlm_modelle = lambda *a, **k: (gefragt.append(a) or ["mein-modell"])
+        focus_cull_stack._vlm_chat = (
+            lambda ep, mo, *a, **k: '{"einstellungen": ["--bg-extract"], "begruendung": "%s"}'
+            % mo)
+        self.addCleanup(lambda: setattr(focus_cull_stack, "vlm_modelle", echt_w))
+        self.addCleanup(lambda: setattr(focus_cull_stack, "_vlm_chat", echt_c))
+        e = berater.fragen("B", "R", "waermer", "http://beispiel/v1", log=_stille)
+        self.assertTrue(gefragt, "der Server wurde gar nicht nach Modellen gefragt")
+        self.assertEqual(e["begruendung"], "mein-modell",
+                         "der ermittelte Name wurde nicht benutzt")
+
+    def test_server_ohne_modelle_gibt_klare_auskunft(self):
+        import focus_cull_stack
+        echt = focus_cull_stack.vlm_modelle
+        focus_cull_stack.vlm_modelle = lambda *a, **k: []
+        self.addCleanup(lambda: setattr(focus_cull_stack, "vlm_modelle", echt))
+        e = berater.fragen("B", "R", "waermer", "http://beispiel/v1", log=_stille)
+        self.assertEqual(e["quelle"], "keine")
+        self.assertIn("kein Modell", e["begruendung"])
 
     def test_ohne_endpunkt_wird_gar_nicht_gefragt(self):
         e = berater.fragen("B", "R", "waermer", None, log=_stille)
@@ -157,7 +188,7 @@ class TestFragen(unittest.TestCase):
 
     def test_ohne_wunsch_wird_gar_nicht_gefragt(self):
         for w in (None, "", "   "):
-            self.assertEqual(berater.fragen("B", "R", w, "http://x/v1",
+            self.assertEqual(berater.fragen("B", "R", w, "http://x/v1", model="qwen",
                                             log=_stille)["quelle"], "keine")
 
 

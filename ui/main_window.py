@@ -1898,8 +1898,13 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, ProjectM
             if getattr(self, "live", None) is not None and self.live.isChecked():
                 args += ["--live"]
         if self.vlm_group.isChecked() and self.vlm_ep.text().strip():
+            # KEIN erfundener Standardname mehr. Vorher stand hier "gpt-4o-mini" als
+            # Rueckfall — auch bei Anbieter "Lokal / eigener Server", dessen Voreinstellung das
+            # Modellfeld leer laesst. Am laufenden vLLM geprueft antwortet der darauf mit
+            # "The model `gpt-4o-mini` does not exist." (404), und die KI-Funktion tat
+            # kommentarlos nichts. Ist das Feld leer, fragt die Pipeline den Server selbst.
             args += ["--vlm-endpoint", self.vlm_ep.text().strip(),
-                     "--vlm-model", self.vlm_model.text().strip() or "gpt-4o-mini"]
+                     "--vlm-model", self.vlm_model.text().strip()]
             if self.vlm_key.text().strip():
                 args += ["--vlm-key", self.vlm_key.text().strip()]
             if self.vlm_wish.text().strip():
@@ -2220,7 +2225,7 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, ProjectM
             QMessageBox.warning(self, tr("Fehler"), tr("Für den Vorschlag wird der VLM-Endpoint benötigt."))
             return
         args = [SCRIPT, "--input", os.path.abspath(inp), "--suggest",
-                "--vlm-endpoint", ep, "--vlm-model", self.vlm_model.text().strip() or "gpt-4o-mini",
+                "--vlm-endpoint", ep, "--vlm-model", self.vlm_model.text().strip(),
                 "--max-side", str(self.maxside.value())]
         if self.vlm_key.text().strip():
             args += ["--vlm-key", self.vlm_key.text().strip()]

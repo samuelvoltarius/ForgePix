@@ -155,7 +155,7 @@ def _prompt(bericht_text, rat_text, wunsch):
         % (bericht_text, rat_text, wunsch, katalog_text()))
 
 
-def fragen(bericht_text, rat_text, wunsch, endpoint, model="qwen", api_key=None,
+def fragen(bericht_text, rat_text, wunsch, endpoint, model=None, api_key=None,
            timeout=240, log=log_print):
     """Das Sprachmodell um Einstellungen zu einem freien Wunsch bitten.
 
@@ -169,9 +169,13 @@ def fragen(bericht_text, rat_text, wunsch, endpoint, model="qwen", api_key=None,
     if not endpoint or not (wunsch or "").strip():
         return leer
     try:
-        from focus_cull_stack import _vlm_chat
+        from focus_cull_stack import _vlm_chat, vlm_modell_waehlen
     except Exception as e:
         leer["begruendung"] = "Kein Zugang zum Modell: %s" % e
+        return leer
+    model = vlm_modell_waehlen(endpoint, model, api_key=api_key, log=log)
+    if not model:
+        leer["begruendung"] = "Der Server nennt kein Modell."
         return leer
     try:
         antwort = _vlm_chat(endpoint, model,

@@ -292,6 +292,42 @@ def cull(frames, grays, dip_ratio, abs_min, dedup, dup_thresh):
     return med
 
 
+def vlm_modelle(endpoint, api_key=None, timeout=30):
+    """Die Modell-IDs vom Server holen (`GET /v1/models`). Leere Liste bei jedem Fehler.
+
+    Warum das noetig ist: die Oberflaeche fiel bei leerem Modellfeld auf "gpt-4o-mini" zurueck —
+    auch dann, wenn als Anbieter "Lokal / eigener Server" gewaehlt war. Am laufenden vLLM
+    geprueft, antwortet der darauf mit
+        {"error": {"message": "The model `gpt-4o-mini` does not exist.", "code": 404}}
+    Die KI-Funktion tat fuer jeden, der einen eigenen Server benutzt und das Feld leer liess,
+    schlicht nichts — ohne dass irgendwo stand, warum.
+    """
+    try:
+        import requests
+    except ImportError:
+        return []
+    kopf = {"Authorization": "Bearer %s" % api_key} if api_key else {}
+    try:
+        r = requests.get("%s/models" % endpoint.rstrip("/"), headers=kopf, timeout=timeout)
+        r.raise_for_status()
+        return [str(m.get("id")) for m in r.json().get("data", []) if m.get("id")]
+    except Exception:
+        return []
+
+
+def vlm_modell_waehlen(endpoint, model, api_key=None, log=print):
+    """Einen brauchbaren Modellnamen bestimmen: den angegebenen, sonst den ersten des Servers."""
+    if model and str(model).strip():
+        return str(model).strip()
+    ids = vlm_modelle(endpoint, api_key)
+    if ids:
+        log("  KI: kein Modell angegeben — der Server nennt %s, davon wird %s benutzt."
+            % (", ".join(ids[:3]), ids[0]))
+        return ids[0]
+    log("  KI: kein Modell angegeben und der Server nennt keines — die KI-Funktion bleibt aus.")
+    return None
+
+
 def _vlm_chat(endpoint, model, messages, max_tokens=300, api_key=None, timeout=180):
     """Zentraler Chat-Aufruf an einen OpenAI-kompatiblen Endpoint.
     Mit API-Key (OpenAI/OpenRouter/…) -> Authorization-Header, KEIN Reasoning-Param
@@ -2097,7 +2133,7 @@ def run_astro(input_dir, work_dir, args):
         if _wunsch and _endpunkt:
             import berater
             _bv = berater.fragen(messbericht.text(_b), regeln.text(_r), _wunsch,
-                                 _endpunkt, model=getattr(args, "vlm_model", None) or "qwen",
+                                 _endpunkt, model=getattr(args, "vlm_model", None),
                                  api_key=getattr(args, "vlm_key", None))
             _bt = berater.text(_bv)
             if _bt:

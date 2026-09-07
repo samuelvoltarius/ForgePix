@@ -232,20 +232,21 @@ def main():
         # allen 71 waeren es ueber 20 GB gewesen — und ein Absturz in Serie 70 haette alles
         # gekostet, weil bis dahin keine einzige .npy auf der Platte lag.
         scherben.mkdir(parents=True, exist_ok=True)
+        n_kacheln = len(kacheln)
         if kacheln:
             np.save(scherben / ("%s__%s.npy" % (wohin, name.replace("|", "_"))),
                     np.stack(kacheln).astype(np.float32))
-        zaehler[wohin] += len(kacheln)
-        del kacheln
+        zaehler[wohin] += n_kacheln
+        del kacheln, stapel
         aufzeichnungen.append({
             "serie": name, "kamera": schluessel[0], "belichtung_s": schluessel[1],
             "nacht": schluessel[2], "subs": len(pfade), "nicht_ausrichtbar": verworfen,
-            "kacheln": len(kacheln), "menge": wohin,
+            "kacheln": n_kacheln, "menge": wohin,
             "sekunden": round(time.time() - t0, 1)})
         with fortschritt.open("a", encoding="utf-8") as fh:
             fh.write(json.dumps(aufzeichnungen[-1], ensure_ascii=False) + "\n")
         print("  [%d/%d] %s: %d Subs -> %d Kacheln (%s), %.0f s"
-              % (i, len(reihen), name, len(pfade), len(kacheln), wohin, time.time() - t0),
+              % (i, len(reihen), name, len(pfade), n_kacheln, wohin, time.time() - t0),
               flush=True)
 
     # ANFUEGEN statt ueberschreiben. Der erste Entwurf schrieb Bank und Manifest bei jedem
