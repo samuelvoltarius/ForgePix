@@ -1653,6 +1653,14 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, ProjectM
         makro = self._is_makro()
         self._set_step(0)
         self.astro_group.setVisible(astro)
+        # Der Wunsch ist im Anfaenger-Modus das Feld fuer "wie soll das Bild am Schluss
+        # aussehen". Ein Makro-Beispiel ("seidiges Wasser, Personen scharf") hilft dort
+        # niemandem — der Platzhalter richtet sich nach der Aufgabe.
+        if hasattr(self, "vlm_wish"):
+            himmel = astro or longexp or hybrid
+            self.vlm_wish.setPlaceholderText(
+                tr("z. B. „der Nebel kräftiger und wärmer, Sterne nicht ausfressen")
+                if himmel else tr("z. B. „seidiges Wasser, Personen scharf"))
         if hasattr(self, "ai_restore_action"):
             self.ai_restore_action.setVisible(astro)
         for widget in self._astro_expert_widgets:

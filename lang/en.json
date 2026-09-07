@@ -950,6 +950,7 @@
   "spaltenweise statt zeilenweise": "by column instead of by row",
   "unbekannt": "unknown",
   "von": "of",
+  "z. B. „der Nebel kräftiger und wärmer, Sterne nicht ausfressen": "e.g. “richer, warmer nebula, don't blow out the stars",
   "z. B. „seidiges Wasser, Personen scharf": "e.g. “silky water, people sharp”",
   "{count} Sterne · Koordinatenepoche {epoch}\n{fields} dokumentierte Suchfelder. Räumliche Vollständigkeit nicht geprüft.\n{motion}": "{count} stars · coordinate epoch {epoch}\n{fields} documented search fields. Spatial completeness has not been verified.\n{motion}",
   "{filter}: Rot schätzt {line}, Grün und Blau schätzen OIII. Die Sensorantworten überlappen; dies ist keine vollständige spektrale Trennung. Fehlende Linien werden nicht erzeugt.": "{filter}: red estimates {line}; green and blue estimate OIII. Sensor responses overlap; this is not a complete spectral separation. Missing emission lines are not generated.",
