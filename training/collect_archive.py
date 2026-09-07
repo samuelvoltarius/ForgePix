@@ -22,6 +22,57 @@ FIELDS = [
     ("M16", 274.7, -13.8, "validation"),
     ("M13", 250.423, 36.461, "validation"),
     ("NGC6543", 269.639, 66.633, "test"),
+    # --- 07.09.2026 ergaenzt -------------------------------------------------------------
+    # Oft beobachtete oeffentliche HST-Felder. Grund: mit acht Feldern (43 Aufnahmen, rund
+    # 2600 Kacheln) laesst sich kein Netz in GraXperts Groessenklasse trainieren — 107,65
+    # Millionen Parameter bei width 256 gegen 0,44 Millionen heute.
+    # Galaxien
+    ("M31", 10.6847, 41.2687, "train"),
+    ("M33", 23.4621, 30.6600, "train"),
+    ("M51", 202.4696, 47.1952, "train"),
+    ("M64", 194.1824, 21.6829, "train"),
+    ("M74", 24.1739, 15.7836, "train"),
+    ("M81", 148.8882, 69.0653, "train"),
+    ("M83", 204.2538, -29.8657, "train"),
+    ("M87", 187.7059, 12.3911, "train"),
+    ("M104", 189.9976, -11.6231, "train"),
+    ("NGC253", 11.8880, -25.2882, "train"),
+    ("NGC891", 35.6392, 42.3492, "train"),
+    ("NGC1300", 49.9208, -19.4111, "train"),
+    ("NGC2841", 140.5108, 50.9765, "train"),
+    ("NGC3521", 166.4525, -0.0359, "train"),
+    ("NGC4038", 180.4713, -18.8672, "train"),
+    ("NGC4414", 186.6129, 31.2235, "train"),
+    ("NGC4565", 189.0866, 25.9876, "validation"),
+    ("NGC6946", 308.7180, 60.1539, "test"),
+    # Nebel
+    ("M1", 83.6331, 22.0145, "train"),
+    ("M17", 275.1963, -16.1772, "train"),
+    ("M20", 270.6708, -22.9717, "train"),
+    ("M27", 299.9016, 22.7211, "train"),
+    ("M57", 283.3962, 33.0292, "train"),
+    ("M76", 25.5771, 51.5754, "train"),
+    ("NGC3132", 151.7592, -40.4361, "train"),
+    ("NGC3372", 161.2650, -59.8678, "train"),
+    ("NGC6302", 258.4333, -37.1031, "train"),
+    ("NGC7293", 337.4108, -20.8372, "train"),
+    ("IC434", 85.2458, -2.4583, "train"),
+    ("NGC7635", 350.2013, 61.2011, "validation"),
+    ("NGC6960", 311.6667, 30.7167, "test"),
+    # Kugelsternhaufen und dichte Felder — viele Sterne, wenig Flaechenhelligkeit
+    ("M2", 323.3626, -0.8233, "train"),
+    ("M4", 245.8968, -26.5256, "train"),
+    ("M15", 322.4930, 12.1670, "train"),
+    ("M22", 279.0999, -23.9047, "train"),
+    ("M53", 198.2302, 18.1682, "train"),
+    ("M80", 244.2600, -22.9761, "train"),
+    ("M92", 259.2808, 43.1359, "train"),
+    ("NGC104", 6.0236, -72.0814, "train"),
+    ("NGC5139", 201.6970, -47.4795, "validation"),
+    # Magellansche Wolken — andere Sternpopulation, andere Farben
+    ("NGC346", 14.7625, -72.1775, "train"),
+    ("NGC602", 22.4000, -73.5500, "train"),
+    ("NGC2070", 84.6767, -69.1008, "test"),
 ]
 GIB = 1024 ** 3
 
@@ -78,7 +129,7 @@ def query_field(ra, dec, *, attempts=3):
     return selected
 
 
-def main(field_names=None):
+def main(field_names=None, max_gib=25):
     selected_fields = FIELDS if field_names is None else [f for f in FIELDS if f[0] in field_names]
     if field_names is not None and set(field_names) - {field[0] for field in FIELDS}:
         raise ValueError("Unknown field selection")
@@ -89,6 +140,7 @@ def main(field_names=None):
     os.write(fd, str(os.getpid()).encode())
     os.close(fd)
     used = sum(p.stat().st_size for p in root.rglob("*.fits"))
+    budget = max(1, int(max_gib)) * GIB
     try:
         for group, ra, dec, split in selected_fields:
             folder = root / group
@@ -108,7 +160,7 @@ def main(field_names=None):
                 record_path = folder / (name + ".json")
                 if path.exists() and record_path.exists():
                     continue
-                if used >= 25 * GIB or shutil.disk_usage(root).free < 80 * GIB:
+                if used >= budget or shutil.disk_usage(root).free < 80 * GIB:
                     print("RESOURCE LIMIT: stopping acquisition", flush=True)
                     return
                 partial = folder / (name + ".part")
@@ -120,7 +172,7 @@ def main(field_names=None):
                         with partial.open("wb") as output:
                             for block in response.iter_content(1024 * 1024):
                                 size += len(block)
-                                if (size > GIB or used + size > 25 * GIB
+                                if (size > GIB or used + size > budget
                                         or shutil.disk_usage(root).free - len(block) < 80 * GIB):
                                     raise RuntimeError("Download resource limit exceeded")
                                 digest.update(block)
@@ -154,6 +206,11 @@ def main(field_names=None):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--max-gib", type=int, default=25,
+                        help="Obergrenze fuer die heruntergeladene Menge in GiB (Vorgabe 25). "
+                             "Der Schutz, mindestens 80 GiB Plattenplatz frei zu lassen, "
+                             "bleibt unabhaengig davon bestehen.")
     parser.add_argument("--field", action="append", choices=[field[0] for field in FIELDS],
                         help="Acquire only this field; repeat to select several. Existing splits stay fixed.")
-    main(parser.parse_args().field)
+    _a = parser.parse_args()
+    main(_a.field, max_gib=_a.max_gib)

@@ -55,9 +55,29 @@ def prepare(root, output, per_file=32, size=256):
             low, high = np.percentile(pixels, [.1, 99.9])
             scale = max(float(high - low), 1e-6)
             accepted = []
-            for _ in range(2000):
-                y = int(rng.integers(0, data.shape[0] - size + 1))
-                x = int(rng.integers(0, data.shape[1] - size + 1))
+            # NUR im gueltigen Bereich wuerfeln. Vorher ging der Wurf ueber das ganze Bild,
+            # und Hubble-Aufnahmen haben grosse leere Raender: gemessen kamen von 2000
+            # Versuchen rund 20 Kacheln durch, eine Trefferquote von 1 %. Die Schleife lief
+            # also ins Versuchslimit, nicht an die Vorgabe — `--per-file` hochzudrehen haette
+            # gar nichts bewirkt. Aus einer Datei mit 5542x5554 Pixeln passen 441 Kacheln.
+            ys, xs = np.nonzero(valid)
+            if ys.size == 0:
+                print(f"{group} {path.name}: keine gueltigen Pixel", flush=True)
+                continue
+            y0, y1 = int(ys.min()), int(ys.max()) - size + 1
+            x0, x1 = int(xs.min()), int(xs.max()) - size + 1
+            # `<`, nicht `<=`: bei einem Bild, das GENAU so gross ist wie eine Kachel, ist
+            # y1 == y0 == 0 und es gibt trotzdem eine gueltige Position. Mit `<=` fiel dieser
+            # Fall heraus und die Vorbereitung meldete "Independent train and validation
+            # objects required" — ein Fehler, der nach fehlenden Daten aussieht.
+            if y1 < y0 or x1 < x0:
+                print(f"{group} {path.name}: gueltiger Bereich kleiner als eine Kachel",
+                      flush=True)
+                continue
+            # Versuchsbudget mit der Vorgabe wachsen lassen, sonst bindet wieder das Limit.
+            for _ in range(max(2000, 60 * per_file)):
+                y = int(rng.integers(y0, y1 + 1))
+                x = int(rng.integers(x0, x1 + 1))
                 if not valid[y:y+size, x:x+size].all():
                     continue
                 patch = (data[y:y+size, x:x+size] - low) / scale

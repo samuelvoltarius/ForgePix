@@ -153,6 +153,69 @@ class TestRiegelInDerDekonvolution(unittest.TestCase):
                         "der Riegel macht keinen Unterschied (%.4f gegen %.4f)" % (ohne, mit))
 
 
+class TestFarbigerHof(unittest.TestCase):
+    """Die Helligkeitspruefung allein genuegt nicht — das hat ein Fehler von genau dieser Art
+    gezeigt.
+
+    Der Riegel gegen die schwarzen Ringe wurde aus EINER gemittelten Hintergrundflaeche
+    gebildet und auf alle drei Kanaele angewandt. Die Kanaele liegen aber verschieden hoch (an
+    M51 gemessen B 0,0367, G 0,0404, R 0,0390); die gemeinsame Grenze hob Blau anders an als
+    Gruen, und die Streckung — die den Schwarzpunkt je Kanal setzt — machte daraus einen
+    violetten Hof um JEDEN Stern.
+
+    Die Ringtiefe meldete dabei -1,2 %, also unterhalb ihrer Schwelle: Entwarnung. Erst der
+    Hofueberschuss zeigte es:
+
+        ohne Dekonvolution        B/G 0,681
+        Riegel aus EINER Flaeche  B/G 2,821
+        Riegel je Kanal           B/G 0,853
+    """
+
+    def _mit_farbhof(self, staerke=0.0):
+        """Sternfeld, bei dem der Hof im Blaukanal angehoben ist."""
+        f = _sternfeld(hof=0.0)
+        if staerke:
+            import cv2
+            g = f.mean(axis=2)
+            hell = (g > np.percentile(g, 99.0)).astype(np.float32)
+            hof = cv2.GaussianBlur(hell, (0, 0), 6) - cv2.GaussianBlur(hell, (0, 0), 2)
+            f = f.copy()
+            f[..., 0] += np.clip(hof, 0, None) * staerke
+        return np.clip(f, 0, 1)
+
+    def test_ein_neutraler_hof_wird_nicht_beanstandet(self):
+        w = messbericht._ringfarbe(self._mit_farbhof(0.0))
+        self.assertIsNotNone(w, "die Messung findet keine geeigneten Sterne")
+        self.assertLess(w, 1.6)
+        self.assertGreater(w, 0.3)
+
+    def test_ein_blauer_hof_faellt_auf(self):
+        w = messbericht._ringfarbe(self._mit_farbhof(0.02))
+        self.assertIsNotNone(w)
+        self.assertGreater(w, 1.6, "der blaue Hof wird nicht erkannt: %.3f" % w)
+
+    def test_die_regel_greift(self):
+        titel = [r.titel for r in regeln.pruefen({"ringfarbe": 2.821})]
+        self.assertIn("Farbiger Hof um die Sterne", titel)
+
+    def test_die_regel_schweigt_im_gesunden_fall(self):
+        titel = " ".join(r.titel for r in regeln.pruefen({"ringfarbe": 0.681}))
+        self.assertNotIn("Farbiger Hof", titel)
+
+    def test_bei_dunklem_ring_wird_keine_farbe_erfunden(self):
+        """Ist der Ueberschuss negativ, ist ein Verhaeltnis sinnlos — dann meldet bereits die
+        Ringtiefe. Ein sinnloser Wert waere schlimmer als keiner."""
+        f = _sternfeld(hof=0.35)
+        self.assertIsNone(messbericht._ringfarbe(f))
+
+    def test_die_untergrenze_arbeitet_je_kanal(self):
+        """Der eigentliche Fix. Eine gemeinsame Flaeche fuer alle Kanaele war die Ursache."""
+        import inspect
+        q = inspect.getsource(astro.deconvolve)
+        self.assertIn("for _k in range(f.shape[2])", q,
+                      "die Untergrenze wird nicht je Kanal gerechnet")
+
+
 class TestImBericht(unittest.TestCase):
 
     def test_die_ringtiefe_steht_im_bericht(self):

@@ -66,9 +66,26 @@ def _read_float(path, debayer=True):
         fits = require_astropy("FITS-Dateien lesen")
         with fits.open(path) as hdul:
             hdu = hdul[0]
-            if hdu.data is None:
+            try:
+                leer = hdu.data is None
+            except Exception as fehler:
+                # Eine abgeschnittene Datei meldet sich hier als `TypeError: buffer is too
+                # small for requested array` — eine Meldung aus dem Innersten von numpy, die
+                # den Dateinamen nicht nennt und den ganzen Lauf beendet. An Alfreds Archiv
+                # aufgetreten (unvollstaendig gesicherte FITS). Eine kaputte Datei unter 300
+                # darf keinen zweistuendigen Stapellauf killen: sie wird benannt und
+                # uebersprungen, so wie es `astro_quality.select_subs` fuer Lights schon tut.
+                raise ForgePixFehler(
+                    "FITS unlesbar (vermutlich abgeschnitten): %s — %s: %s"
+                    % (path, type(fehler).__name__, fehler)) from fehler
+            if leer:
                 raise ValueError(f"FITS enthält kein Bild im primären HDU: {path}")
-            source = np.asarray(hdu.data)
+            try:
+                source = np.asarray(hdu.data)
+            except Exception as fehler:
+                raise ForgePixFehler(
+                    "FITS unlesbar (vermutlich abgeschnitten): %s — %s: %s"
+                    % (path, type(fehler).__name__, fehler)) from fehler
             # Float FITS are physical pixel values, not an undocumented ADU range.
             # Do not infer scaling from the brightest pixel or clip signed residuals.
             d = (source.astype(np.float32) / float(np.iinfo(source.dtype).max)
@@ -2301,9 +2318,19 @@ def deconvolve(f, psf=None, iterations=15, star_protect=0.85, regularize=0.0,
     # Staubband (Original unter dem Himmel) bleibt alles erlaubt, an einer Sternflanke
     # (Original ueber dem Himmel) darf es hoechstens bis auf den Himmel heruntergehen.
     if deringing:
-        _flaeche = _bg_surface(f)
-        _boden = np.minimum(f.astype(np.float32),
-                            _flaeche[..., None] if out.ndim == 3 else _flaeche)
+        # JE KANAL. `_bg_surface` mittelt die Kanaele und liefert EINE Flaeche; die auf alle
+        # drei anzuwenden war ein Fehler: die Kanaele haben verschiedene Hintergrundpegel (an
+        # M51 gemessen B 0,0367, G 0,0404, R 0,0390). Eine gemeinsame Untergrenze hebt Blau
+        # anders an als Gruen, und die Saettigung macht daraus einen VIOLETTEN Hof um jeden
+        # Stern. Gemessen: Ring B/G 2,401 gegen 0,98 ohne diesen Schritt — die Korrektur gegen
+        # die schwarzen Ringe erzeugte einen Farbfehler an derselben Stelle.
+        if out.ndim == 3:
+            _boden = np.empty_like(f, dtype=np.float32)
+            for _k in range(f.shape[2]):
+                _flaeche = _bg_surface(f[..., _k])
+                _boden[..., _k] = np.minimum(f[..., _k].astype(np.float32), _flaeche)
+        else:
+            _boden = np.minimum(f.astype(np.float32), _bg_surface(f))
         out = np.maximum(out, _boden)
     psf_sz = psf.shape[0] if (psf is not None and not tiled_psf) else "tiled"
     log(f"    Dekonvolution: Richardson-Lucy {iterations} Iter., PSF {psf_sz}, "

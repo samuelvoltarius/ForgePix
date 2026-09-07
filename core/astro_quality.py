@@ -20,7 +20,16 @@ def _read_gray(path, max_side=1600):
     ext = os.path.splitext(path)[1].lower()
     if ext in (".fit", ".fits", ".fts"):
         fits = require_astropy("FITS-Subs bewerten")
-        d = np.asarray(fits.getdata(path)).astype(np.float32)
+        try:
+            d = np.asarray(fits.getdata(path)).astype(np.float32)
+        except Exception:
+            # Eine abgeschnittene Datei faellt erst beim ZUGRIFF auf die Bilddaten um, nicht
+            # beim Oeffnen — astropy meldet vorher hoechstens eine Warnung. Der Fehler kommt
+            # dann als `TypeError: buffer is too small for requested array` aus dem Innersten
+            # von numpy, ohne den Dateinamen. `analyze_frame` erwartet hier None und meldet
+            # die Aufnahme dann sauber als "nicht lesbar" — eine kaputte Datei unter 300 darf
+            # keinen zweistuendigen Lauf kosten.
+            return None
         if d.ndim == 3:
             d = d[0] if d.shape[0] in (3, 4) else d.mean(axis=2)
         mx = float(np.nanmax(d)) or 1.0

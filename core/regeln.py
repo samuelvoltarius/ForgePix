@@ -170,6 +170,24 @@ def pruefen(bericht, komet=False, bereits=None):
             "Weniger Iterationen bei der Dekonvolution.",
             None))
 
+    # --- Farbiger Hof um die Sterne ----------------------------------------------
+    # Die Helligkeitspruefung allein genuegt nicht. Ein Fehler an genau dieser Stelle (eine
+    # gemeinsame Untergrenze fuer alle drei Kanaele statt einer je Kanal) erzeugte einen
+    # violetten Hof um jeden Stern, waehrend die Ringtiefe mit -1,2 % unter der Schwelle blieb
+    # und Entwarnung gab. Gemessen: Hofueberschuss B/G 2,821 gegen 0,681 im gesunden Fall.
+    hoffarbe = _w(bericht, "ringfarbe")
+    if hoffarbe is not None and (hoffarbe > 1.6 or hoffarbe < 0.3):
+        raete.append(Rat(
+            KRITISCH, "Farbiger Hof um die Sterne",
+            "Der Hof um die Sterne hat einen Farbstich: Blau steht im Ueberschuss %.2f-mal so "
+            "hoch wie Gruen (gesund ist rund 0,7). Solche Hoefe entstehen, wenn ein "
+            "Bearbeitungsschritt die Kanaele gemeinsam behandelt, obwohl sie verschiedene "
+            "Hintergrundpegel haben — die Streckung setzt den Schwarzpunkt je Kanal und blaest "
+            "den Unterschied auf." % hoffarbe,
+            "Dekonvolution und Entrauschen einzeln abschalten und pruefen, welcher Schritt es "
+            "verursacht.",
+            None))
+
     # --- Ausgebrannte Sterne -----------------------------------------------------
     clip = _w(bericht, "bild", "ausgebrannt_prozent")
     if clip is not None and clip > 0.5:

@@ -191,8 +191,8 @@ def _ringe(bild, sterne_max=250):
         from scipy import ndimage
     except ImportError:
         return None
-    g = np.asarray(bild, np.float32)
-    g = g.mean(axis=2) if g.ndim == 3 else g
+    a = np.asarray(bild, np.float32)
+    g = a.mean(axis=2) if a.ndim == 3 else a
     if g.size < 10000:
         return None
     hintergrund = float(np.median(g))
@@ -225,6 +225,77 @@ def _ringe(bild, sterne_max=250):
     if len(tiefen) < 5 or hintergrund <= 1e-9:
         return None
     return _zahl(np.median(tiefen) / hintergrund)
+
+
+def _ringfarbe(bild, sterne_max=250):
+    """Hat der Hof um die Sterne einen FARBSTICH? Gibt B/G im Hof geteilt durch B/G im Himmel.
+
+    Die Helligkeitsmessung allein genuegt nicht — das hat ein Fehler an genau dieser Stelle
+    gezeigt. Eine Untergrenze gegen die Dekonvolutionsringe wurde aus EINER gemittelten
+    Hintergrundflaeche gebildet und auf alle drei Kanaele angewandt. Die Kanaele haben aber
+    verschiedene Pegel (an M51 gemessen B 0,0367, G 0,0404, R 0,0390); die gemeinsame Grenze
+    hob Blau anders an als Gruen, und die Saettigung machte daraus einen violetten Hof um jeden
+    Stern. Die Ringtiefe meldete dabei brav +0,9 %, also "in Ordnung".
+
+    Gemessen an den drei Faellen:
+
+        ohne Dekonvolution        Ring B/G 0,981
+        Dekonvolution ohne Riegel Ring B/G 0,932
+        Riegel aus EINER Flaeche  Ring B/G 2,401   <- violett, von der Helligkeit unbemerkt
+        Riegel je Kanal           Ring B/G 0,853   <- wieder neutral
+
+    Returns:
+        1,0 = kein Farbstich. Deutlich groesser = blauer/violetter Hof, deutlich kleiner =
+        gelblicher. `None` bei Graubildern oder wenn zu wenige Sterne taugen.
+    """
+    if np.asarray(bild).ndim != 3:
+        return None
+    try:
+        from scipy import ndimage
+    except ImportError:
+        return None
+    a = np.asarray(bild, np.float32)
+    if a.ndim != 3 or a.shape[2] != 3:
+        return None
+    g = a.mean(axis=2)
+    if g.size < 10000:
+        return None
+    schwelle = float(np.percentile(g, 99.8))
+    if not np.isfinite(schwelle) or schwelle <= float(np.median(g)):
+        return None
+    if float(np.mean(g >= schwelle)) > 0.01:
+        m = float(np.median(g))
+        schwelle = m + 0.5 * (schwelle - m)
+    marken, anzahl = ndimage.label(g >= schwelle)
+    if not anzahl:
+        return None
+    zentren = ndimage.center_of_mass(g, marken, range(1, min(anzahl, sterne_max) + 1))
+    yy, xx = np.mgrid[-14:15, -14:15]
+    ringzone = (np.hypot(yy, xx) > 5) & (np.hypot(yy, xx) < 11)
+    ringe = []
+    for cy, cx in zentren:
+        cy, cx = int(cy), int(cx)
+        if not (16 < cy < g.shape[0] - 16 and 16 < cx < g.shape[1] - 16):
+            continue
+        umfeld = a[cy - 14:cy + 15, cx - 14:cx + 15]
+        ringe.append([float(np.median(umfeld[..., k][ringzone])) for k in range(3)])
+    if len(ringe) < 5:
+        return None
+    r = np.asarray(ringe).mean(axis=0)
+    himmel = np.asarray([float(np.median(a[..., k])) for k in range(3)])
+    # Der UEBERSCHUSS ueber den EIGENEN Hintergrund je Kanal. Das ist der Punkt: die Kanaele
+    # liegen verschieden hoch (an M51 B 0,0367, G 0,0404, R 0,0390), und die Bearbeitung setzt
+    # den Schwarzpunkt je Kanal. Sichtbar wird darum nicht das Verhaeltnis der Absolutwerte,
+    # sondern das der Ueberschuesse. Gemessen an denselben drei Staepeln:
+    #     ohne Dekonvolution      0,681
+    #     Riegel aus              negativ (beide Kanaele UNTER dem Himmel: schwarzer Ring)
+    #     Riegel aus EINER Flaeche 2,821  <- violetter Hof
+    ueber = r - himmel
+    if ueber[1] <= 1e-9 or ueber[0] <= -1e-9:
+        # Negativer Ueberschuss heisst dunkler Ring — das meldet bereits `_ringe`. Hier waere
+        # ein Verhaeltnis sinnlos, und ein sinnloser Wert ist schlimmer als keiner.
+        return None
+    return _zahl(ueber[0] / ueber[1])
 
 
 def _ausgebrannt(bild, grenze=0.995):
@@ -376,6 +447,7 @@ def erstellen(bild, pfad=None, paths=None, kamera=None, filter_key=None, log=log
         "farbe": _farbe(a, kamera),
         "signal_zu_rauschen": _signal(a),
         "ringtiefe": _ringe(a),
+        "ringfarbe": _ringfarbe(a),
         "ausruestung": _ausruestung(pfad, kamera, filter_key),
         "serie": _serie(paths),
     }
@@ -428,6 +500,11 @@ def text(bericht):
         z.append("Sternhoefe      %+.1f %% des Himmelspegels%s"
                  % (100.0 * _ring,
                     "   ACHTUNG: dunkler Ring um die Sterne" if _ring < -0.03 else ""))
+    _rf = bericht.get("ringfarbe")
+    if _rf is not None:
+        z.append("Hoffarbe        B/G des Hofueberschusses %.2f%s"
+                 % (_rf, "   ACHTUNG: farbiger Hof um die Sterne"
+                    if (_rf > 1.6 or _rf < 0.3) else ""))
     teile = [t for t in (au.get("kamera"),
                          "%.0f mm" % au["brennweite_mm"] if au.get("brennweite_mm") else None,
                          "%.2f um" % au["pixelgroesse_um"] if au.get("pixelgroesse_um") else None,

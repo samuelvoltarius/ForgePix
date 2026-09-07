@@ -16,6 +16,14 @@ import torch.nn.functional as F
 from training.vendor.nafnet_upstream import NAFNet
 
 TASKS = ("denoise", "background", "deblur", "starless")
+# Grundform. `--width` und `--channels` ueberschreiben sie; die Vorgabe bleibt, was bisher
+# trainiert wurde, damit alte Laeufe reproduzierbar bleiben.
+#
+# Zum Groessenvergleich, an den ausgelieferten Dateien gemessen (07.09.2026): GraXperts
+# Entrausch-Modell 3.0.2 ist 455,6 MB gross und dreikanalig, unseres 1,8 MB und einkanalig —
+# Faktor 244. Als die Trainingsdaten von HST-Aufnahmen auf eigene Kameras umgestellt wurden,
+# aenderte sich am Ergebnis nichts (Rauschen 0,77-fach gegen 0,75-fach). Das legt nahe, dass
+# nicht die Daten die Grenze sind, sondern die Kapazitaet.
 CONFIG = dict(img_channel=1, width=16, middle_blk_num=2,
               enc_blk_nums=[1, 1, 2], dec_blk_nums=[1, 1, 1])
 CONTRACT = dict(channels=1, tile_size=256, halo=32,
@@ -163,7 +171,13 @@ def train(args):
         scene_manifest = json.loads((args.scenes/"manifest.json").read_text())
         train_bank = torch.from_numpy(np.load(args.scenes/"train.npy"))[:,None].to(device)
         val_bank = torch.from_numpy(np.load(args.scenes/"validation.npy"))[:,None].to(device)
-    model = NAFNet(**CONFIG).to(device)
+    config = dict(CONFIG, width=args.width, img_channel=args.channels,
+                  middle_blk_num=args.bloecke)
+    contract = dict(CONTRACT, channels=args.channels)
+    model = NAFNet(**config).to(device)
+    _par = sum(p.numel() for p in model.parameters())
+    print(json.dumps({"modell": "NAFNet", "width": args.width, "channels": args.channels,
+                      "bloecke": args.bloecke, "parameter": _par}), flush=True)
     # Exact identity initialization; an untrained model must not invent structure.
     torch.nn.init.zeros_(model.ending.weight)
     torch.nn.init.zeros_(model.ending.bias)
@@ -195,13 +209,13 @@ def train(args):
                 print(json.dumps(dict(step=step,validation=val)),flush=True)
                 if val["output_mse"] < best:
                     best,best_step = val["output_mse"],step
-                    torch.save(dict(model=model.state_dict(),config=CONFIG,contract=CONTRACT,
+                    torch.save(dict(model=model.state_dict(),config=config,contract=contract,
                         report=dict(task=args.task,step=step,validation=val,release_approved=False)),
                         args.output/"checkpoint.pt")
     checkpoint = torch.load(args.output/"checkpoint.pt",map_location=device,weights_only=False)
     report = dict(schema_version=1,task=args.task,status="experimental",
         release_approved=False,steps=args.steps,best_step=best_step,batch=args.batch,
-        config=CONFIG,contract=CONTRACT,seed=609061,development_validation_seed=830122,
+        config=config,contract=contract,seed=609061,development_validation_seed=830122,
         seconds=time.perf_counter()-start,torch_version=str(torch.__version__),
         validation=checkpoint["report"]["validation"],training_source_sha256=source_hash,
         scene_counts=scene_manifest["counts"] if scene_manifest else {},
@@ -220,6 +234,15 @@ if __name__ == "__main__":
     ap.add_argument("--steps",type=int,default=4000)
     ap.add_argument("--batch",type=int,default=4)
     ap.add_argument("--validate-every",type=int,default=1000)
+    ap.add_argument("--width",type=int,default=16,
+                    help="Breite des Netzes. 16 ist die bisherige Groesse (~1,8 MB ONNX); "
+                         "GraXperts Entrauscher ist 455 MB gross.")
+    ap.add_argument("--channels",type=int,default=1,choices=(1,3),
+                    help="1 = mono, jeder Farbkanal einzeln (bisher). 3 = farbig. Mono war "
+                         "gewaehlt, damit das Netz nicht die Kanaele mitteln und so die Farbe "
+                         "zerstoeren kann; GraXpert entrauscht dagegen dreikanalig.")
+    ap.add_argument("--bloecke",type=int,default=2,
+                    help="Bloecke im mittleren Teil (Vorgabe 2).")
     options=ap.parse_args()
     if options.validate_every < 1:
         ap.error("validate-every must be positive")
