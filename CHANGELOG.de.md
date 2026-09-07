@@ -8,6 +8,16 @@ Alle nennenswerten Änderungen an ForgePix. Format orientiert an
 
 ## [Unreleased]
 
+### Langzeitbelichtung: das Dreiecks-Matching fehlte in der Ausrichtungskette
+
+`longexp._star_affine` versuchte Offset-Voting und fiel dann direkt auf ORB zurück — der
+mittlere Schritt, das Dreiecks-Matching, fehlte. Ausgerechnet dort zählt er am meisten, weil
+eine **nicht nachgeführte** Serie die größte Feldrotation überhaupt hat. An fünf Subs einer
+echten Serie gemessen (IC 434, bis −27,6° Drehung): **alte Kette 1 von 5, neue Kette 5 von 5.**
+ORB fing keinen einzigen auf — auf einem Sternfeld ohne Textur ist es deutlich schwächer.
+
+Die Kette ist jetzt dieselbe wie beim Astro-Stapeln: Offset-Voting → Dreiecks-Matching → ORB.
+
 ### Photometrie: die Sterne wanderten aus der Blende, gemessen wurde trotzdem
 
 Die Koordinaten von Ziel- und Vergleichsstern galten **starr für jede Aufnahme**; gesucht wurde

@@ -186,10 +186,20 @@ def stack_stars_point(paths, work_dir=None, align="auto", sigma_clip=False, log=
 
 def _star_affine(refg, img_g):
     """Affine Partial-Transform (Translation + Rotation + Skala) aus den Sternpositionen schätzen,
-    die die Feldrotation nicht nachgeführter Serien abdeckt. Nutzt astro._estimate_star_transform
-    (Stern-Centroids + Offset-Voting + RANSAC) und fällt auf ORB (astro._estimate_rotation) zurück.
+    die die Feldrotation nicht nachgeführter Serien abdeckt.
+
+    Dieselbe Kette wie beim Astro-Stapeln (`astro.register_and_cache`): erst Offset-Voting,
+    dann Dreiecks-Matching, zuletzt ORB. Der mittlere Schritt fehlte hier — und gerade hier
+    zaehlt er, weil eine nicht nachgefuehrte Serie die groesste Feldrotation ueberhaupt hat. An
+    einer echten Serie gemessen (IC 434, 224 Subs, bis -27,6 Grad) gibt das Offset-Voting ab
+    etwa dem 25. Sub `None` zurueck, waehrend das Dreiecks-Matching alle 224 ausrichtet. Ohne
+    diesen Schritt fiel die Ausrichtung auf ORB zurueck, das auf einem Sternfeld ohne Textur
+    deutlich schwaecher ist.
+
     Gibt eine 2x3-Matrix (img → ref) oder None, wenn keine sichere Ausrichtung möglich ist."""
     M = astro._estimate_star_transform(refg, img_g)
+    if M is None:
+        M = astro._estimate_star_transform_robust(refg, img_g)
     if M is None:
         M = astro._estimate_rotation(refg, img_g, detector="ORB", min_inliers=12)
     return M

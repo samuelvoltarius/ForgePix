@@ -8,6 +8,16 @@ All notable changes to ForgePix. Format based on
 
 ## [Unreleased]
 
+### Long exposure: triangle matching was missing from the alignment chain
+
+`longexp._star_affine` tried offset voting and then fell straight back to ORB — the middle step,
+triangle matching, was missing. That is exactly where it matters most, because an **untracked**
+series has the largest field rotation of all. Measured on five subs of a real series (IC 434, up
+to −27.6° rotation): **old chain 1 of 5, new chain 5 of 5.** ORB caught none of them — on a
+textureless star field it is considerably weaker.
+
+The chain now matches the astro stacker: offset voting → triangle matching → ORB.
+
 ### Photometry: the stars drifted out of the aperture, and it measured anyway
 
 The coordinates of target and comparison stars were treated as **fixed for every frame**; the
