@@ -2305,76 +2305,121 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, ProjectM
             sb.setValue(sb.maximum())
 
     # ---------- Statuszeile ----------
-    # --- Vorschlag des Regelwerks --------------------------------------------------------
-    # Zuordnung Schalter -> was in der Oberflaeche zu tun ist. Nur was hier drinsteht, wird
-    # gesetzt; alles andere wird dem Benutzer als "nicht uebernommen" genannt, statt still
-    # verschluckt zu werden. Ein Knopf, der behauptet etwas gesetzt zu haben und es nicht tut,
-    # waere schlimmer als gar kein Knopf.
+    # --- Vorschlag des Regelwerks und des Sprachmodells -----------------------------------
+    # Zuordnung SCHALTER -> was in der Oberflaeche zu tun ist. Bewusst je Schalter und nicht je
+    # fertiger Zeichenkette: das Regelwerk sagt feste Dinge ("--bin 2"), das Sprachmodell waehlt
+    # die Zahl selbst ("--astro-saturation 1.2"). Beides zerfaellt hier in dieselben Bausteine.
+    #
+    # Jeder Eintrag: schalter -> (name, braucht_wert, setzen(wert) -> bool)
+    # `setzen` gibt False zurueck, wenn das Bedienelement fehlt — dann wird das dem Benutzer
+    # gesagt, statt es still zu verschlucken. Ein Knopf, der behauptet etwas gesetzt zu haben
+    # und es nicht tut, waere schlimmer als gar kein Knopf.
     def _rat_zuordnung(self):
-        def setz_haken(name, wert=True):
-            def f():
-                w = getattr(self, name, None)
-                if w is None:
+        def haken(name, wert=True):
+            def f(_w=None):
+                e = getattr(self, name, None)
+                if e is None:
                     return False
-                w.setChecked(wert)
+                e.setChecked(wert)
                 return True
             return f
 
-        def setz_wert(name, wert):
-            def f():
-                w = getattr(self, name, None)
-                if w is None:
+        def zahl(name, standard=None):
+            def f(w=None):
+                e = getattr(self, name, None)
+                if e is None:
                     return False
-                w.setValue(wert)
+                v = standard if w is None else w
+                if v is None:
+                    return False
+                e.setValue(v)
                 return True
             return f
 
-        def setz_auswahl(name, daten):
-            def f():
-                w = getattr(self, name, None)
-                if w is None:
+        def auswahl(name, standard=None):
+            def f(w=None):
+                e = getattr(self, name, None)
+                if e is None:
                     return False
-                i = w.findData(daten)
+                v = standard if w is None else w
+                i = e.findData(int(v)) if v is not None else -1
                 if i < 0:
                     return False
-                w.setCurrentIndex(i)
+                e.setCurrentIndex(i)
                 return True
             return f
 
-        def drizzle():
-            return (setz_auswahl("astro_drizzle", 2)() and setz_haken("astro_drizzle_true")())
-
         return {
-            "--bg-extract": (tr("Hintergrund entfernen"), setz_haken("astro_bg")),
-            "--astro-synthstar": (tr("Sternformen neu setzen"), setz_haken("astro_synthstar")),
-            "--astro-unclip-stars": (tr("Ausgefressene Sternkerne einfärben"),
-                                     setz_haken("astro_unclip")),
-            "--astro-starless-stretch 0.35": (tr("Sternlos strecken"),
-                                              setz_wert("astro_starless_stretch", 0.35)),
-            "--astro-drizzle 2 --astro-drizzle-true": (tr("Drizzle 2× aus den Originalmessungen"),
-                                                       drizzle),
-            "--bin 2": (tr("2×-Binning"), setz_auswahl("astro_bin", 2)),
+            "--bg-extract": (tr("Hintergrund entfernen"), False, haken("astro_bg")),
+            "--astro-synthstar": (tr("Sternformen neu setzen"), False,
+                                  haken("astro_synthstar")),
+            "--astro-unclip-stars": (tr("Ausgefressene Sternkerne einfärben"), False,
+                                     haken("astro_unclip")),
+            "--astro-deconv": (tr("Dekonvolution"), False, haken("astro_deconv")),
+            "--astro-drizzle-true": (tr("Drizzle aus den Originalmessungen"), False,
+                                     haken("astro_drizzle_true")),
+            "--astro-starless-stretch": (tr("Sternlos strecken"), True,
+                                         zahl("astro_starless_stretch", 0.35)),
+            "--astro-saturation": (tr("Farbsättigung"), True, zahl("astro_sat")),
+            "--astro-bright": (tr("Helligkeit"), True, zahl("astro_bright")),
+            "--astro-color": (tr("Farbstärke"), True, zahl("astro_color")),
+            "--astro-denoise": (tr("Entrauschen"), True, zahl("astro_denoise")),
+            "--astro-drizzle": (tr("Ausgabegröße"), True, auswahl("astro_drizzle", 2)),
+            "--bin": (tr("Binning"), True, auswahl("astro_bin", 2)),
         }
 
-    def _rat_zeigen(self, zeile):
-        """Den Marker RAT:<schalter> in einen lesbaren Vorschlag verwandeln."""
-        self._rat_schalter = [t for t in zeile.split() if t]
+    def _rat_zerlegen(self, schalterliste):
+        """Eine Schalterliste in (schalter, wert)-Paare zerlegen; Unbekanntes kommt zurueck.
+
+        Returns:
+            (paare, unbekannt) — `unbekannt` sind die Bestandteile, die kein Bedienelement
+            haben. Sie werden dem Benutzer genannt, nicht verschluckt.
+        """
+        zuordnung = self._rat_zuordnung()
+        paare, unbekannt = [], []
+        i = 0
+        while i < len(schalterliste):
+            t = schalterliste[i]
+            if t not in zuordnung:
+                unbekannt.append(t)
+                i += 1
+                continue
+            _name, braucht_wert, _tu = zuordnung[t]
+            wert = None
+            if braucht_wert and i + 1 < len(schalterliste):
+                try:
+                    wert = float(schalterliste[i + 1])
+                    i += 1
+                except ValueError:
+                    wert = None          # naechster Eintrag ist selbst ein Schalter
+            paare.append((t, wert))
+            i += 1
+        return paare, unbekannt
+
+    def _rat_zeigen(self, zeile, quelle="regelwerk"):
+        """Den Marker RAT:/WUNSCH:<schalter> in einen lesbaren Vorschlag verwandeln.
+
+        `quelle` unterscheidet Regelwerk (gemessen, deterministisch) von Sprachmodell
+        (formuliert). Das gehoert in den Text: eine Modellantwort neben eine Messung zu stellen,
+        ohne den Unterschied zu benennen, waere irrefuehrend.
+        """
+        self._rat_schalter = [t for t in (zeile or "").split() if t]
+        self._rat_quelle = quelle
+        paare, unbekannt = self._rat_zerlegen(self._rat_schalter)
         zuordnung = self._rat_zuordnung()
         namen = []
-        rest = list(self._rat_schalter)
-        for schluessel, (name, _tu) in zuordnung.items():
-            teile = schluessel.split()
-            if all(t in rest for t in teile):
-                namen.append(name)
-                for t in teile:
-                    rest.remove(t)
-        if not namen and not rest:
+        for schalter, wert in paare:
+            name = zuordnung[schalter][0]
+            namen.append(name if wert is None else "%s %g" % (name, wert))
+        if not namen and not unbekannt:
             self.rat_bar.hide()
             return
-        text = tr("ForgePix hat den Stapel vermessen und schlägt vor:") + " " + ", ".join(namen)
-        if rest:
-            # Ehrlich benennen, was der Knopf NICHT kann, statt es zu verschweigen.
-            text += "  " + tr("(nicht per Knopf setzbar: %s)") % " ".join(rest)
+        kopf = (tr("ForgePix hat den Stapel vermessen und schlägt vor:")
+                if quelle == "regelwerk"
+                else tr("Das Sprachmodell schlägt zu deinem Wunsch vor (formuliert, nicht gemessen):"))
+        text = kopf + " " + ", ".join(namen)
+        if unbekannt:
+            text += "  " + tr("(nicht per Knopf setzbar: %s)") % " ".join(unbekannt)
         self.rat_lbl.setText(text)
         self.rat_btn.setEnabled(bool(namen))
         self.rat_bar.show()
@@ -2386,14 +2431,11 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, ProjectM
         hat, bevor der naechste Lauf beginnt; ein Astro-Lauf dauert Minuten bis Stunden.
         """
         zuordnung = self._rat_zuordnung()
-        rest = list(getattr(self, "_rat_schalter", []))
+        paare, _unbekannt = self._rat_zerlegen(getattr(self, "_rat_schalter", []))
         gesetzt, misslungen = [], []
-        for schluessel, (name, tu) in zuordnung.items():
-            teile = schluessel.split()
-            if all(t in rest for t in teile):
-                for t in teile:
-                    rest.remove(t)
-                (gesetzt if tu() else misslungen).append(name)
+        for schalter, wert in paare:
+            name, _bw, tu = zuordnung[schalter]
+            (gesetzt if tu(wert) else misslungen).append(name)
         if gesetzt:
             self._append("\n  " + tr("Übernommen: %s") % ", ".join(gesetzt) + "\n")
         if misslungen:
@@ -2475,7 +2517,11 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, ProjectM
             elif s.startswith("RATIONALE:"):
                 self._last_rationale = s[len("RATIONALE:"):].strip() or self._last_rationale
             elif s.startswith("RAT:"):
-                self._rat_zeigen(s[len("RAT:"):].strip())
+                self._rat_zeigen(s[len("RAT:"):].strip(), quelle="regelwerk")
+            elif s.startswith("WUNSCH:"):
+                # Kommt NACH dem RAT: und ueberschreibt ihn absichtlich — wer einen Wunsch
+                # geaeussert hat, will die Antwort darauf sehen, nicht den allgemeinen Rat.
+                self._rat_zeigen(s[len("WUNSCH:"):].strip(), quelle="modell")
             elif s.startswith("RESULT:"):
                 saw_result = True
         # Fallback für alte Pipeline-Versionen ohne Marker: deutsche Log-Schlüsselwörter

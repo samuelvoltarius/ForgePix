@@ -2088,6 +2088,23 @@ def run_astro(input_dir, work_dir, args):
             # damit als Begruendung und wuerde dem Benutzer sonst rohe Schalter als Grund zeigen.
             print("  Empfohlene Einstellungen: " + " ".join(_schalter))
             print("RAT:" + " ".join(_schalter))
+
+        # Freier Wunsch -> Sprachmodell (Stufe 3). Nur wenn beides da ist: ein Wunsch und ein
+        # Endpunkt. Das Regelwerk bleibt die Autoritaet; das Modell ergaenzt und ueberstimmt
+        # nicht — deshalb steht sein Vorschlag NEBEN dem Rat und ersetzt ihn nicht.
+        _wunsch = str(getattr(args, "wish", "") or "").strip()
+        _endpunkt = getattr(args, "vlm_endpoint", None)
+        if _wunsch and _endpunkt:
+            import berater
+            _bv = berater.fragen(messbericht.text(_b), regeln.text(_r), _wunsch,
+                                 _endpunkt, model=getattr(args, "vlm_model", None) or "qwen",
+                                 api_key=getattr(args, "vlm_key", None))
+            _bt = berater.text(_bv)
+            if _bt:
+                print()
+                print(_bt)
+            if _bv["einstellungen"]:
+                print("WUNSCH:" + " ".join(_bv["einstellungen"]))
     except Exception as e:
         # Nicht verschlucken. Ein stiller Fehler hier hiesse: der Bericht fehlt und niemand
         # merkt es — genau die Sorte Fehler, die in diesem Projekt am meisten gekostet hat.

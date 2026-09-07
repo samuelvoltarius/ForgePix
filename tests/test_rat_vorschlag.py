@@ -108,9 +108,34 @@ class TestRatVorschlag(_MitFenster):
     def test_jede_zuordnung_trifft_ein_vorhandenes_bedienelement(self):
         """Wenn ein Bedienelement umbenannt wird, faellt die Zuordnung sonst still aus —
         der Knopf meldete dann "nicht uebernommen", ohne dass jemand die Ursache saehe."""
-        for schluessel, (name, tu) in self.w._rat_zuordnung().items():
-            self.assertTrue(tu(), "%s (%s) findet sein Bedienelement nicht"
-                            % (schluessel, name))
+        for schluessel, (name, braucht_wert, tu) in self.w._rat_zuordnung().items():
+            # 1.0 liegt bei jedem wertbehafteten Schalter in der Spanne und ist bei den
+            # Auswahlfeldern ein vorhandener Eintrag.
+            self.assertTrue(tu(1.0) if braucht_wert else tu(),
+                            "%s (%s) findet sein Bedienelement nicht" % (schluessel, name))
+
+    def test_wertschalter_ohne_wert_wird_nicht_stillschweigend_gesetzt(self):
+        """Wenn das Modell den Wert vergisst, darf nicht irgendein Standard gesetzt werden —
+        der Benutzer bekaeme eine Zahl, die niemand gewaehlt hat."""
+        zuordnung = self.w._rat_zuordnung()
+        _name, braucht_wert, tu = zuordnung["--astro-saturation"]
+        self.assertTrue(braucht_wert)
+        self.assertFalse(tu(None), "ohne Wert darf nichts gesetzt werden")
+
+    def test_wert_aus_dem_sprachmodell_wird_uebernommen(self):
+        """Das Regelwerk sagt feste Dinge, das Sprachmodell waehlt die Zahl selbst."""
+        self.w._rat_zeigen("--astro-saturation 1.4 --astro-denoise 0.3", quelle="modell")
+        self.w._rat_uebernehmen()
+        self.assertAlmostEqual(self.w.astro_sat.value(), 1.4, places=3)
+        self.assertAlmostEqual(self.w.astro_denoise.value(), 0.3, places=3)
+
+    def test_herkunft_steht_im_text(self):
+        """Eine Modellantwort neben eine Messung zu stellen, ohne den Unterschied zu benennen,
+        waere irrefuehrend."""
+        self.w._rat_zeigen("--bg-extract", quelle="regelwerk")
+        self.assertIn("vermessen", self.w.rat_lbl.text())
+        self.w._rat_zeigen("--bg-extract", quelle="modell")
+        self.assertIn("nicht gemessen", self.w.rat_lbl.text())
 
 
 class TestMarkerAusDerPipeline(_MitFenster):
@@ -127,7 +152,12 @@ class TestMarkerAusDerPipeline(_MitFenster):
             aussagbar.add(treffer)
         self.assertTrue(aussagbar)
         zuordnung = set(self.w._rat_zuordnung())
-        fehlend = sorted(aussagbar - zuordnung)
+        # Je SCHALTER pruefen, nicht je fertiger Zeichenkette: "--bin 2" zerfaellt in den
+        # Schalter "--bin" und den Wert 2.
+        bestandteile = set()
+        for a in aussagbar:
+            bestandteile.update(t for t in a.split() if t.startswith("--"))
+        fehlend = sorted(bestandteile - zuordnung)
         self.assertEqual(fehlend, [],
                          "Das Regelwerk empfiehlt etwas, das der Knopf nicht setzen kann: %s"
                          % fehlend)
