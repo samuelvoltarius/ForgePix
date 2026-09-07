@@ -8,6 +8,29 @@ Alle nennenswerten Änderungen an ForgePix. Format orientiert an
 
 ## [Unreleased]
 
+### Die Sub-Bewertung schaltete sich selbst ab
+
+`analyze_frame` setzt für eine Aufnahme ohne gefundene Sterne die Platzhalter **FWHM 99,0** und
+**Exzentrizität 9,0**. Das heißt „nicht gemessen", nicht „sehr unscharf". Diese Werte gingen aber
+in die Mediane ein, an denen die Schwellen hängen — und schalteten genau die Prüfungen ab, die
+gebraucht werden. Bei 6 bewölkten von 8 Aufnahmen gemessen:
+
+| Prüfung | Median mit Platzhaltern | Bedingung | greift? |
+|---|---|---|---|
+| wenige Sterne | 0 | `med_stars > 0` | **nein** |
+| unscharf | 99,0 | `99 > 1,5 × 99` | **nein** |
+| längliche Sterne | — | `9,0 > 1,7` | ja — aber zufällig |
+
+Die bewölkten Aufnahmen fielen also **nur durch Zufall** heraus, weil der Platzhalter 9,0 über
+der Elongations-Schwelle liegt. Wäre er 1,0 gewesen, wären alle sechs im Stapel gelandet. Und die
+Begründung war falsch: „längliche Sterne (Elongation 9,00) — Guidingfehler" für eine Aufnahme, die
+gar keine Sterne hat — das schickt den Benutzer die Nachführung prüfen, obwohl Wolken schuld sind.
+
+Die Vergleichswerte kommen jetzt nur aus Aufnahmen, in denen tatsächlich Sterne gefunden wurden,
+und eine sternlose Aufnahme bekommt ihren eigenen, richtigen Grund. Nachgemessen an einer Serie
+aus 2 scharfen, 2 unscharfen und 6 sternlosen Aufnahmen: vorher kamen die unscharfen durch, jetzt
+bleiben nur die scharfen übrig.
+
 ### Der Mosaik-Modus konnte keine FITS lesen
 
 `cv2.imread` liest keine FITS und gibt `None` zurück. Die Kacheln wurden danach still verworfen,

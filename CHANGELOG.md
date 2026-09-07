@@ -8,6 +8,28 @@ All notable changes to ForgePix. Format based on
 
 ## [Unreleased]
 
+### The sub grading disabled itself
+
+`analyze_frame` sets the placeholders **FWHM 99.0** and **eccentricity 9.0** for a frame with no
+detected stars. That means "not measured", not "very blurry". Those values nevertheless entered
+the medians the thresholds hang on — and disabled exactly the checks that are needed. Measured on
+6 clouded frames out of 8:
+
+| Check | median with placeholders | condition | fires? |
+|---|---|---|---|
+| few stars | 0 | `med_stars > 0` | **no** |
+| blurry | 99.0 | `99 > 1.5 × 99` | **no** |
+| elongated stars | — | `9.0 > 1.7` | yes — by accident |
+
+The clouded frames were therefore rejected **only by coincidence**, because the placeholder 9.0
+happens to exceed the elongation threshold. Had it been 1.0, all six would have gone into the
+stack. And the stated reason was wrong: "elongated stars (elongation 9.00) — guiding error" for a
+frame with no stars at all — which sends the user to check their mount when clouds are to blame.
+
+The reference values now come only from frames where stars were actually found, and a starless
+frame gets its own, correct reason. Re-measured on a series of 2 sharp, 2 blurry and 6 starless
+frames: the blurry ones used to pass; now only the sharp ones remain.
+
 ### The mosaic mode could not read FITS
 
 `cv2.imread` does not read FITS and returns `None`. The tiles were then silently discarded, and

@@ -119,8 +119,20 @@ def select_subs(paths, fwhm_factor=1.5, ecc_max=1.7, star_frac=0.5, bg_factor=1.
     good = [f for f in frames if f["ok"]]
     if not good:
         return frames, [f["path"] for f in frames if f.get("path")]
-    med_stars = float(np.median([f["stars"] for f in good]))
-    med_fwhm = float(np.median([f["fwhm"] for f in good]))
+    # Die Vergleichswerte NUR aus Aufnahmen bilden, in denen ueberhaupt Sterne gefunden wurden.
+    #
+    # `analyze_frame` setzt fuer eine sternlose Aufnahme die Platzhalter FWHM 99,0 und
+    # Exzentrizitaet 9,0 — das heisst "nicht gemessen", nicht "sehr unscharf". Gingen diese
+    # Werte in den Median ein, schalteten sich genau die Pruefungen ab, die gebraucht werden:
+    # bei 6 bewoelkten von 8 Aufnahmen wurde der Sternzahl-Median 0 (Bedingung `med_stars > 0`
+    # nie erfuellt) und der FWHM-Median 99,0 (`99 > 1,5*99` nie erfuellt). Die bewoelkten
+    # Aufnahmen fielen dann nur noch durch die Exzentrizitaet heraus — also durch Zufall, weil
+    # der Platzhalter 9,0 ueber der Schwelle 1,7 liegt. Waere er 1,0, waeren alle sechs im
+    # Stapel gelandet.
+    mit_sternen = [f for f in good if f["stars"] > 0]
+    bezug = mit_sternen or good
+    med_stars = float(np.median([f["stars"] for f in bezug]))
+    med_fwhm = float(np.median([f["fwhm"] for f in bezug]))
     med_bg = float(np.median([f["bg"] for f in good]))
     kept = []
     for f in frames:
@@ -129,12 +141,18 @@ def select_subs(paths, fwhm_factor=1.5, ecc_max=1.7, star_frac=0.5, bg_factor=1.
         r = f["reasons"]
         if f["trail"]:
             r.append("Satelliten-/Flugzeugspur")
-        if med_stars > 0 and f["stars"] < star_frac * med_stars:
-            r.append(f"wenige Sterne ({f['stars']} vs. Median {med_stars:.0f}) — Wolken/Dunst?")
-        if f["fwhm"] > fwhm_factor * med_fwhm:
-            r.append(f"unscharf (FWHM {f['fwhm']:.1f} vs. {med_fwhm:.1f})")
-        if f["ecc"] > ecc_max:
-            r.append(f"längliche Sterne (Elongation {f['ecc']:.2f}) — Guidingfehler")
+        if f["stars"] == 0:
+            # Der ehrliche Grund. Vorher stand hier "laengliche Sterne (Elongation 9,00) —
+            # Guidingfehler" fuer eine Aufnahme, die ueberhaupt keine Sterne hat.
+            r.append("keine Sterne gefunden — bewoelkt, beschlagen oder fehlbelichtet")
+        else:
+            if med_stars > 0 and f["stars"] < star_frac * med_stars:
+                r.append(f"wenige Sterne ({f['stars']} vs. Median {med_stars:.0f}) — "
+                         f"Wolken/Dunst?")
+            if f["fwhm"] > fwhm_factor * med_fwhm:
+                r.append(f"unscharf (FWHM {f['fwhm']:.1f} vs. {med_fwhm:.1f})")
+            if f["ecc"] > ecc_max:
+                r.append(f"längliche Sterne (Elongation {f['ecc']:.2f}) — Guidingfehler")
         if f["bg"] > bg_factor * med_bg:
             r.append("heller Hintergrund — Wolken/Mond/Lichtverschmutzung")
         f["keep"] = len(r) == 0
