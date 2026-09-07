@@ -93,7 +93,8 @@ class TestPruefen(unittest.TestCase):
              "filter": {"L": 40}, "belichtungen_s": {300.0: 40},
              "temperatur_c": (-10.5, -9.8), "naechte": ["2026-09-06"],
              "richtungsspanne_grad": 0.01, "gesamt_minuten": 200.0,
-             "bildgroessen": {(1080, 1920): 40}, "enthaltene_subs": None}
+             "bildgroessen": {(1080, 1920): 40}, "enthaltene_subs": None,
+             "zeitraum_minuten": 300.0}
         u.update(abw)
         return u
 
@@ -166,6 +167,27 @@ class TestPruefen(unittest.TestCase):
         u = vorpruefung.uebersicht([{"EXPTIME": 300.0}, {"EXPTIME": 300.0}])
         self.assertAlmostEqual(u["gesamt_minuten"], 10.0, places=3)
         self.assertIsNone(u["enthaltene_subs"])
+
+    def test_zeitraum_wird_aus_den_zeitstempeln_gerechnet(self):
+        """Die Gesamtbelichtung sagt nicht, ueber welchen Zeitraum aufgenommen wurde. Fuer
+        Kometen ist genau das die entscheidende Groesse — der Kern muss sich messbar bewegt
+        haben. An echten Daten: 3,5 Minuten Belichtung, aber 4 Minuten 23 Sekunden Zeitraum."""
+        koepfe = [{"DATE-OBS": "2026-03-07T18:11:02", "EXPTIME": 30.0},
+                  {"DATE-OBS": "2026-03-07T18:15:25", "EXPTIME": 30.0}]
+        u = vorpruefung.uebersicht(koepfe)
+        self.assertAlmostEqual(u["zeitraum_minuten"], 4.383, places=2)
+        self.assertIn("Zeitraum", vorpruefung.text(u))
+
+    def test_ohne_zeitstempel_kein_zeitraum(self):
+        self.assertIsNone(vorpruefung.uebersicht([{"EXPTIME": 30.0}])["zeitraum_minuten"])
+        self.assertIsNone(vorpruefung.uebersicht(
+            [{"DATE-OBS": "2026-03-07T18:11:02"}])["zeitraum_minuten"],
+            "eine einzelne Aufnahme hat keinen Zeitraum")
+
+    def test_kaputter_zeitstempel_stuerzt_nicht(self):
+        u = vorpruefung.uebersicht([{"DATE-OBS": "kein Datum hier!!"},
+                                    {"DATE-OBS": "auch nicht!!!!!!"}])
+        self.assertIsNone(u["zeitraum_minuten"])
 
     def test_mehrere_filter(self):
         t = [x.titel for x in vorpruefung.pruefen(self._u(filter={"Ha": 20, "L": 20}))]

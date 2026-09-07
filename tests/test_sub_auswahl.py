@@ -109,6 +109,26 @@ class TestSubAuswahl(unittest.TestCase):
         _frames, behalten = astro_quality.select_subs(pfade, log=_stille)
         self.assertEqual(len(behalten), 6)
 
+    def test_unlesbare_aufnahmen_verschwinden_nicht(self):
+        """Vorher fielen sie spurlos heraus: bei 8 Dateien, davon 3 unlesbar, meldete das
+        Protokoll "5/5 Subs behalten" — der Benutzer erfuhr nie, dass drei fehlten."""
+        pfade = [self._szene(40, name="gut_%d" % i) for i in range(5)]
+        for i in range(3):
+            p = os.path.join(self.d, "kaputt_%d.tif" % i)
+            with open(p, "wb") as fh:
+                fh.write(b"kein Bild")
+            pfade.append(p)
+        zeilen = []
+        frames, behalten = astro_quality.select_subs(pfade, log=zeilen.append)
+        self.assertEqual(len(behalten), 5)
+        zusammenfassung = [z for z in zeilen if "behalten" in z][-1]
+        self.assertIn("5/8", zusammenfassung,
+                      "die Bezugsgroesse muss die Zahl der uebergebenen Aufnahmen sein: %s"
+                      % zusammenfassung)
+        self.assertIn("nicht lesbar", zusammenfassung)
+        genannt = sum(1 for z in zeilen if "kaputt_" in z)
+        self.assertEqual(genannt, 3, "jede unlesbare Aufnahme muss einzeln genannt werden")
+
     def test_platzhalter_sind_noch_die_erwarteten(self):
         """Wenn `analyze_frame` andere Platzhalter setzt, gilt die Begruendung oben nicht mehr
         — dann muss dieser Test auffallen und nicht die Auswahl still danebenliegen."""

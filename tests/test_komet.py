@@ -122,6 +122,71 @@ class TestKomet(unittest.TestCase):
         a, b = astro._read_float(pfade[0]), astro._read_float(raus[0])
         self.assertEqual(a.shape, b.shape)
 
+    def test_springende_fundorte_geben_keine_bahn(self):
+        """Der teuerste Fehler dieses Moduls: durch die hellsten Restflecken wurde eine Gerade
+        gelegt, auch wenn sie quer ueber das Bild springen. An echten Daten (C/2024 E1, 9 Subs
+        ueber 4 Minuten) kamen dabei ein Rest von 422,7 px und eine "Wanderung" von 640,9 px
+        heraus; die letzte Aufnahme waere um (-231, -598) px verschoben worden. Das Ergebnis
+        haette wie ein Kometen-Stack ausgesehen und war Unsinn."""
+        pfade, _wahr = self._serie(unter="springt", n=10, komet_an=False)
+        # Jeweils EIN heller Fleck, aber an zufaelliger Stelle — keine Bahn.
+        rng = np.random.default_rng(11)
+        for p in pfade:
+            from constants import imread
+            bgr = imread(p, cv2.IMREAD_UNCHANGED).astype(np.float32) / 65535.0
+            k = np.zeros(bgr.shape[:2], np.float32)
+            cv2.circle(k, (int(rng.integers(30, 230)), int(rng.integers(30, 230))), 3, 1.0, -1)
+            bgr += cv2.GaussianBlur(k, (0, 0), 4.0)[:, :, None] * 12.0
+            imwrite(p, np.clip(bgr * 65535, 0, 65535).astype(np.uint16))
+        zeilen = []
+        self.assertIsNone(komet.spur_finden(pfade, log=zeilen.append),
+                          "eine zufaellige Punktwolke wurde als Kernbahn genommen")
+        self.assertTrue(any("nicht auf einer Bahn" in z for z in zeilen),
+                        "der Grund muss dastehen: %s" % zeilen)
+
+    def test_die_toleranz_haengt_nicht_an_der_wanderung(self):
+        """Die erste Fassung erlaubte `0,2 * Wanderung` — und lief in die eigene Falle: eine
+        Unsinns-Bahn erzeugt eine riesige Wanderung, die die Toleranz mit anhebt. An echten
+        Daten wurden 387,5 px Rest gegen 395 px Toleranz geprueft und durchgelassen."""
+        import inspect
+        quelle = inspect.getsource(komet.spur_finden)
+        self.assertNotIn("0.2 * weg", quelle,
+                         "die Toleranz haengt wieder an der Wanderung")
+
+    def test_zu_kleine_wanderung_lohnt_nicht(self):
+        """Wandert der Kern kaum, kostet das Verschieben nur Schaerfe durch die Interpolation.
+
+        Geprueft wird die Schwelle selbst, an einer sauber gefundenen Bahn: eine Serie mit
+        deutlicher Wanderung, aber mit einer hochgesetzten Mindestwanderung. So haengt der
+        Test nicht daran, ob ein fast stehender Kern ueberhaupt zuverlaessig gefunden wird —
+        er wird es naemlich nicht, und dann greift zu Recht schon die Bahn-Pruefung."""
+        pfade, _wahr = self._serie(unter="langsam", n=10)
+        zeilen = []
+        erg = komet.spur_finden(pfade, log=zeilen.append, min_weg_px=10000.0)
+        self.assertIsNone(erg, "eine zu kleine Wanderung wurde nicht abgelehnt")
+        self.assertTrue(any("wandert" in z for z in zeilen), zeilen)
+        # Gegenprobe: mit der normalen Schwelle geht dieselbe Serie durch.
+        self.assertIsNotNone(komet.spur_finden(pfade, log=_stille),
+                             "die Testserie wird schon aus einem anderen Grund abgelehnt")
+
+    def test_zeitachse_kommt_aus_den_originalen(self):
+        """Die registrierten Frames sind TIFFs ohne DATE-OBS. Ohne die Originale rechnete die
+        Bahn ueber die Bildnummer, obwohl die Zeitstempel vorhanden sind — bei ungleichen
+        Abstaenden sitzt der Kern dann falsch."""
+        from astropy.io import fits
+        pfade, _wahr = self._serie(unter="zeit", n=10)
+        originale = []
+        for i, _p in enumerate(pfade):
+            q = os.path.join(self.d, "zeit", "orig_%03d.fit" % i)
+            fits.writeto(q, np.zeros((4, 4), np.float32),
+                         fits.Header({"DATE-OBS": "2026-03-07T18:%02d:00" % (10 + i)}))
+            originale.append(q)
+        erg = komet.spur_finden(pfade, log=_stille, zeit_paths=originale)
+        self.assertIsNotNone(erg)
+        self.assertTrue(erg["echte_zeit"], "die Zeitstempel der Originale wurden nicht benutzt")
+        ohne = komet.spur_finden(pfade, log=_stille)
+        self.assertFalse(ohne["echte_zeit"], "ohne Originale darf es keine echte Zeit geben")
+
     def test_hellster_fleck_ignoriert_einzelne_rauschspitzen(self):
         """Ein Komet ist diffus. Ein einzelnes helles Pixel ist ein Treffer, kein Kern."""
         rest = np.zeros((80, 80), np.float32)

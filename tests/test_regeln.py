@@ -145,6 +145,50 @@ class TestSchalterExistieren(unittest.TestCase):
         self.assertEqual(fehlend, [], "Regelwerk empfiehlt unbekannte Schalter: %s" % fehlend)
 
 
+class TestKometenModus(unittest.TestCase):
+    """Beim Kometen-Stacking wird auf den KERN ausgerichtet — die Sterne sind absichtlich
+    Striche. Mehrere Regeln sind dann nicht nur nutzlos, sondern schaedlich."""
+
+    def test_synthstar_wird_nicht_empfohlen(self):
+        """`--astro-synthstar` wuerde die Striche durch runde Profile ersetzen und damit genau
+        das Ergebnis zerstoeren, wegen dem man den Modus gewaehlt hat."""
+        raete = regeln.pruefen(_bericht(sterne__rundheit=2.0), komet=True)
+        self.assertEqual([r for r in raete if "verzogen" in r.titel], [])
+        self.assertNotIn("--astro-synthstar", regeln.einstellungen(raete))
+
+    def test_helligkeitsverlauf_wird_nicht_beurteilt(self):
+        """Die Sternstriche liegen ueber das ganze Bild und gehen in die Messung des
+        Hintergrunds ein — an echten Kometendaten: Gradient 133 % bei einem Bild, das nur
+        Striche enthaelt."""
+        raete = regeln.pruefen(_bericht(himmel__gradient_prozent=133.0), komet=True)
+        self.assertEqual([r for r in raete if "Helligkeitsverlauf" in r.titel], [])
+
+    def test_strichspur_ist_hier_keine_spur(self):
+        raete = regeln.pruefen(_bericht(sterne__spur=True), komet=True)
+        self.assertEqual([r for r in raete if "Strichspur" in r.titel], [])
+
+    def test_der_hinweis_erklaert_warum(self):
+        raete = regeln.pruefen(_bericht(), komet=True)
+        r = [x for x in raete if "Kometen" in x.titel]
+        self.assertEqual(len(r), 1)
+        self.assertEqual(r[0].stufe, regeln.HINWEIS)
+        self.assertIn("Kern", r[0].grund)
+
+    def test_ohne_kometen_modus_bleibt_alles_wie_bisher(self):
+        """Die Gegenprobe: sonst waere nicht zu unterscheiden, ob die Regeln unterdrueckt
+        werden oder ueberhaupt nicht mehr greifen."""
+        raete = regeln.pruefen(_bericht(sterne__rundheit=2.0, himmel__gradient_prozent=133.0))
+        titel = [r.titel for r in raete]
+        self.assertTrue(any("verzogen" in t for t in titel))
+        self.assertTrue(any("Helligkeitsverlauf" in t for t in titel))
+        self.assertEqual([t for t in titel if "Kometen" in t], [])
+
+    def test_was_weiter_gilt_bleibt_stehen(self):
+        """Signalabstand und Aufnahmezahl gelten auch im Kometen-Modus."""
+        titel = [r.titel for r in regeln.pruefen(_bericht(serie__anzahl=4), komet=True)]
+        self.assertTrue(any("Wenige Aufnahmen" in t for t in titel))
+
+
 class TestAusgabe(unittest.TestCase):
 
     def test_reihenfolge_nach_dringlichkeit(self):

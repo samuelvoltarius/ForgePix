@@ -116,7 +116,8 @@ def _gerade_robust(t, v, runden=3):
     return float(a), float(b), behalten
 
 
-def spur_finden(reg_paths, log=log_print):
+def spur_finden(reg_paths, log=log_print, zeit_paths=None, max_rest_px=6.0,
+                min_weg_px=2.0):
     """Kernbahn aus bereits sternregistrierten Frames bestimmen.
 
     Returns:
@@ -124,7 +125,17 @@ def spur_finden(reg_paths, log=log_print):
         `gefunden` (in wie vielen Frames ein Kern gefunden wurde), `verworfen`,
         `rest_px` (mittlerer Abstand der Fundorte zur Geraden),
         `geschwindigkeit_px_pro_frame` und `echte_zeit` (ob Zeitstempel benutzt wurden).
-        Bei zu wenig Material: None.
+        Args:
+        zeit_paths: die ORIGINAL-Aufnahmen, nur fuer die Zeitachse. Die registrierten Frames
+            sind TIFFs ohne DATE-OBS — ohne diesen Umweg rechnete die Gerade ueber die
+            Bildnummer, obwohl die Zeitstempel vorhanden sind. Bei ungleichen Abstaenden
+            (Wolkenpause, verworfene Subs) sitzt der Kern dann falsch.
+        max_rest_px: groesster mittlerer Abstand der Fundorte zur Geraden. Darueber ist es
+            keine Bahn, sondern Rauschen.
+        min_weg_px: kuerzeste Wanderung, ab der sich das Verschieben lohnt.
+
+    Bei zu wenig Material ODER einer unplausiblen Bahn: None. Der Aufrufer stapelt dann ganz
+    normal weiter — ein stiller Abbruch waere hier das Schlimmste.
     """
     n = len(reg_paths)
     if n < 4:
@@ -140,7 +151,8 @@ def spur_finden(reg_paths, log=log_print):
         log("    Komet: nur in %d von %d Frames ein bewegtes Objekt gefunden — zu wenig"
             % (len(gefunden), n))
         return None
-    t_all, echte_zeit = _zeitachse(reg_paths)
+    zeitquelle = zeit_paths if (zeit_paths and len(zeit_paths) == n) else reg_paths
+    t_all, echte_zeit = _zeitachse(zeitquelle)
     t = t_all[gefunden]
     x = np.asarray([orte[i][0] for i in gefunden], np.float64)
     y = np.asarray([orte[i][1] for i in gefunden], np.float64)
@@ -158,6 +170,39 @@ def spur_finden(reg_paths, log=log_print):
         "Rest zur Geraden %.2f px" % (len(gefunden), n, int((~behalten).sum()), rest_px))
     log("    Komet: Wanderung ueber die Serie %.1f px%s"
         % (weg, " (echte Zeitstempel)" if echte_zeit else " (ohne Zeitstempel, ueber Bildnummer)"))
+
+    # Ist das ueberhaupt eine Bahn? Bis hierher wurde durch die hellsten Restflecken eine
+    # Gerade gelegt — auch dann, wenn diese Flecken quer ueber das Bild springen. An echten
+    # Daten (C/2024 E1, 9 Subs ueber 4 Minuten) kam dabei ein Rest von 422,7 px und eine
+    # "Wanderung" von 640,9 px heraus; die letzte Aufnahme waere um (-231, -598) px verschoben
+    # worden. Das Ergebnis haette wie ein Kometen-Stack ausgesehen und war Unsinn.
+    # Der Rest wird ABSOLUT geprueft, nicht im Verhaeltnis zur Wanderung. Die erste Fassung
+    # dieser Pruefung erlaubte `0,2 * weg` — und lief damit in die eigene Falle: eine
+    # Unsinns-Bahn erzeugt eine riesige "Wanderung", die die Toleranz mit anhebt. An den
+    # echten Daten wurden 387,5 px Rest gegen 395 px Toleranz geprueft und durchgelassen.
+    # Ein echter Kern wird auf wenige Pixel genau gefunden; alles darueber ist keine Bahn.
+    if not np.isfinite(rest_px) or rest_px > max_rest_px:
+        log("    Komet: die Fundorte liegen nicht auf einer Bahn (mittlerer Abstand %.1f px, "
+            "erlaubt sind %.1f) — kein Kern erkannt, es wird normal gestapelt."
+            % (rest_px, max_rest_px))
+        return None
+    # Und die Bahn muss ins Bild passen: ein Kern, der weiter wandert als das Bild breit ist,
+    # waere zwischendurch draussen gewesen.
+    try:
+        h, w = astro._gray(frames[0]).shape[:2]
+        diagonale = float(np.hypot(h, w))
+    except Exception:
+        diagonale = None
+    if diagonale and weg > diagonale:
+        log("    Komet: die errechnete Wanderung (%.0f px) ist groesser als die Bilddiagonale "
+            "(%.0f px) — das kann keine Kernbahn sein, es wird normal gestapelt."
+            % (weg, diagonale))
+        return None
+    if weg < min_weg_px:
+        log("    Komet: der Kern wandert ueber die ganze Serie nur %.1f px. Das Verschieben "
+            "brächte nichts und kostet Schaerfe durch die Interpolation — es wird normal "
+            "gestapelt." % weg)
+        return None
     return {"versatz": versatz, "gefunden": len(gefunden), "verworfen": int((~behalten).sum()),
             "rest_px": rest_px, "weg_px": weg, "echte_zeit": echte_zeit}
 
@@ -185,7 +230,8 @@ def auf_kern_verschieben(reg_paths, out_dir, versatz, log=log_print):
     return raus
 
 
-def stack_auf_kern(reg_paths, out_dir, method="median", kappa=2.5, log=log_print):
+def stack_auf_kern(reg_paths, out_dir, method="median", kappa=2.5, log=log_print,
+                   zeit_paths=None):
     """Kompletter Kometen-Durchgang auf bereits sternregistrierten Frames.
 
     `median` ist hier die richtige Voreinstellung und nicht `sigma`: nach dem Verschieben auf den
@@ -194,7 +240,7 @@ def stack_auf_kern(reg_paths, out_dir, method="median", kappa=2.5, log=log_print
 
     Returns: (ergebnis_bgr, info-dict) oder (None, None), wenn kein Kern gefunden wurde.
     """
-    info = spur_finden(reg_paths, log=log)
+    info = spur_finden(reg_paths, log=log, zeit_paths=zeit_paths)
     if info is None:
         return None, None
     pfade = auf_kern_verschieben(reg_paths, out_dir, info["versatz"], log=log)

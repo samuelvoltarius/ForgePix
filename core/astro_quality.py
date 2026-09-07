@@ -137,6 +137,10 @@ def select_subs(paths, fwhm_factor=1.5, ecc_max=1.7, star_frac=0.5, bg_factor=1.
     kept = []
     for f in frames:
         if not f["ok"]:
+            # NICHT ueberspringen, ohne es zu sagen. Vorher fielen unlesbare Aufnahmen
+            # spurlos heraus: bei 8 Dateien, davon 3 unlesbar, meldete das Protokoll
+            # "5/5 Subs behalten" — der Benutzer erfuhr nie, dass drei fehlten.
+            log("  %s: %s ✗" % (f["name"], "; ".join(f.get("reasons") or ["nicht lesbar"])))
             continue
         r = f["reasons"]
         if f["trail"]:
@@ -160,7 +164,11 @@ def select_subs(paths, fwhm_factor=1.5, ecc_max=1.7, star_frac=0.5, bg_factor=1.
             f"Elong={f['ecc']:.2f} BG={f['bg']:.3f} {'✓' if f['keep'] else '✗ ' + '; '.join(r)}")
         if f["keep"]:
             kept.append(f["path"])
-    log(f"  -> {len(kept)}/{len(good)} Subs behalten")
+    # Bezugsgroesse ist die Zahl der UEBERGEBENEN Aufnahmen, nicht die der lesbaren.
+    unlesbar = len(frames) - len(good)
+    log("  -> %d/%d Subs behalten%s"
+        % (len(kept), len(frames),
+           (" (%d davon nicht lesbar)" % unlesbar) if unlesbar else ""))
     return frames, kept
 
 

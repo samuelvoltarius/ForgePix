@@ -2020,6 +2020,9 @@ def run_astro(input_dir, work_dir, args):
         except Exception:
             pass
 
+    # Vorbelegt, damit der Bericht sich darauf verlassen kann: im Drizzle-Zweig laeuft das
+    # Kometen-Stacking gar nicht erst.
+    _komet_angewandt = False
     if drizzle_true:
         # Echtes Drizzle integriert Registrierung + flusserhaltendes Droppen in EINEM Schritt
         # (kein separates Resampling/Stacken) → behält die Sub-Pixel-Dither-Diversität.
@@ -2052,14 +2055,26 @@ def run_astro(input_dir, work_dir, args):
                 import komet as _komet
                 print("  Kometen-Stacking: Kern suchen …")
                 _kdir = os.path.join(work_dir, "komet")
+                # Je registriertem Frame die ORIGINAL-Aufnahme: der Dateiname traegt den Index
+                # (reg_0007.tif -> paths[7]), so wie es die Belichtungszeiten weiter unten auch
+                # machen. Faellt einer heraus, bleibt die Zuordnung trotzdem richtig.
+                try:
+                    _zeit_quellen = [paths[int(os.path.basename(p)[4:8])] for p in aligned]
+                except (ValueError, IndexError):
+                    _zeit_quellen = None
+                # Die ORIGINALE fuer die Zeitachse mitgeben: `aligned` sind registrierte
+                # TIFFs ohne DATE-OBS, und ohne die echten Zeitstempel rechnet die Bahn ueber
+                # die Bildnummer — bei Wolkenpausen sitzt der Kern dann falsch.
                 _komet_erg, _kinfo = _komet.stack_auf_kern(aligned, _kdir,
                                                            method=args.astro_method,
-                                                           kappa=args.astro_kappa)
+                                                           kappa=args.astro_kappa,
+                                                           zeit_paths=_zeit_quellen)
                 shutil.rmtree(_kdir, ignore_errors=True)
                 if _komet_erg is None:
                     print("  (kein Kern gefunden — normales Stacken)", file=sys.stderr)
             except Exception as e:
                 print(f"  (Kometen-Stacking uebersprungen: {e})", file=sys.stderr)
+        _komet_angewandt = _komet_erg is not None
         if _komet_erg is not None:
             result = _komet_erg
         else:
@@ -2165,7 +2180,10 @@ def run_astro(input_dir, work_dir, args):
         import regeln
         _b = messbericht.erstellen(result, pfad=(used_paths[0] if used_paths else None),
                                    paths=used_paths, log=lambda *a, **k: None)
-        _r = regeln.pruefen(_b)
+        # Es zaehlt, was TATSAECHLICH passiert ist, nicht der Schalter. Findet sich kein Kern,
+        # wird normal auf die Sterne gestapelt — dann sind sie rund und die Regeln zu
+        # Sternform und Hintergrund gelten wieder.
+        _r = regeln.pruefen(_b, komet=bool(_komet_angewandt))
         with open(os.path.join(out, "messbericht.json"), "w", encoding="utf-8") as f:
             json.dump({"bericht": _b,
                        "raete": [dict(x._asdict()) for x in _r],

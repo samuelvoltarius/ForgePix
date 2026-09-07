@@ -41,12 +41,20 @@ def _w(bericht, *pfad, standard=None):
     return standard if k is None else k
 
 
-def pruefen(bericht):
+def pruefen(bericht, komet=False):
     """Den Messbericht durchgehen und eine Liste von `Rat` zurückgeben.
 
     Fehlende Werte fuehren NICHT zu einem Rat. Eine Regel, die auf `None` anspringt, erfindet
     einen Befund aus einer Nicht-Messung — genau davor schuetzt der Bericht mit seinem
     konsequenten `None`.
+
+    Args:
+        komet: beim Kometen-Stacking wird auf den KERN ausgerichtet, die Sterne werden also
+            absichtlich zu Strichen. Dann sind mehrere Regeln nicht nur nutzlos, sondern
+            schaedlich: `--astro-synthstar` wuerde genau das Ergebnis zerstoeren, wegen dem
+            man diesen Modus waehlt. Ausserdem verzerren die Sternstriche die Messung des
+            Hintergrunds — an echten Kometendaten gemessen: Rauschen 0,010 statt 0,0003 und
+            ein Gradient von 133 % bei einem Bild, das nur Striche enthaelt.
     """
     raete = []
 
@@ -69,7 +77,10 @@ def pruefen(bericht):
             None))
 
     # --- Hintergrund -------------------------------------------------------------
-    grad = _w(bericht, "himmel", "gradient_prozent")
+    # Beim Kometen-Stacking sind die Sterne Striche und liegen ueberall — was hier als
+    # "Hintergrund" gemessen wird, ist zu einem guten Teil Sternlicht. Ein Gradient-Rat waere
+    # eine Aussage ueber etwas, das nicht gemessen wurde.
+    grad = None if komet else _w(bericht, "himmel", "gradient_prozent")
     if grad is not None and grad > 10.0:
         raete.append(Rat(
             WICHTIG, "Starker Helligkeitsverlauf im Hintergrund",
@@ -115,7 +126,10 @@ def pruefen(bericht):
             "--astro-unclip-stars"))
 
     # --- Sternform ---------------------------------------------------------------
-    rund = _w(bericht, "sterne", "rundheit")
+    # Beim Kometen-Stacking SOLLEN die Sterne Striche sein — das ist der Zweck des Modus.
+    # `--astro-synthstar` wuerde sie durch runde Profile ersetzen und damit genau das
+    # Ergebnis zerstoeren, wegen dem man ihn gewaehlt hat.
+    rund = None if komet else _w(bericht, "sterne", "rundheit")
     if rund is not None and rund > 1.6:
         raete.append(Rat(
             WICHTIG, "Sterne deutlich verzogen",
@@ -125,7 +139,7 @@ def pruefen(bericht):
             "die Verformung von 0,79 auf 0,39, also auf den Wert derselben Aufnahme ohne "
             "Fehler. ACHTUNG: danach fuer Photometrie unbrauchbar.",
             "--astro-synthstar"))
-    if _w(bericht, "sterne", "spur") is True:
+    if not komet and _w(bericht, "sterne", "spur") is True:
         raete.append(Rat(
             WICHTIG, "Strichspur erkannt",
             "In der untersuchten Aufnahme wurde eine Spur gefunden (Satellit oder Flugzeug).",
@@ -169,6 +183,16 @@ def pruefen(bericht):
             "Satellitenspur dadurch von 0,042 auf 0,016.",
             None))
 
+    if komet:
+        raete.append(Rat(
+            HINWEIS, "Kometen-Stacking: einige Messwerte gelten hier nicht",
+            "Ausgerichtet wurde auf den Kern, die Sterne sind also absichtlich Striche. Sie "
+            "liegen ueber das ganze Bild verteilt und gehen in die Messung von Hintergrund, "
+            "Rauschen und Signalabstand ein — an echten Kometendaten gemessen: Rauschen 0,010 "
+            "statt 0,0003 und ein Helligkeitsverlauf von 133 %. Sternform, Helligkeitsverlauf "
+            "und Strichspuren werden hier darum NICHT beurteilt.",
+            "Fuer eine Beurteilung des Himmels denselben Stapel ohne --astro-komet rechnen.",
+            None))
     reihenfolge = {KRITISCH: 0, WICHTIG: 1, HINWEIS: 2}
     raete.sort(key=lambda r: reihenfolge.get(r.stufe, 9))
     return raete

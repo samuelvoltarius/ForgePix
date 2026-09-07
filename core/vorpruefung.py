@@ -154,6 +154,7 @@ def uebersicht(koepfe, gesamt=None):
     temperaturen, naechte, richtungen = [], collections.Counter(), []
     gesamt_s, subs = 0.0, 0
     groessen = collections.Counter()
+    zeitpunkte = []
     for h in koepfe:
         k = str(h.get("INSTRUME", "")).strip()
         if k:
@@ -177,6 +178,13 @@ def uebersicht(koepfe, gesamt=None):
         d = str(h.get("DATE-OBS", ""))[:10]
         if d:
             naechte[d] += 1
+        # Die Uhrzeit mitfuehren: die Gesamtbelichtung sagt nicht, ueber welchen ZEITRAUM
+        # aufgenommen wurde. Fuer Kometen ist genau das die entscheidende Groesse — der Kern
+        # muss sich messbar bewegt haben. An echten Daten: 3,5 Minuten Belichtung, aber
+        # 4 Minuten 23 Sekunden Zeitraum.
+        voll = str(h.get("DATE-OBS", "")).strip()
+        if len(voll) >= 19:
+            zeitpunkte.append(voll[:19])
         r = _richtung(h)
         if r is not None:
             richtungen.append(r)
@@ -190,6 +198,14 @@ def uebersicht(koepfe, gesamt=None):
         mitte = (sum(x for x, _y in richtungen) / len(richtungen),
                  sum(y for _x, y in richtungen) / len(richtungen))
         spanne_grad = max(_winkelabstand(r, mitte) for r in richtungen) * 2.0
+    zeitraum_min = None
+    if len(zeitpunkte) >= 2:
+        try:
+            from datetime import datetime
+            werte = sorted(datetime.fromisoformat(z) for z in zeitpunkte)
+            zeitraum_min = (werte[-1] - werte[0]).total_seconds() / 60.0
+        except (ValueError, TypeError):
+            zeitraum_min = None
     return {
         "anzahl": int(gesamt if gesamt is not None else len(koepfe)),
         "gelesen": len(koepfe),
@@ -204,6 +220,7 @@ def uebersicht(koepfe, gesamt=None):
                            if gesamt_s > 0 else None),
         "enthaltene_subs": (subs if subs else None),
         "bildgroessen": dict(groessen),
+        "zeitraum_minuten": zeitraum_min,
     }
 
 
@@ -345,6 +362,9 @@ def text(u):
     if u.get("richtungsspanne_grad") is not None:
         z.append("Himmelsfeld     Ausrichtungen bis %.2f Grad auseinander"
                  % u["richtungsspanne_grad"])
+    if u.get("zeitraum_minuten") is not None:
+        z.append("Zeitraum        %.0f Minuten von der ersten bis zur letzten Aufnahme"
+                 % u["zeitraum_minuten"])
     if u.get("naechte"):
         n = u["naechte"]
         z.append("Naechte         %s" % (n[0] if len(n) == 1 else "%s bis %s (%d)"

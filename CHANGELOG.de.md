@@ -8,6 +8,50 @@ Alle nennenswerten Änderungen an ForgePix. Format orientiert an
 
 ## [Unreleased]
 
+### Kometen-Stacking: es hat eine Bahn erfunden
+
+Der Modus richtet auf den **Kern** aus statt auf die Sterne. Dafür legt er eine Gerade durch die
+hellsten „bewegten" Flecken — **auch wenn diese Flecken quer über das Bild springen**. An echten
+Daten (C/2024 E1, 9 Aufnahmen über 4 Minuten) kam dabei heraus:
+
+| Messwert | Wert | plausibel wäre |
+|---|---|---|
+| mittlerer Abstand zur Geraden | **422,7 px** | 1–2 px |
+| „Wanderung" über die Serie | **640,9 px** | Bruchteile eines Pixels in 4 Minuten |
+| Verschiebung der letzten Aufnahme | **(−231, −598) px** | — |
+
+Das Ergebnis sah aus wie ein Kometen-Stack und war Unsinn. Jetzt wird die Bahn geprüft: liegt der
+mittlere Abstand über 6 px oder ist die Wanderung größer als die Bilddiagonale, gilt sie nicht als
+Kernbahn und es wird normal gestapelt — mit Begründung im Protokoll, nicht still.
+
+**Die erste Fassung dieser Prüfung war selbst falsch** und ist an denselben Daten aufgeflogen: sie
+erlaubte einen Rest von `0,2 × Wanderung` und lief damit in die eigene Falle, weil eine
+Unsinns-Bahn eine riesige Wanderung erzeugt, die die Toleranz mit anhebt. 387,5 px Rest wurden
+gegen 395 px Toleranz geprüft und durchgelassen. Der Rest wird jetzt absolut geprüft.
+
+**Die Zeitachse war ebenfalls falsch.** Die Bahn wurde über registrierte TIFF-Kopien gerechnet,
+die kein `DATE-OBS` tragen — also über die Bildnummer, obwohl die Zeitstempel in den Originalen
+stehen. Bei Wolkenpausen oder verworfenen Aufnahmen sitzt der Kern damit falsch. Die Originale
+werden jetzt mitgegeben, zugeordnet über den Index im Dateinamen.
+
+### Das Regelwerk gab beim Kometen-Stacking schädlichen Rat
+
+Bei diesem Modus **sollen** die Sterne Striche sein — das ist sein Zweck. Das Regelwerk sah
+„Rundheit 1,63" und empfahl `--astro-synthstar`, was genau dieses Ergebnis zerstört hätte.
+Außerdem verzerren die Striche die Messung des Hintergrunds: Rauschen 0,010 statt 0,0003 und ein
+Helligkeitsverlauf von 133 % bei einem Bild, das nur Striche enthält — beides führte zu Rat über
+etwas, das nicht gemessen wurde.
+
+Sternform, Helligkeitsverlauf und Strichspuren werden in diesem Modus nicht mehr beurteilt, und
+ein Hinweis sagt warum. Maßgeblich ist dabei, was **tatsächlich** passiert ist: wird mangels
+Kernbahn normal gestapelt, gelten die Regeln wieder.
+
+### Die Vorprüfung nennt den Zeitraum
+
+Die Gesamtbelichtung sagt nicht, über welche Zeit aufgenommen wurde. Für Kometen ist genau das
+entscheidend. An den echten Daten: 3,5 Minuten Belichtung, aber 4 Minuten 23 Sekunden Zeitraum —
+in dieser Zeit bewegt sich ein Komet bei 3,99 "/px um Bruchteile eines Pixels.
+
 ### Die Sub-Bewertung schaltete sich selbst ab
 
 `analyze_frame` setzt für eine Aufnahme ohne gefundene Sterne die Platzhalter **FWHM 99,0** und

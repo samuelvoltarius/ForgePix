@@ -8,6 +8,50 @@ All notable changes to ForgePix. Format based on
 
 ## [Unreleased]
 
+### Comet stacking: it invented a track
+
+The mode aligns on the **nucleus** instead of the stars. For that it fits a line through the
+brightest "moving" spots — **even when those spots jump across the frame**. On real data
+(C/2024 E1, 9 frames over 4 minutes) this produced:
+
+| Measurement | Value | plausible would be |
+|---|---|---|
+| mean distance from the fitted line | **422.7 px** | 1–2 px |
+| "travel" across the series | **640.9 px** | fractions of a pixel in 4 minutes |
+| shift applied to the last frame | **(−231, −598) px** | — |
+
+The result looked like a comet stack and was nonsense. The track is now checked: if the mean
+distance exceeds 6 px, or the travel exceeds the frame diagonal, it is not treated as a nucleus
+track and normal stacking proceeds — with a reason in the log, not silently.
+
+**The first version of that check was itself wrong** and was caught on the same data: it allowed a
+residual of `0.2 × travel` and walked into its own trap, because a nonsense track produces a huge
+travel that raises the tolerance with it. 387.5 px of residual were checked against 395 px of
+tolerance and let through. The residual is now checked in absolute terms.
+
+**The time axis was wrong too.** The track was computed over registered TIFF copies, which carry
+no `DATE-OBS` — so over the frame index, although the timestamps sit in the originals. With cloud
+gaps or rejected frames the nucleus then lands in the wrong place. The originals are now passed
+along, matched through the index in the file name.
+
+### The rule set gave harmful advice during comet stacking
+
+In this mode the stars are **meant** to be streaks — that is the point. The rule set saw
+"roundness 1.63" and recommended `--astro-synthstar`, which would have destroyed exactly that
+result. The streaks also distort the background measurement: noise 0.010 instead of 0.0003 and a
+brightness gradient of 133% on an image that contains nothing but streaks — both produced advice
+about something that was never measured.
+
+Star shape, brightness gradient and trails are no longer judged in this mode, and a note says why.
+What counts is what **actually** happened: if no nucleus track is found and normal stacking runs,
+the rules apply again.
+
+### The pre-flight states the time span
+
+Integration time does not say over what period the frames were taken. For comets that is the
+decisive quantity. On the real data: 3.5 minutes of integration but a span of 4 minutes 23
+seconds — in that time a comet moves fractions of a pixel at 3.99"/px.
+
 ### The sub grading disabled itself
 
 `analyze_frame` sets the placeholders **FWHM 99.0** and **eccentricity 9.0** for a frame with no
