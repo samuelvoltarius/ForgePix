@@ -8,6 +8,33 @@ Alle nennenswerten Änderungen an ForgePix. Format orientiert an
 
 ## [Unreleased]
 
+### Photometrie: die Sterne wanderten aus der Blende, gemessen wurde trotzdem
+
+Die Koordinaten von Ziel- und Vergleichsstern galten **starr für jede Aufnahme**; gesucht wurde
+nur im Umkreis von etwa 1,5 Blendenradien. An zwanzig echten Aufnahmen (IC 417, Seestar S30)
+wanderten die Sterne um **112 px** bei 7,5 px Suchradius — es kamen **3 von 20 Messpunkten**
+zustande.
+
+Und das war noch der gute Fall. Wer stur an der alten Stelle misst, trifft irgendwann den
+Nachbarstern oder halb daneben und bekommt einen Fluss, der plausibel aussieht: **eine glatte,
+erfundene Lichtkurve**. Bei einer Funktion, deren Zweck eine AAVSO-Meldung ist, ist das der
+schlimmstmögliche Fehler.
+
+Jetzt wird jede Aufnahme mit der vorhandenen, getesteten Registrierung auf die erste bezogen und
+die Koordinaten werden mitgerechnet. Lässt sich eine Aufnahme nicht ausrichten, wird ab der
+zuletzt gefundenen Position gesucht und das gemeldet. Dieselbe Serie danach: **14 von 20**. Der
+gemessene Versatz steht im Protokoll und im Ergebnis.
+
+**Zweiter Fehler im selben Modul.** Die Flüsse der Vergleichssterne wurden *während* der Schleife
+eingetragen und beim ersten Fehlschlag abgebrochen — die Listen liefen unterschiedlich lang, und
+die Bedingung für die Streuung (gleiche Länge) war auf echten Daten nie erfüllt. Gemeldet wurde
+dann „nicht bestimmbar (nur ein Vergleichsstern)", obwohl drei angegeben waren: eine falsche
+Begründung für eine Zahl, die es hätte geben müssen. Jetzt steht dort **0,1388 mag** — die
+ehrliche Messgenauigkeit, die der Docstring verspricht.
+
+Gemessen über die Driftstärke (synthetische Serie, 200×200 px): 0 px r=0,97 · 10 px r=0,98 ·
+30 px r=0,99 · 60 px r=0,59 (ab dort verlassen die Vergleichssterne das Bild).
+
 ### Die Vorprüfung erkennt zwei Ziele in einem Ordner
 
 Derselbe stille Fehler, der die Trainingsserien verdorben hat, trifft auch den Benutzer: liegen

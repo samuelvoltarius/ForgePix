@@ -8,6 +8,31 @@ All notable changes to ForgePix. Format based on
 
 ## [Unreleased]
 
+### Photometry: the stars drifted out of the aperture, and it measured anyway
+
+The coordinates of target and comparison stars were treated as **fixed for every frame**; the
+search covered only about 1.5 aperture radii. On twenty real frames (IC 417, Seestar S30) the
+stars drifted by **112 px** against a 7.5 px search radius — **3 of 20 measurements** survived.
+
+And that was the good case. Measuring stubbornly at the old position eventually hits the
+neighbouring star, or half of it, and returns a flux that looks plausible: **a smooth, invented
+light curve**. For a function whose purpose is an AAVSO report, that is the worst possible defect.
+
+Every frame is now referred to the first through the existing, tested registration, and the
+coordinates are carried along. If a frame cannot be registered, the search starts from the last
+found position and says so. The same series afterwards: **14 of 20**. The measured drift appears
+in the log and in the result.
+
+**A second defect in the same module.** The comparison stars' fluxes were appended *during* the
+loop and the loop broke on the first failure — the lists ended up with different lengths, and the
+condition for the scatter (equal lengths) was never satisfied on real data. It then reported "not
+determinable (only one comparison star)" although three were given: a wrong reason for a number
+that should have existed. It now reads **0.1388 mag** — the honest measurement precision the
+docstring promises.
+
+Measured against drift strength (synthetic series, 200×200 px): 0 px r=0.97 · 10 px r=0.98 ·
+30 px r=0.99 · 60 px r=0.59 (beyond which the comparison stars leave the frame).
+
 ### The pre-flight detects two targets in one folder
 
 The same silent fault that spoiled the training series hits the user too: frames of two objects in
