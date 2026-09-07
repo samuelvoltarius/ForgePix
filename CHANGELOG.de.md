@@ -8,6 +8,34 @@ Alle nennenswerten Änderungen an ForgePix. Format orientiert an
 
 ## [Unreleased]
 
+### Stufe 4: die lokale KI wird gefunden statt mitgeliefert
+
+ForgePix liefert **kein** Sprachmodell mit. Das Programm ist rund 30 MB groß; ein brauchbares
+kleines Modell liegt bei 300 bis 900 MB, also beim Zehn- bis Dreißigfachen. Das zahlte auch die
+Mehrheit mit, die nie einen freien Wunsch eintippt. Ein Modell ist etwas, das man **anbietet**.
+
+Neu ist der Knopf **„Lokale KI suchen"**. Ollama, llama.cpp (`llama-server`), LM Studio und vLLM
+sprechen alle dieselbe OpenAI-kompatible Sprache und horchen auf bekannten Ports —
+`core/lokales_modell.py` sucht sie und trägt Adresse und Modell ein. Wer eines davon aus ganz
+anderen Gründen installiert hat, muss nichts einstellen. Ist Ollama installiert, aber nicht
+gestartet (der häufigste Fall), wird es gestartet. Ist noch kein Modell da, **fragt** ForgePix,
+bevor es eines herunterlädt.
+
+Von selbst wird nichts geladen — nicht beim Start, nicht beim Suchen, nicht als stiller Rückfall.
+Ein Programm, das mehrere hundert Megabyte holt, weil es gerade praktisch wäre, ist ein Programm,
+dem man nicht mehr traut. Zwei Tests prüfen genau das.
+
+Was NICHT behauptet wird: dass ein 1,5-B-Modell die Aufgabe gut löst. Das ist ungemessen. Der
+Berater prüft ohnehin jeden Vorschlag gegen seinen Katalog — ein schwaches Modell kann nichts
+kaputtmachen, nur nichts beitragen.
+
+### Nebenbefund: die Prüfung auf `subprocess`-Kodierung sah nur eine Zeile
+
+Der Test, der `text=True` ohne `encoding=` findet, war eine Zeilensuche. Er meldete einen
+korrekten mehrzeiligen Aufruf als Fehler — und hätte umgekehrt einen wirklich fehlenden
+Parameter übersehen, wenn `text=True` am Zeilenende stand. Jetzt wird der Aufruf selbst über den
+Syntaxbaum untersucht, mit Gegenprobe an einem echten Verstoß.
+
 ### Der Entrauscher, bei voller Auflösung gemessen
 
 Die vier mitgelieferten ONNX-Modelle sind als experimentell geführt und in keinem Standardweg

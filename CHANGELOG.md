@@ -8,6 +8,33 @@ All notable changes to ForgePix. Format based on
 
 ## [Unreleased]
 
+### Stage 4: the local AI is found, not bundled
+
+ForgePix ships **no** language model. The program is about 30 MB; a usable small model is 300 to
+900 MB, ten to thirty times that. The majority who never type a free-text wish would pay for it
+too. A model is something you **offer**.
+
+New is the **"Find local AI"** button. Ollama, llama.cpp (`llama-server`), LM Studio and vLLM all
+speak the same OpenAI-compatible language and listen on known ports — `core/lokales_modell.py`
+finds them and fills in address and model. Anyone who installed one of them for entirely
+different reasons has nothing to configure. If Ollama is installed but not running (the most
+common case), it is started. If no model is present, ForgePix **asks** before downloading one.
+
+Nothing is downloaded on its own — not at startup, not while searching, not as a silent fallback.
+A program that fetches several hundred megabytes because it would be convenient is a program you
+stop trusting. Two tests check exactly that.
+
+What is *not* claimed: that a 1.5B model does the job well. That is unmeasured. The advisor
+validates every suggestion against its catalogue anyway — a weak model cannot break anything, it
+can only fail to contribute.
+
+### Side finding: the `subprocess` encoding check looked at one line only
+
+The test that finds `text=True` without `encoding=` was a line-based search. It reported a
+correct multi-line call as a violation — and would conversely have missed a genuinely absent
+parameter when `text=True` ended a line. It now inspects the call itself through the syntax tree,
+with a counter-check against a real violation.
+
 ### The denoiser, measured at full resolution
 
 The four bundled ONNX models are marked experimental and are not enabled on any default path.

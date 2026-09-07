@@ -1224,6 +1224,16 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, ProjectM
         self.vlm_wish.setPlaceholderText(tr("z. B. „seidiges Wasser, Personen scharf"))
         vg.addLayout(_row(tr("Wunsch (optional)"), self.vlm_wish,
                           tr("Freitext an die KI. Wird beim KI-Vorschlag wörtlich berücksichtigt.")))
+        # Lokale KI: suchen statt einstellen lassen. Ollama, llama.cpp, LM Studio und vLLM
+        # horchen alle OpenAI-kompatibel auf bekannten Ports — wer eines davon laufen hat, soll
+        # nichts eintippen muessen.
+        self.lokale_ki_btn = QPushButton(tr("🖥️  Lokale KI suchen"))
+        self.lokale_ki_btn.setToolTip(tr("Sucht einen KI-Server auf diesem Rechner (Ollama, "
+                                         "llama.cpp, LM Studio, vLLM) und trägt ihn ein. "
+                                         "Lädt von sich aus nichts herunter."))
+        self.lokale_ki_btn.clicked.connect(self._lokale_ki_suchen)
+        vg.addWidget(self.lokale_ki_btn)
+
         # Transparenz: was geht an die KI?
         _note = QLabel(tr("An die KI gehen nur: einige Vorschau-Frames, das Schärfeprofil, "
                           "EXIF-Eckdaten und dein Wunsch. Keine Originaldateien, keine Standortdaten."))
@@ -2310,6 +2320,131 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, ProjectM
             sb.setValue(sb.maximum())
 
     # ---------- Statuszeile ----------
+    # --- Lokale KI (Stufe 4) --------------------------------------------------------------
+    def _lokale_ki_eintragen(self, gefunden):
+        """Einen gefundenen Server in die Felder schreiben und die KI-Gruppe einschalten."""
+        self.vlm_ep.setText(gefunden["url"])
+        if gefunden["modelle"]:
+            self.vlm_model.setText(gefunden["modelle"][0])
+        self.vlm_key.setText("")
+        i = self.vlm_provider.findText(tr("Eigene Adresse"))
+        if i >= 0:
+            self.vlm_provider.setCurrentIndex(i)
+        self.vlm_group.setChecked(True)
+
+    def _lokale_ki_suchen(self):
+        """Einen KI-Server auf diesem Rechner finden — und wenn keiner da ist, sagen wie.
+
+        Laedt von sich aus NICHTS herunter. Ein Modell ist mehrere hundert Megabyte; das
+        passiert nur, wenn jemand im Dialog ausdruecklich zustimmt.
+        """
+        import sys as _sys
+        from PySide6.QtWidgets import QMessageBox
+        _sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(
+            os.path.abspath(__file__))), "core"))
+        import lokales_modell
+
+        self.lokale_ki_btn.setEnabled(False)
+        QApplication.setOverrideCursor(Qt.WaitCursor)
+        try:
+            eigene = self.vlm_ep.text().strip() or None
+            gefunden = lokales_modell.server_suchen(zusaetzlich=eigene, log=self._append,
+                                                    timeout=1.0)
+            if gefunden is None and lokales_modell.ollama_pfad():
+                # Installiert, aber nicht gestartet — das ist der haeufigste Fall und laesst
+                # sich ohne Zutun beheben.
+                self._append(tr("  Ollama ist installiert, aber nicht gestartet — wird "
+                                "gestartet …") + "\n")
+                if lokales_modell.ollama_starten(log=self._append):
+                    gefunden = lokales_modell.server_suchen(log=self._append, timeout=1.0)
+        finally:
+            QApplication.restoreOverrideCursor()
+            self.lokale_ki_btn.setEnabled(True)
+
+        if gefunden and gefunden["modelle"]:
+            self._lokale_ki_eintragen(gefunden)
+            QMessageBox.information(
+                self, tr("Lokale KI"),
+                tr("Gefunden: %(name)s unter %(url)s\n\nModell: %(modell)s\n\n"
+                   "Die Felder sind eingetragen. Trage unter „Wunsch“ ein, wie das Bild "
+                   "aussehen soll.")
+                % {"name": gefunden["name"], "url": gefunden["url"],
+                   "modell": gefunden["modelle"][0]})
+            return
+
+        # Ab hier gibt es keinen brauchbaren Server. Erst berichten, dann fragen.
+        bericht = lokales_modell.bericht(log=lambda *a: None)
+        self._append("\n" + bericht + "\n")
+        if gefunden is not None:
+            self._lokale_ki_eintragen(gefunden)     # Server laeuft, nur ohne Modell
+
+        if not lokales_modell.ollama_pfad():
+            QMessageBox.information(
+                self, tr("Lokale KI"),
+                tr("Auf diesem Rechner läuft kein KI-Server.\n\n%(bericht)s")
+                % {"bericht": bericht})
+            return
+
+        vorschlag = lokales_modell.EMPFOHLEN[0]
+        antwort = QMessageBox.question(
+            self, tr("Modell herunterladen?"),
+            tr("Es ist noch kein Modell da.\n\nForgePix kann „%(name)s“ holen "
+               "(%(groesse)s, %(grund)s). Der Download läuft über Ollama und braucht "
+               "Internet.\n\nJetzt herunterladen?")
+            % {"name": vorschlag[0], "groesse": vorschlag[1], "grund": vorschlag[2]},
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+        if antwort != QMessageBox.Yes:
+            self._append(tr("  Kein Download. Die Bearbeitung läuft ohne KI vollständig "
+                            "weiter.") + "\n")
+            return
+        self._modell_laden(vorschlag[0])
+
+    def _modell_laden(self, name):
+        """`ollama pull` als Unterprozess, damit die Oberflaeche nicht einfriert.
+
+        Ein Modell ist mehrere hundert Megabyte — ein blockierender Aufruf haette das Fenster
+        minutenlang eingefroren, und der Benutzer haette es fuer abgestuerzt gehalten.
+        """
+        import sys as _sys
+        _sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(
+            os.path.abspath(__file__))), "core"))
+        import lokales_modell
+
+        exe = lokales_modell.ollama_pfad()
+        if not exe:
+            return
+        self._append(tr("  Lade %s herunter …") % name + "\n")
+        self.lokale_ki_btn.setEnabled(False)
+        self._pull_proc = QProcess(self)
+        self._pull_proc.setProcessChannelMode(QProcess.MergedChannels)
+        self._pull_proc.readyReadStandardOutput.connect(
+            lambda: self._append(bytes(self._pull_proc.readAllStandardOutput())
+                                 .decode(errors="replace")))
+        self._pull_proc.finished.connect(lambda code, _st: self._modell_fertig(name, code))
+        self._pull_proc.start(exe, ["pull", name])
+
+    def _modell_fertig(self, name, code):
+        from PySide6.QtWidgets import QMessageBox
+        import sys as _sys
+        _sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(
+            os.path.abspath(__file__))), "core"))
+        import lokales_modell
+
+        self.lokale_ki_btn.setEnabled(True)
+        if code != 0:
+            self._append(tr("  Download fehlgeschlagen (Code %d).") % code + "\n")
+            QMessageBox.warning(self, tr("Lokale KI"),
+                                tr("Der Download von %s ist fehlgeschlagen.") % name)
+            return
+        gefunden = lokales_modell.server_suchen(log=self._append, timeout=1.0)
+        if gefunden:
+            self._lokale_ki_eintragen(gefunden)
+        # Den geladenen Namen setzen, auch wenn der Server ihn noch nicht auflistet.
+        self.vlm_model.setText(name)
+        self.vlm_group.setChecked(True)
+        QMessageBox.information(self, tr("Lokale KI"),
+                                tr("%s ist geladen und eingetragen.") % name)
+
     # --- Vorschlag des Regelwerks und des Sprachmodells -----------------------------------
     # Zuordnung SCHALTER -> was in der Oberflaeche zu tun ist. Bewusst je Schalter und nicht je
     # fertiger Zeichenkette: das Regelwerk sagt feste Dinge ("--bin 2"), das Sprachmodell waehlt

@@ -129,21 +129,66 @@ class TestLogRobustheit(unittest.TestCase):
 class TestSubprozessDekodierung(unittest.TestCase):
     """Externe Tools (Siril/GraXpert/exiftool) geben UTF-8 aus — nicht die Locale-Codepage."""
 
+    # Frueher war das eine Zeilensuche per regulaerem Ausdruck: `text=True`, dem nicht
+    # unmittelbar `, encoding` folgt. Die sah einen mehrzeiligen Aufruf nicht — sie meldete
+    # einen korrekten Aufruf, dessen `encoding=` in der naechsten Zeile stand, und haette
+    # umgekehrt einen wirklich fehlenden Parameter uebersehen, wenn `text=True` am Zeilenende
+    # stand. Jetzt wird der Aufruf selbst untersucht, nicht seine Schreibweise.
+    @staticmethod
+    def _nackte_aufrufe(datei):
+        import ast
+        with open(datei, encoding="utf-8") as fh:
+            baum = ast.parse(fh.read())
+        raus = []
+        for k in ast.walk(baum):
+            if not isinstance(k, ast.Call):
+                continue
+            name = k.func.attr if isinstance(k.func, ast.Attribute) else getattr(
+                k.func, "id", "")
+            if name not in ("run", "Popen", "check_output", "call", "check_call"):
+                continue
+            schluessel = {w.arg for w in k.keywords if w.arg}
+            textmodus = any(
+                w.arg in ("text", "universal_newlines")
+                and isinstance(w.value, ast.Constant) and w.value.value is True
+                for w in k.keywords)
+            if textmodus and "encoding" not in schluessel:
+                raus.append(k.lineno)
+        return raus
+
     def test_w3_engines_dekodieren_externe_ausgabe_als_utf8(self):
         """`text=True` ohne `encoding=` nimmt die Locale-Codepage: „Frühling→" kam unter
         Windows als „FrÃ¼hlingâ†'" an. Alle subprocess-Aufrufe müssen utf-8 festlegen."""
-        import re
         root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        nackt = []
         core = os.path.join(root, "core")
+        nackt = []
         for fn in sorted(os.listdir(core)):
-            if not fn.endswith(".py"):
-                continue
-            with open(os.path.join(core, fn), encoding="utf-8") as fh:
-                for i, zeile in enumerate(fh, 1):
-                    if re.search(r"text=True(?!\s*,\s*encoding)", zeile):
-                        nackt.append(f"core/{fn}:{i}")
+            if fn.endswith(".py"):
+                nackt += ["core/%s:%d" % (fn, z)
+                          for z in self._nackte_aufrufe(os.path.join(core, fn))]
         self.assertEqual(nackt, [], "subprocess ohne encoding='utf-8': " + ", ".join(nackt))
+
+    def test_die_pruefung_faengt_einen_echten_verstoss(self):
+        """Gegenprobe. Ohne sie waere nicht zu unterscheiden, ob oben nichts gefunden wurde
+        oder ob gar nichts geprueft wird."""
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            gut = os.path.join(d, "gut.py")
+            zeilen_gut = ["import subprocess",
+                          "subprocess.run(['x'], text=True,",
+                          "               encoding='utf-8')"]
+            with open(gut, "w", encoding="utf-8") as fh:
+                fh.write(chr(10).join(zeilen_gut))
+            self.assertEqual(self._nackte_aufrufe(gut), [],
+                             "mehrzeiliger, korrekter Aufruf wurde faelschlich gemeldet")
+            schlecht = os.path.join(d, "schlecht.py")
+            zeilen_schlecht = ["import subprocess",
+                               "subprocess.run(['x'],",
+                               "               text=True)"]
+            with open(schlecht, "w", encoding="utf-8") as fh:
+                fh.write(chr(10).join(zeilen_schlecht))
+            self.assertEqual(self._nackte_aufrufe(schlecht), [2],
+                             "ein echter Verstoss wurde nicht gefunden")
 
 
 class TestFremdtoolSuche(unittest.TestCase):
