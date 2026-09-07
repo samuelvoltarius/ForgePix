@@ -8,6 +8,28 @@ All notable changes to ForgePix. Format based on
 
 ## [Unreleased]
 
+### Series are separated by pointing direction
+
+While building the scene bank, one series stood out by losing 76% of its frames as "not
+alignable", while nine others lost none. The cause was in the header: **RA/DEC jump from
+(202.47 | 47.19) to (210.74 | 54.29)**, about 11 degrees. The folder `whirl` holds frames of
+**five different targets**, some on the same night with the same exposure time. Without the
+pointing in the key they ended up in one series — and the second target's frames were discarded.
+They are not bad frames; they show something else.
+
+Grouping now also uses the pointing, and does so **by angular distance rather than by grid**. A
+grid of `round(ra / 0.5)` cuts a field in two exactly when it sits on a cell boundary — which
+happened: RA 210.75 and 210.80 landed in cells 421 and 422, turning 84 frames of one target into
+55 and 29. Distance is computed as a true angular separation, with the cosine of declination and
+across the zero point.
+
+Tolerance 0.5 degrees: dithering and tracking errors move by arcminutes, a mosaic panel or a new
+target by degrees. If RA/DEC is missing from the header, grouping works as before and the log
+says so.
+
+Measured on the `whirl` folder: instead of six series with heavy loss, now **eleven clean series
+holding 634 frames**; the split fields are whole again (55 + 29 → 94, 110 + 30 → 140).
+
 ### Live stacking: 4 of 10 frames, and 231 messages for 10 files
 
 Found in a real live run (IC 417, 10 Seestar frames, fed in as they would arrive at night). Two

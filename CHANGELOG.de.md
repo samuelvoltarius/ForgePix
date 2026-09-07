@@ -8,6 +8,28 @@ Alle nennenswerten Änderungen an ForgePix. Format orientiert an
 
 ## [Unreleased]
 
+### Serien werden nach Himmelsrichtung getrennt
+
+Beim Bau der Szenenbank fiel eine Serie auf, die 76 % ihrer Aufnahmen als „nicht ausrichtbar"
+verlor, während neun andere keine einzige verloren. Die Ursache stand im Header: **RA/DEC
+springen von (202,47 | 47,19) auf (210,74 | 54,29)**, also rund 11 Grad. Im Ordner `whirl` liegen
+Aufnahmen von **fünf verschiedenen Zielen**, teils in derselben Nacht mit derselben
+Belichtungszeit. Ohne die Richtung im Schlüssel landeten sie in einer Serie — und die Aufnahmen
+des zweiten Ziels wurden weggeworfen. Sie sind aber nicht schlecht, sie zeigen etwas anderes.
+
+Gruppiert wird jetzt zusätzlich nach der Himmelsrichtung, und zwar **nach Winkelabstand statt
+nach Raster**. Eine Rasterung nach `round(ra / 0,5)` zerschneidet ein Feld genau dann, wenn es
+auf einer Zellgrenze liegt — genau passiert: RA 210,75 und 210,80 landeten in den Zellen 421 und
+422, aus 84 zusammengehörenden Aufnahmen wurden 55 und 29. Der Abstand wird als echter
+Winkelabstand gerechnet, mit Kosinus der Deklination und über den Nullpunkt hinweg.
+
+Toleranz 0,5 Grad: Dithering und Nachführfehler bewegen sich im Bogenminutenbereich, ein
+Mosaik-Feld oder ein neues Ziel dagegen um Grad. Fehlt RA/DEC im Header, wird wie bisher
+gruppiert und das steht im Protokoll.
+
+Am Ordner `whirl` gemessen: statt sechs Serien mit hohem Verlust jetzt **elf saubere Serien mit
+634 Aufnahmen**; die zerschnittenen Felder sind wieder zusammen (55 + 29 → 94, 110 + 30 → 140).
+
 ### Live-Stacking: 4 von 10 Aufnahmen, und 231 Meldungen für 10 Dateien
 
 Am echten Live-Lauf aufgefallen (IC 417, 10 Seestar-Aufnahmen, nachgeschoben wie in der

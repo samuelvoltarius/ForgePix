@@ -27,6 +27,7 @@ Drei Sorten Paar, alle aus derselben Serie:
     "tief"      wenige Subs -> viele    Ziel ist rauschaermer, aber nicht rauschfrei
     "kacheln"   dasselbe, in Ausschnitten
 """
+import math
 import os
 import random
 
@@ -37,16 +38,79 @@ from constants import log_print
 import astro
 
 
-def serien_finden(ordner, min_subs=20, log=log_print):
-    """Serien gleicher Kamera UND gleicher Belichtung finden, die gross genug sind.
+def _richtung(h):
+    """Wohin das Teleskop zeigte, als Gradzahlen — oder None, wenn es nicht dasteht."""
+    def z(*namen):
+        for n in namen:
+            if n in h:
+                try:
+                    return float(h[n])
+                except (TypeError, ValueError):
+                    pass
+        return None
+    ra, dec = z("RA", "CRVAL1", "OBJCTRA"), z("DEC", "CRVAL2", "OBJCTDEC")
+    return None if ra is None or dec is None else (ra, dec)
 
-    Die Gruppierung laeuft ueber Kamera und Belichtungszeit, NICHT ueber den Objektnamen: in
-    Alfreds Bestand heisst dieselbe Galaxie `M51`, `whirl`, `Whirlpool Galaxy` und
-    `Whirlpool Galaxy(1)`. Wer nach Namen gruppiert, zerreisst die Serie — und paart im
-    schlimmsten Fall Aufnahmen aus verschiedenen Naechten.
+
+def _winkelabstand(a, b):
+    """Echter Winkelabstand zweier Himmelsrichtungen in Grad (RA/DEC).
+
+    Nicht einfach die Differenz der Zahlen: bei RA zaehlt der Kosinus der Deklination, und der
+    Uebergang von 359,9 auf 0,1 Grad sind 0,2 Grad und nicht 359,8.
+    """
+    ra1, de1 = math.radians(a[0]), math.radians(a[1])
+    ra2, de2 = math.radians(b[0]), math.radians(b[1])
+    d = (math.sin((de2 - de1) / 2) ** 2
+         + math.cos(de1) * math.cos(de2) * math.sin((ra2 - ra1) / 2) ** 2)
+    return math.degrees(2 * math.asin(min(1.0, math.sqrt(max(0.0, d)))))
+
+
+def _felder_bilden(richtungen, toleranz_grad=0.5):
+    """Richtungen zu Feldern zusammenfassen. Gibt je Richtung die Nummer ihres Feldes.
+
+    Warum ueberhaupt: in Alfreds Bestand liegen im Ordner `whirl` Aufnahmen von fuenf
+    verschiedenen Zielen — RA/DEC springen zwischen (202,5 | 47,2), (210,8 | 54,3),
+    (184,7 | 47,3), (112,3 | 20,9) und (189,1 | 26,0). Ohne Richtung im Schluessel landeten
+    sie in EINER Serie; beim Stapeln fielen dann 76 % der Aufnahmen als "nicht ausrichtbar"
+    heraus. Sie sind aber nicht schlecht, sie zeigen etwas anderes.
+
+    Warum kein Raster: eine Rasterung nach `round(ra / 0,5)` zerschneidet ein Feld genau dann,
+    wenn es auf einer Zellgrenze liegt. Genau passiert: RA 210,75 und 210,80 landeten in den
+    Zellen 421 und 422 — aus 84 zusammengehoerenden Aufnahmen wurden 55 und 29. Hier wird
+    stattdessen nach Abstand zusammengefasst.
+
+    0,5 Grad Toleranz: Dithering und Nachfuehrfehler bewegen sich im Bogenminutenbereich, ein
+    Mosaik-Feld oder ein neues Ziel dagegen um Grad. Fehlt die Angabe, bleibt das Feld None und
+    es wird wie zuvor gruppiert.
+    """
+    mitten = []
+    zuordnung = []
+    for r in richtungen:
+        if r is None:
+            zuordnung.append(None)
+            continue
+        for i, m in enumerate(mitten):
+            if _winkelabstand(r, m) <= toleranz_grad:
+                zuordnung.append(i)
+                break
+        else:
+            mitten.append(r)
+            zuordnung.append(len(mitten) - 1)
+    return zuordnung, mitten
+
+
+def serien_finden(ordner, min_subs=20, log=log_print):
+    """Serien gleicher Kamera, Belichtung, Nacht, Ordner UND Himmelsrichtung finden.
+
+    Die Gruppierung laeuft NICHT ueber den Objektnamen: in Alfreds Bestand heisst dieselbe
+    Galaxie `M51`, `whirl`, `Whirlpool Galaxy` und `Whirlpool Galaxy(1)`. Wer nach Namen
+    gruppiert, zerreisst die Serie — und paart im schlimmsten Fall Aufnahmen aus verschiedenen
+    Naechten. Stattdessen zaehlt, wohin das Teleskop zeigte (siehe `_felder_bilden`).
     """
     from astropy.io import fits
-    gruppen = {}
+    # Erster Durchgang: alles einsammeln, ohne die Richtung schon zu entscheiden.
+    vorlaeufig = {}
+    ohne_richtung = 0
     for wurzel, _unter, dateien in os.walk(ordner):
         for name in sorted(dateien):
             if os.path.splitext(name)[1].lower() not in (".fit", ".fits", ".fts"):
@@ -64,13 +128,28 @@ def serien_finden(ordner, min_subs=20, log=log_print):
                 t = round(float(t), 1)
             except (TypeError, ValueError):
                 continue
-            schluessel = (str(h.get("INSTRUME", "?")).strip(), t,
-                          str(h.get("DATE-OBS", ""))[:10],       # Nacht
-                          wurzel)                                # gleicher Ordner
-            gruppen.setdefault(schluessel, []).append(p)
+            r = _richtung(h)
+            if r is None:
+                ohne_richtung += 1
+            grob = (str(h.get("INSTRUME", "?")).strip(), t,
+                    str(h.get("DATE-OBS", ""))[:10],       # Nacht
+                    wurzel)                                # gleicher Ordner
+            vorlaeufig.setdefault(grob, []).append((p, r))
+
+    # Zweiter Durchgang: je Grobgruppe die Richtungen nach Abstand zu Feldern zusammenfassen.
+    gruppen = {}
+    for grob, eintraege in vorlaeufig.items():
+        zuordnung, _mitten = _felder_bilden([r for _p, r in eintraege])
+        for (p, _r), feld in zip(eintraege, zuordnung):
+            gruppen.setdefault(grob + (feld,), []).append(p)
+    for v in gruppen.values():
+        v.sort()
     brauchbar = {k: v for k, v in gruppen.items() if len(v) >= min_subs}
     log("    Trainingspaare: %d Serien mit mindestens %d Aufnahmen gefunden (von %d insgesamt)"
         % (len(brauchbar), min_subs, len(gruppen)))
+    if ohne_richtung:
+        log("    Trainingspaare: %d Aufnahme(n) ohne RA/DEC im Header — dort kann nicht nach "
+            "Himmelsrichtung getrennt werden." % ohne_richtung)
     return brauchbar
 
 

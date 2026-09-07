@@ -206,8 +206,11 @@ def main():
     scherben = args.output / "_scherben"
     aufzeichnungen = []
     for i, (schluessel, pfade) in enumerate(reihen, 1):
-        name = "%s|%g|%s|%s" % (schluessel[0], schluessel[1], schluessel[2],
-                                hashlib.sha256(schluessel[3].encode("utf-8")).hexdigest()[:8])
+        # Der Name muss den GANZEN Schluessel abbilden. Er enthaelt seit der Trennung nach
+        # Himmelsrichtung auch das Feld — ohne das bekaemen zwei Ziele im selben Ordner
+        # denselben Namen, und die Fortsetzung uebersprunge das zweite als "schon erledigt".
+        kennung = hashlib.sha256(repr(schluessel[3:]).encode("utf-8")).hexdigest()[:8]
+        name = "%s|%g|%s|%s" % (schluessel[0], schluessel[1], schluessel[2], kennung)
         if name in erledigt:
             continue
         t0 = time.time()

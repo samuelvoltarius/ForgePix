@@ -82,13 +82,23 @@ A soft focus series becomes one fully sharp image — and you see *what* happens
 - **RAW** faithfully developed to 16‑bit (DHT/DCB/VNG/AHD, AMaZE where available); EXIF/provenance preserved.
 - **Export & workflow:** before/after slider, film strip, **ghost map/deghost**, export presets
   (Instagram/WhatsApp/Web/4K/Print), **batch** & **watch folder**, quick‑export chips, resume last folder.
+- **Pre-flight, measurement report and advice:** Before stacking, ForgePix reads only the FITS
+  headers and states what it sees — count, camera, filter, exposure, temperature span, nights —
+  and warns about **two cameras in one folder** or too few frames **before** the computation
+  starts. After the run the **linear** stack is measured (sky, gradient, star count, FWHM,
+  roundness, channel ratios, signal-to-noise) and a rule set turns that into advice with reason,
+  action and the concrete switch — clickable in the interface. Deterministic and offline; every
+  rule is a test, and missing measurements trigger none.
 - **Fully keyboard‑operable**, **German & English** UI, **AI strictly optional** (local or API).
 
 ## Runs everywhere — AI is optional
 
 Automatic works **completely without AI** (settings derived from the measured sharpness
 profile). **No Ollama, no server, no model download.** Optionally connect an OpenAI‑compatible
-server (llama.cpp / LM Studio / vLLM) **or a provider with API key** (OpenAI / OpenRouter).
+server (Ollama / llama.cpp / LM Studio / vLLM) **or a provider with API key** (OpenAI /
+OpenRouter). The **"Find local AI"** button locates a running server on your own machine and
+fills it in; if there is none, it says what is missing. Nothing is downloaded without explicit
+consent.
 This optional **language assistant advises & checks settings**; it does not process image pixels. *“The software explains why it
 chose these settings.”* You can add a **free‑text wish** (e.g. “silky water, people sharp”) and the
 suggestion also gets **EXIF basics** + the **focus map**. Setup states exactly what is sent — a few
@@ -100,7 +110,10 @@ or importing a linear result, open **Tools → Local AI: noise, background, deta
 and stars …**. Choose a linear FITS or TIFF stack, select a function and strength,
 then explicitly enable experimental processing. Raw Bayer frames must first be
 calibrated and debayered; JPEG previews are not accepted. The bundled models run
-locally with ONNX Runtime and need no server or external astronomy application.
+locally with ONNX Runtime and need no server or external astronomy application. They are
+explicitly **experimental**: measured on real frames, only the denoiser holds up — for
+sharpening, star separation and background the classical built-in path is better. The numbers
+are in [docs/KI_MODELLE.md](docs/KI_MODELLE.md).
 
 Windows x64 packages automatically prefer a compatible graphics processor via
 DirectML. The dialog also offers **Processor only**. The actual backend and any

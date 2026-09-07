@@ -82,13 +82,23 @@ Aus einer unscharfen Fokusreihe wird ein durchgehend scharfes Bild — und du si
 - **RAW** treu in 16‑bit entwickelt (DHT/DCB/VNG/AHD, AMaZE falls verfügbar); EXIF/Provenienz übernommen.
 - **Export & Workflow:** Vorher/Nachher‑Regler, Filmstreifen, **Geister‑Karte/Deghost**, Export‑Presets
   (Instagram/WhatsApp/Web/4K/Druck), **Batch** & **Watch‑Ordner**, Schnell‑Export‑Chips, letzter Ordner.
+- **Vorprüfung, Messbericht und Rat:** Vor dem Stapeln liest ForgePix nur die FITS‑Kopfdaten und
+  sagt, was es sieht — Anzahl, Kamera, Filter, Belichtung, Temperaturspanne, Nächte — und warnt
+  bei **zwei Kameras in einem Ordner** oder zu wenigen Aufnahmen, **bevor** die Rechenzeit
+  anfängt. Nach dem Lauf wird der **lineare** Stapel vermessen (Himmel, Gradient, Sternzahl,
+  FWHM, Rundheit, Farbverhältnisse, Signal/Rauschen) und ein Regelwerk macht daraus einen Rat mit
+  Grund, Maßnahme und dem konkreten Schalter — anklickbar in der Oberfläche. Deterministisch und
+  offline; jede Regel ist ein Test, und fehlende Messwerte lösen keine aus.
 - **Komplett per Tastatur bedienbar**, **Deutsch & Englisch**, **KI strikt optional** (lokal oder API).
 
 ## Läuft überall — KI ist optional
 
 Die Automatik funktioniert **komplett ohne KI** (Einstellungen aus dem gemessenen Schärfeprofil).
 **Kein Ollama, kein Server, kein Modell‑Download.** Optional ein OpenAI‑kompatibler Server
-(llama.cpp / LM Studio / vLLM) **oder ein Anbieter mit API‑Schlüssel** (OpenAI / OpenRouter).
+(Ollama / llama.cpp / LM Studio / vLLM) **oder ein Anbieter mit API‑Schlüssel** (OpenAI /
+OpenRouter). Der Knopf **„Lokale KI suchen"** findet einen laufenden Server auf dem eigenen
+Rechner selbst und trägt ihn ein; ist keiner da, sagt er, was fehlt. Heruntergeladen wird nur
+auf ausdrückliche Zustimmung.
 Dieser optionale **Sprachassistent berät und prüft Einstellungen**; er verarbeitet keine Bildpixel. *„Die Software erklärt, warum sie
 diese Einstellungen gewählt hat.“* Du kannst einen **Freitext-Wunsch** angeben (z. B. „seidiges
 Wasser, Personen scharf"); der Vorschlag bekommt zusätzlich **EXIF-Eckdaten** + die **Fokus-Map**.
@@ -103,7 +113,10 @@ Details und Sterne …**. Wähle einen linearen FITS- oder TIFF-Stack, Funktion 
 Wirkung und bestätige den experimentellen Einsatz. Bayer-Rohbilder müssen zuerst
 kalibriert und debayert werden; JPEG-Vorschauen werden nicht angenommen.
 Die mitgelieferten Modelle laufen lokal mit ONNX Runtime, ohne Server oder
-externes Astroprogramm.
+externes Astroprogramm. Sie sind ausdrücklich **experimentell**: an echten Aufnahmen
+gemessen hält davon nur der Entrauscher stand, beim Schärfen, Sternetrennen und
+Hintergrund ist der klassische, eingebaute Weg besser — die Zahlen stehen in
+[docs/KI_MODELLE.de.md](docs/KI_MODELLE.de.md).
 
 Windows-x64-Pakete verwenden automatisch eine geeignete Grafikkarte über
 DirectML. Im Dialog kannst du auch **Nur Prozessor** wählen. Backend und ein

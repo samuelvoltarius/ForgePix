@@ -92,6 +92,93 @@ class TestSerienFinden(unittest.TestCase):
         self.assertEqual(trainingspaare.serien_finden(self.d, min_subs=20, log=_stille), {})
 
 
+class TestHimmelsrichtung(unittest.TestCase):
+    """Aufnahmen verschiedener Ziele duerfen nicht in eine Serie.
+
+    In Alfreds Ordner `whirl` liegen Aufnahmen von fuenf Zielen, teils derselben Nacht mit
+    derselben Belichtungszeit. Ohne die Richtung im Schluessel landeten sie in EINER Serie —
+    beim Stapeln fielen dann 76 % der Aufnahmen als "nicht ausrichtbar" heraus. Sie sind aber
+    nicht schlecht, sie zeigen etwas anderes.
+    """
+
+    def test_abstand_beruecksichtigt_die_deklination(self):
+        """Ein Grad RA ist am Himmelspol fast nichts und am Aequator ein voller Grad."""
+        am_aequator = trainingspaare._winkelabstand((0.0, 0.0), (1.0, 0.0))
+        weit_oben = trainingspaare._winkelabstand((0.0, 80.0), (1.0, 80.0))
+        self.assertAlmostEqual(am_aequator, 1.0, places=3)
+        self.assertLess(weit_oben, 0.2)
+
+    def test_abstand_ueber_den_nullpunkt(self):
+        """359,9 und 0,1 Grad sind 0,2 Grad auseinander, nicht 359,8."""
+        self.assertAlmostEqual(trainingspaare._winkelabstand((359.9, 0.0), (0.1, 0.0)),
+                               0.2, places=3)
+
+    def test_dasselbe_ziel_bleibt_ein_feld(self):
+        """Der Fehler der ersten Fassung: eine Rasterung nach round(ra/0,5) zerschnitt ein
+        Feld an der Zellgrenze — RA 210,75 und 210,80 landeten in den Zellen 421 und 422, aus
+        84 zusammengehoerenden Aufnahmen wurden 55 und 29."""
+        richtungen = [(210.75, 54.30), (210.80, 54.35), (210.78, 54.32)]
+        zuordnung, mitten = trainingspaare._felder_bilden(richtungen)
+        self.assertEqual(len(mitten), 1, "dasselbe Ziel wurde zerschnitten")
+        self.assertEqual(set(zuordnung), {0})
+
+    def test_verschiedene_ziele_werden_getrennt(self):
+        richtungen = [(202.47, 47.19), (210.75, 54.30), (202.50, 47.21), (112.30, 20.91)]
+        zuordnung, mitten = trainingspaare._felder_bilden(richtungen)
+        self.assertEqual(len(mitten), 3)
+        self.assertEqual(zuordnung[0], zuordnung[2])
+        self.assertNotEqual(zuordnung[0], zuordnung[1])
+
+    def test_ohne_richtung_bleibt_None(self):
+        """Fehlt RA/DEC, darf nicht getrennt werden — sonst zerfiele eine gute Serie."""
+        zuordnung, mitten = trainingspaare._felder_bilden([None, None, (1.0, 1.0)])
+        self.assertEqual(zuordnung[:2], [None, None])
+        self.assertEqual(len(mitten), 1)
+
+
+class TestSerienNachRichtung(unittest.TestCase):
+
+    def setUp(self):
+        self.d = tempfile.mkdtemp(prefix="fp_tr_")
+
+    def tearDown(self):
+        shutil.rmtree(self.d, ignore_errors=True)
+
+    def _schreiben(self, n, ra, dec, praefix):
+        from astropy.io import fits
+        for i in range(n):
+            fits.writeto(os.path.join(self.d, "%s_%03d.fit" % (praefix, i)),
+                         np.full((8, 8), 0.1, np.float32),
+                         fits.Header({"IMAGETYP": "Light", "INSTRUME": "ZWO ASI533MC Pro",
+                                      "EXPTIME": 15.0, "DATE-OBS": "2022-03-03T23:00:00",
+                                      "RA": ra, "DEC": dec}))
+
+    def test_zwei_ziele_geben_zwei_serien(self):
+        self._schreiben(25, 202.47, 47.19, "a")
+        self._schreiben(25, 210.75, 54.30, "b")
+        s = trainingspaare.serien_finden(self.d, min_subs=20, log=_stille)
+        self.assertEqual(len(s), 2)
+        self.assertEqual(sorted(len(v) for v in s.values()), [25, 25])
+
+    def test_gedithertes_ziel_bleibt_eine_serie(self):
+        """Dithering verschiebt um Bogenminuten — das darf keine Serie zerreissen."""
+        self._schreiben(15, 202.470, 47.190, "a")
+        self._schreiben(15, 202.478, 47.196, "b")
+        s = trainingspaare.serien_finden(self.d, min_subs=20, log=_stille)
+        self.assertEqual(len(s), 1)
+        self.assertEqual(len(list(s.values())[0]), 30)
+
+    def test_ohne_ra_dec_wie_bisher(self):
+        from astropy.io import fits
+        for i in range(25):
+            fits.writeto(os.path.join(self.d, "x_%03d.fit" % i),
+                         np.full((8, 8), 0.1, np.float32),
+                         fits.Header({"IMAGETYP": "Light", "INSTRUME": "K", "EXPTIME": 15.0,
+                                      "DATE-OBS": "2022-03-03T23:00:00"}))
+        s = trainingspaare.serien_finden(self.d, min_subs=20, log=_stille)
+        self.assertEqual(len(s), 1)
+
+
 class TestPaare(unittest.TestCase):
 
     def setUp(self):
