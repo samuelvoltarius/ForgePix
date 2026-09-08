@@ -8,6 +8,55 @@ Alle nennenswerten Änderungen an ForgePix. Format orientiert an
 
 ## [Unreleased]
 
+### Vier klassische Werkzeuge ohne KI — und Masken fuer JEDEN Schritt
+
+Der PixInsight-Vergleich nannte sie als Luecken. Alle vier sind rein rechnerisch, jedes gegen
+eine BEKANNTE Wahrheit geprueft und jedes mit Gegenprobe.
+
+**Superbias** (`--superbias`). Ein Master-Bias aus N Aufnahmen traegt noch 1/sqrt(N) des
+Einzelrauschens in JEDE kalibrierte Aufnahme hinein. Ein Bias besteht aber fast nur aus
+Struktur: Sockel, Spalten- und Zeilenmuster der Ausleseelektronik. Superbias behaelt sie und
+wirft das Rauschen weg. Gegen eine bekannte Struktur gemessen: mittlerer Fehler **0,000431 beim
+schlichten Median aus 20 Aufnahmen, 0,000078 beim Modell** — Faktor 5,5. Die Gegenprobe pruefen
+die Tests mit: das Spaltenmuster muss ueberleben (Korrelation ueber 0,95), sonst waere jeder
+Weichzeichner "besser".
+
+**Larson-Sekanina** (`--astro-larson GRAD`). Der Rotationsgradient, der Kometenstrahlen und
+-schalen sichtbar macht: zwei gedrehte Kopien werden abgezogen, alles Rotationssymmetrische
+faellt heraus. An einem gerechneten Kometen mit bekanntem Jet: Sichtbarkeit **0,22 auf 0,65**
+Streuungen. Und die Gegenprobe, die zaehlt: aus einer symmetrischen Kugel OHNE Jet entsteht
+keine Struktur — ein Verfahren, das Strukturen erfindet, waere in der Astrofotografie der
+schlimmste Fehler. Es laeuft NUR auf die Ansicht; das lineare Ergebnis bleibt messbar, weil die
+Helligkeiten danach Differenzen sind und keine physikalische Bedeutung mehr haben.
+
+**Periodische Muster** (`--astro-periodisch STAERKE`). Fourier-Kerbfilter gegen Streifen aus
+der Ausleseelektronik oder einer schwankenden Nachfuehrung. An einem echten Stapel mit
+aufgepraegten Streifen: Fehler **0,002918 auf 0,000440**, also 85 % weg. Wichtiger noch die
+Gegenprobe: ein SAUBERES Bild aendert sich um **0,000001**. Beim Bauen kam heraus, dass die
+Kerbe die Nachbarfrequenzen mitnehmen muss — ohne blieben ueber alle Schwellen und
+Fenstergroessen hinweg 47 bis 53 % stehen, mit 40 %.
+
+**Blink** (`--blink`). Viele Aufnahmen als animiertes GIF hintereinander: Wolken,
+Nachfuehrfehler und Spuren fallen im Wechsel sofort auf, waehrend sie im Einzelbild untergehen.
+Eine kaputte Datei kostet nicht das ganze Daumenkino.
+
+**Annotation** (`core/annotation.py`). Koordinatengitter, Bildfeld, Massstab und Mitte aus der
+Astrometrie gerechnet; helle Sterne mit Helligkeit aus dem lokalen Gaia-Katalog;
+Deep-Sky-Objekte aus einer mitgegebenen CSV. ForgePix bringt bewusst KEINE eingebaute
+Objektliste mit — erfundene Koordinaten waeren schlimmer als gar keine. Die Projektion ist gegen
+bekannte Werte geprueft: der Bezugspunkt landet auf dem Bezugspixel, und 0,1 Grad noerdlich sind
+bei 3,5e-4 Grad je Pixel genau 285,7 px.
+
+**Masken fuer jeden Schritt.** Der Vergleich nannte als Luecke: die Bausteine stehen in
+`core/masken.py`, aber nur die Astro-Schritte haengen dran; bei PixInsight laesst sich JEDER
+Prozess durch JEDE Maske anwenden. Statt jedem Schritt einen eigenen Maskenschalter zu geben,
+kommen die Masken in **PixelMath**: `maske_sterne`, `maske_hintergrund`, `maske_nebel`,
+`maske_hell(A, von, bis)` und `mische(unten, oben, maske)`. Damit ist jede Verknuepfung eine
+Formel — skriptbar, in der Stapelverarbeitung erreichbar, und das Regelwerk kann sie
+vorschlagen. Nur den Hintergrund entrauschen heisst jetzt:
+
+    mische(A, blur(A, 2), maske_hintergrund(A))
+
 ### Registrierung ueber Prozesse — Threads brachten nichts
 
 Der teuerste Schritt beim Stapeln ist die Ausrichtung: 2,7 s je Aufnahme, rund 80 % der Zeit

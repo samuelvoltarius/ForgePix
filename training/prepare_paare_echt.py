@@ -108,7 +108,23 @@ def bauen(quellen, ziel, min_subs=30, je_serie=60, kacheln=8, frames=20, groesse
     for nr, (name, kamera, dateien) in enumerate(serien, 1):
         t0 = time.time()
         genutzt = dateien[:je_serie]
-        # Ausrichten. Die Referenz ist die erste Aufnahme der Serie.
+        # Die Referenz muss LESBAR sein. In Alfreds Archiv liegt eine abgeschnittene Aufnahme
+        # (IC5070), und sie ist die erste ihrer Serie — als Referenz gelesen riss sie den
+        # ganzen Prozesspool mit und kostete die komplette Serie. Also vorher pruefen.
+        import astro as _astro
+        while genutzt:
+            try:
+                if _astro._read_float(genutzt[0]) is not None:
+                    break
+            except Exception as _e:
+                print("  [%d/%d] %-16s Referenz unlesbar (%s), naechste"
+                      % (nr, len(serien), name, os.path.basename(genutzt[0])), flush=True)
+            genutzt = genutzt[1:]
+        if len(genutzt) < min_subs:
+            print("  [%d/%d] %-16s keine brauchbare Referenz" % (nr, len(serien), name),
+                  flush=True)
+            continue
+        # Ausrichten. Die Referenz ist die erste LESBARE Aufnahme der Serie.
         bilder, masken = [], None
         try:
             with ProcessPoolExecutor(max_workers=prozesse, initializer=_init,

@@ -46,6 +46,37 @@ CONTRACT = dict(channels=1, tile_size=256, halo=32,
 _cpu_generator = torch.Generator().manual_seed(9241773)
 
 
+def echte_paare(batch, device, generator, banken, channels):
+    """Einen Stapel aus ECHTEN Paaren ziehen: eine Aufnahme gegen das Mittel der uebrigen.
+
+    Der Unterschied zum synthetischen Weg ist nicht klein. Ein Modell, das nur gegen
+    kuenstliches Rauschen trainiert, kann gelernt haben, genau dieses umzukehren — gemessen:
+    ein Lauf meldete am synthetischen Pruefstand MSE-Faktor 73,4 und tat an einer echten
+    Aufnahme nichts (1,05).
+
+    Die Paare sind dreikanalig (Farbkameras). Fuer ein einkanaliges Modell wird EIN Kanal
+    gezogen, nicht der Mittelwert: der Mittelwert haette weniger Rauschen als das, was das
+    Modell spaeter zu sehen bekommt, und das Modell lernte eine zu leichte Aufgabe.
+    """
+    laut, rein = banken
+    idx = torch.randint(len(laut), (batch,), generator=_cpu_generator)
+    x = laut[idx].to(device, non_blocking=True)
+    y = rein[idx].to(device, non_blocking=True)
+    if x.ndim == 4 and x.shape[-1] == 3:                      # (N,H,W,3) -> (N,3,H,W)
+        x = x.permute(0, 3, 1, 2).contiguous()
+        y = y.permute(0, 3, 1, 2).contiguous()
+    if channels == 1 and x.shape[1] == 3:
+        k = torch.randint(3, (1,), generator=_cpu_generator).item()
+        x, y = x[:, k:k+1], y[:, k:k+1]
+    # Dieselben Spiegelungen wie im synthetischen Weg — sie kosten nichts und vervielfachen
+    # die Vielfalt. Beide Seiten IDENTISCH spiegeln, sonst passt das Paar nicht mehr zusammen.
+    if float(torch.rand(1, generator=_cpu_generator).item()) < .5:
+        x, y = x.flip(-1), y.flip(-1)
+    if float(torch.rand(1, generator=_cpu_generator).item()) < .5:
+        x, y = x.transpose(-1, -2), y.transpose(-1, -2)
+    return x, y
+
+
 def sample(batch, device, generator, task, scene_bank=None):
     """Return physical signed mono input and target, plus diffuse target.
 
@@ -214,11 +245,14 @@ def loss_function(prediction, target, robust=False):
 
 
 @torch.no_grad()
-def evaluate(model, task, device, bank=None):
+def evaluate(model, task, device, bank=None, paare=None, channels=1):
     gen = torch.Generator(device=device).manual_seed(830122)
     measurements = []
     for _ in range(16):
-        inp,target = sample(4,device,gen,task,bank)
+        if paare is not None:
+            inp, target = echte_paare(4, device, gen, paare, channels)
+        else:
+            inp,target = sample(4,device,gen,task,bank)
         x,y,offset,scale = normalize(inp,target)
         pred = model(x)*scale+offset
         measurements.append([float((pred-target).square().mean()),
@@ -239,6 +273,27 @@ def train(args):
     gen = torch.Generator(device=device).manual_seed(609061)
     train_bank = val_bank = None
     scene_manifest = None
+    # ECHTE Paare, falls verlangt. Sie werden in Trainings- und Pruefteil zerlegt, und zwar
+    # NACH SERIE, nicht zufaellig: Kacheln derselben Serie zeigen dieselbe Stelle des Himmels,
+    # und laegen sie auf beiden Seiten, wuerde die Pruefung auswendig Gelerntes belohnen.
+    paare_train = paare_val = None
+    if args.echte_paare:
+        _laut = torch.from_numpy(np.load(Path(args.echte_paare) / "rauschig.npy"))
+        _rein = torch.from_numpy(np.load(Path(args.echte_paare) / "sauber.npy"))
+        if len(_laut) != len(_rein):
+            raise SystemExit("rauschig.npy und sauber.npy haben verschiedene Laengen")
+        _m = json.loads((Path(args.echte_paare) / "manifest.json").read_text(encoding="utf-8"))
+        _je = [s_["genutzte_frames"] * s_["kacheln"] for s_ in _m["serien"]]
+        _grenze, _summe = 0, 0
+        for _n in _je:                       # die letzten Serien werden zur Pruefung
+            if _summe >= 0.85 * len(_laut):
+                break
+            _summe += _n
+            _grenze = _summe
+        paare_train = (_laut[:_grenze], _rein[:_grenze])
+        paare_val = (_laut[_grenze:], _rein[_grenze:])
+        print("Echte Paare: %d zum Trainieren, %d zum Pruefen (nach Serie getrennt)"
+              % (_grenze, len(_laut) - _grenze), flush=True)
     if args.scenes and args.task != "starless":
         scene_manifest = json.loads((args.scenes/"manifest.json").read_text())
         def _bank(name):
@@ -291,7 +346,10 @@ def train(args):
     with (args.output/"metrics.jsonl").open("w") as logfile:
         for step in range(1,args.steps+1):
             model.train()
-            inp,target = sample(args.batch,device,gen,args.task,train_bank)
+            if paare_train is not None:
+                inp, target = echte_paare(args.batch, device, gen, paare_train, args.channels)
+            else:
+                inp,target = sample(args.batch,device,gen,args.task,train_bank)
             x,y,_,_ = normalize(inp,target)
             optimizer.zero_grad(set_to_none=True)
             loss = loss_function(model(x), y, robust=args.robuster_verlust)
@@ -307,7 +365,7 @@ def train(args):
                 logfile.write(json.dumps(row)+"\n"); logfile.flush()
             if step % args.validate_every == 0 or step == args.steps:
                 model.eval()
-                val = evaluate(model,args.task,device,val_bank)
+                val = evaluate(model, args.task, device, val_bank, paare_val, args.channels)
                 print(json.dumps(dict(step=step,validation=val)),flush=True)
                 if val["output_mse"] < best:
                     best,best_step = val["output_mse"],step
@@ -321,7 +379,15 @@ def train(args):
         seconds=time.perf_counter()-start,torch_version=str(torch.__version__),
         validation=checkpoint["report"]["validation"],training_source_sha256=source_hash,
         scene_counts=scene_manifest["counts"] if scene_manifest else {},
-        limitations="Synthetic and added-degradation HST scene tests; no real independent clean/noisy pairs, held-out camera or astrophotometric release qualification")
+        trainingsdaten=("echte Rauschig/Sauber-Paare aus eigenen Aufnahmen"
+                        if args.echte_paare else "synthetische Degradation auf Szenenkacheln"),
+        echte_paare=(dict(quelle=str(args.echte_paare), train=len(paare_train[0]),
+                          pruefung=len(paare_val[0])) if paare_train is not None else None),
+        limitations=("Echte Paare: die saubere Seite ist der Mittelwert der uebrigen Aufnahmen "
+                     "derselben Serie und hat Restrauschen (sqrt(N-1) geringer); Eingang und "
+                     "Wahrheit teilen das feste Muster des Sensors. Keine Freigabe."
+                     if args.echte_paare else
+                     "Synthetic and added-degradation HST scene tests; no real independent clean/noisy pairs, held-out camera or astrophotometric release qualification"))
     (args.output/"report.json").write_text(json.dumps(report,indent=2))
     if scene_manifest:
         (args.output/"scene_manifest.json").write_text(json.dumps(scene_manifest,indent=2))
@@ -343,6 +409,10 @@ if __name__ == "__main__":
                     help="1 = mono, jeder Farbkanal einzeln (bisher). 3 = farbig. Mono war "
                          "gewaehlt, damit das Netz nicht die Kanaele mitteln und so die Farbe "
                          "zerstoeren kann; GraXpert entrauscht dagegen dreikanalig.")
+    ap.add_argument("--echte-paare", default=None, metavar="ORDNER",
+                    help="Auf ECHTEN Rauschig/Sauber-Paaren trainieren statt auf kuenstlichem "
+                         "Rauschen. Der Ordner kommt von `prepare_paare_echt.py` und enthaelt "
+                         "rauschig.npy und sauber.npy. Schliesst --scenes aus.")
     ap.add_argument("--robuster-verlust", action="store_true",
                     help="Charbonnier statt quadratischem Fehler. Bei grossem Helligkeitsumfang "
                          "bestimmen sonst die hellsten Pixel das Training allein.")

@@ -58,7 +58,67 @@ _FUNCTIONS = {"abs": (np.abs, 1), "sqrt": (np.sqrt, 1), "log": (np.log, 1),
               "med": (lambda x: np.float64(np.median(x)), 1),
               "mad": (lambda x: np.float64(np.median(np.abs(x - np.median(x))) * 1.4826), 1),
               "mtf": (lambda x, m: _mtf(x, m), 2),
-              "blur": (lambda x, s: _blur(x, s), 2)}
+              "blur": (lambda x, s: _blur(x, s), 2),
+              # --- Masken -------------------------------------------------------------
+              # Der Vergleich mit PixInsight nannte als Luecke: "die Bausteine stehen in
+              # core/masken.py, aber nur die Astro-Schritte haengen dran. Bei PixInsight
+              # laesst sich JEDER Prozess durch JEDE Maske anwenden."
+              #
+              # Statt jedem Schritt einen eigenen Maskenschalter zu geben, kommen die Masken
+              # hierher. Dann laesst sich jede Verknuepfung als Formel schreiben, sie ist
+              # skriptbar, in der Stapelverarbeitung erreichbar, und das Regelwerk kann sie
+              # vorschlagen. Beispiel — nur den Hintergrund entrauschen:
+              #
+              #     mische(A, blur(A, 2), maske_hintergrund(A))
+              #
+              # `mische(unten, oben, maske)` ist dabei das Gegenstueck zu `masken.anwenden`.
+              "maske_sterne": (lambda x: _maske(x, "sterne"), 1),
+              "maske_hintergrund": (lambda x: _maske(x, "hintergrund"), 1),
+              "maske_nebel": (lambda x: _maske(x, "nebel"), 1),
+              "maske_hell": (lambda x, v, b: _maske_hell(x, v, b), 3),
+              "mische": (lambda u, o, m: _mische_maske(u, o, m), 3)}
+
+
+def _maske(bild, art):
+    """Eine der eingebauten Masken. Gibt sie in derselben Form wie das Bild zurueck, damit
+    sie sich direkt multiplizieren laesst."""
+    import masken
+    a = np.asarray(bild, np.float32)
+    if art == "sterne":
+        m = masken.sterne(a)
+    elif art == "hintergrund":
+        m = masken.hintergrund(a)
+    else:
+        m = masken.nebel(a)
+    m = np.asarray(m, np.float64)
+    if a.ndim == 3 and m.ndim == 2:
+        m = np.repeat(m[..., None], a.shape[2], axis=2)
+    return m
+
+
+def _maske_hell(bild, von, bis):
+    """Maske nach Helligkeit: alles zwischen `von` und `bis`, weich auslaufend."""
+    import masken
+    a = np.asarray(bild, np.float32)
+    m = np.asarray(masken.helligkeit(a, float(np.asarray(von).ravel()[0]),
+                                     float(np.asarray(bis).ravel()[0])), np.float64)
+    if a.ndim == 3 and m.ndim == 2:
+        m = np.repeat(m[..., None], a.shape[2], axis=2)
+    return m
+
+
+def _mische_maske(unten, oben, maske):
+    """`unten` dort behalten, wo die Maske 0 ist, `oben` wo sie 1 ist, dazwischen mischen.
+
+    Das Gegenstueck zu `masken.anwenden`, aber als Formel — damit sich JEDER Ausdruck
+    maskiert anwenden laesst, nicht nur die fest verdrahteten Astro-Schritte.
+    """
+    u = np.asarray(unten, np.float64)
+    o = np.asarray(oben, np.float64)
+    m = np.clip(np.asarray(maske, np.float64), 0.0, 1.0)
+    if u.ndim == 3 and m.ndim == 2:
+        m = np.repeat(m[..., None], u.shape[2], axis=2)
+    return u * (1.0 - m) + o * m
 
 
 def _mtf(bild, mitte):

@@ -8,6 +8,54 @@ All notable changes to ForgePix. Format based on
 
 ## [Unreleased]
 
+### Four classical tools without AI — and masks for EVERY step
+
+The PixInsight comparison listed them as gaps. All four are purely computational, each checked
+against a KNOWN truth and each with a counter-test.
+
+**Superbias** (`--superbias`). A master bias from N frames still carries 1/sqrt(N) of the
+single-frame noise into EVERY calibrated frame. But a bias is almost entirely structure:
+pedestal, column and row patterns of the readout electronics. Superbias keeps those and
+discards the noise. Measured against a known structure: mean error **0.000431 for a plain
+median of 20 frames, 0.000078 for the model** — a factor of 5.5. The tests check the
+counter-side too: the column pattern must survive (correlation above 0.95), otherwise any blur
+would score "better".
+
+**Larson-Sekanina** (`--astro-larson DEGREES`). The rotational gradient that reveals cometary
+jets and shells: two rotated copies are subtracted, everything rotationally symmetric drops
+out. On a computed comet with a known jet: visibility **0.22 to 0.65** standard deviations. And
+the counter-test that matters: a symmetric ball WITHOUT a jet produces no structure — a method
+that invents structure would be the worst possible failure in astrophotography. It runs on the
+VIEW only; the linear result stays measurable, because the brightnesses afterwards are
+differences with no physical meaning.
+
+**Periodic patterns** (`--astro-periodisch STRENGTH`). A Fourier notch filter against stripes
+from readout electronics or a wobbling mount. On a real stack with imprinted stripes: error
+**0.002918 to 0.000440**, 85 % removed. More important is the counter-test: a CLEAN image
+changes by **0.000001**. Building it revealed that the notch must include neighbouring
+frequencies — without that, 47 to 53 % remained across every threshold and window size; with
+it, 40 %.
+
+**Blink** (`--blink`). Many frames as an animated GIF: clouds, tracking errors and trails stand
+out immediately in sequence while they vanish in a single frame. One broken file does not cost
+the whole animation.
+
+**Annotation** (`core/annotation.py`). Coordinate grid, field, scale and centre computed from
+the astrometry; bright stars with magnitudes from the local Gaia catalogue; deep-sky objects
+from a supplied CSV. ForgePix deliberately ships NO built-in object list — invented coordinates
+would be worse than none. The projection is checked against known values: the reference point
+lands on the reference pixel, and 0.1 degrees north is exactly 285.7 px at 3.5e-4 degrees per
+pixel.
+
+**Masks for every step.** The comparison named this gap: the building blocks are in
+`core/masken.py`, but only the astro steps use them; in PixInsight ANY process can be applied
+through ANY mask. Rather than giving every step its own mask switch, the masks move into
+**PixelMath**: `maske_sterne`, `maske_hintergrund`, `maske_nebel`, `maske_hell(A, from, to)`
+and `mische(bottom, top, mask)`. Every combination is now a formula — scriptable, reachable in
+batch processing, and the rule engine can suggest it. Denoising only the background reads:
+
+    mische(A, blur(A, 2), maske_hintergrund(A))
+
 ### Registration on processes — threads achieved nothing
 
 The most expensive step in stacking is alignment: 2.7 s per frame, about 80 % of the per-image
