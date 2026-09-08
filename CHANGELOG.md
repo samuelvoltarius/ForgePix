@@ -8,6 +8,29 @@ All notable changes to ForgePix. Format based on
 
 ## [Unreleased]
 
+### Robust loss for training (`--robuster-verlust`)
+
+Squared error is dominated by the BRIGHTEST pixels. Astro data has an enormous brightness
+range: synthetic stars run up to amplitude 1.26 and are accumulated twelve times, plus scene
+tiles with values far above 1. Charbonnier (square root of error² + eps²) behaves like squared
+error for small errors and like absolute error for large ones — bright areas count without
+dominating.
+
+Measured on `deblur`: loss variation between adjacent steps fell from 800 % to 10 %, but the
+spikes remained (factor 4.5 instead of 7). They come from the scene generator itself, whose
+batches differ greatly in difficulty.
+
+**The real finding along the way:** the successful earlier runs (factors 6.64 and 13.89) were
+`denoise`, not `deblur`. Blindly inverting a random blur is a considerably harder task. For
+comparison, both at width 128 with identical settings:
+
+| | Loss after 400 steps | Spike | Validation |
+|---|---|---|---|
+| deblur | 0.0525 (baseline 0.0115) | factor 4.5 | 1.06 |
+| denoise | 0.00457 (baseline 0.0066, **falling**) | factor 1.6 | **1.53** |
+
+The default remains squared error so previously trained models stay comparable.
+
 ### The scene bank was tearing training apart — values up to 1036 instead of 1
 
 A width-256 run thrashed, a width-128 run thrashed too — and both produced **almost identical

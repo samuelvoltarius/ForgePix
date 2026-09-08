@@ -185,9 +185,25 @@ def normalize(inp, target):
     return (inp-offset)/scale, (target-offset)/scale, offset, scale
 
 
-def loss_function(prediction, target):
+def loss_function(prediction, target, robust=False):
+    """Fehlermass. `robust=True` ersetzt den quadratischen Term durch Charbonnier.
+
+    Warum es das gibt: der quadratische Fehler wird von den HELLSTEN Pixeln bestimmt. Bei
+    Astro-Daten ist der Helligkeitsumfang riesig — synthetische Sterne laufen bis Amplitude
+    1,26 und werden zwoelffach aufsummiert, und die Hubble-Szenenbank enthaelt Kacheln mit
+    Werten bis 1036. Gemessen aeusserte sich das darin, dass zwei verschieden grosse Modelle
+    (width 128 und 256) fast identische Verlustwerte lieferten: der Verlust kam von wenigen
+    hellen Kacheln, nicht vom Modell.
+
+    Charbonnier (Wurzel aus Fehler^2 + eps^2) verhaelt sich bei kleinen Fehlern wie der
+    quadratische und bei grossen wie der absolute — die hellen Stellen zaehlen dann mit,
+    dominieren aber nicht mehr.
+    """
     error = prediction-target
-    mse = error.square().mean()
+    if robust:
+        mse = (error.square() + 1e-6).sqrt().mean()
+    else:
+        mse = error.square().mean()
     # Edge preservation and local average flux constrain errors that global
     # MSE alone can hide. These losses are not a scientific quality certificate.
     edges = (error[:,:,:,1:]-error[:,:,:,:-1]).abs().mean()
@@ -278,7 +294,7 @@ def train(args):
             inp,target = sample(args.batch,device,gen,args.task,train_bank)
             x,y,_,_ = normalize(inp,target)
             optimizer.zero_grad(set_to_none=True)
-            loss = loss_function(model(x),y)
+            loss = loss_function(model(x), y, robust=args.robuster_verlust)
             if not torch.isfinite(loss):
                 raise RuntimeError("Non-finite training loss")
             loss.backward()
@@ -327,6 +343,9 @@ if __name__ == "__main__":
                     help="1 = mono, jeder Farbkanal einzeln (bisher). 3 = farbig. Mono war "
                          "gewaehlt, damit das Netz nicht die Kanaele mitteln und so die Farbe "
                          "zerstoeren kann; GraXpert entrauscht dagegen dreikanalig.")
+    ap.add_argument("--robuster-verlust", action="store_true",
+                    help="Charbonnier statt quadratischem Fehler. Bei grossem Helligkeitsumfang "
+                         "bestimmen sonst die hellsten Pixel das Training allein.")
     ap.add_argument("--lr", type=float, default=2e-4,
                     help="Lernrate (Vorgabe 2e-4; bei width>=128 eher 5e-5 bis 1e-4)")
     ap.add_argument("--bloecke",type=int,default=2,

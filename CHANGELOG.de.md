@@ -8,6 +8,29 @@ Alle nennenswerten Änderungen an ForgePix. Format orientiert an
 
 ## [Unreleased]
 
+### Robustes Fehlermass fuer das Training (`--robuster-verlust`)
+
+Der quadratische Fehler wird von den HELLSTEN Pixeln bestimmt. Bei Astro-Daten ist der
+Helligkeitsumfang riesig: die synthetischen Sterne laufen bis Amplitude 1,26 und werden
+zwoelffach aufsummiert, dazu kommen Szenenkacheln mit Werten weit ueber 1. Charbonnier
+(Wurzel aus Fehler² + eps²) verhaelt sich bei kleinen Fehlern wie der quadratische und bei
+grossen wie der absolute — helle Stellen zaehlen mit, dominieren aber nicht.
+
+Gemessen an `deblur`: die Verlust-Schwankung ging von 800 % auf 10 % zwischen benachbarten
+Schritten zurueck, die Ausschlaege blieben aber (Faktor 4,5 statt 7). Sie kommen aus dem
+Szenengenerator selbst, dessen Stapel sich stark im Schwierigkeitsgrad unterscheiden.
+
+**Der eigentliche Befund dabei:** die erfolgreichen frueheren Laeufe (Faktor 6,64 und 13,89)
+waren `denoise`, nicht `deblur`. Blindes Zurueckrechnen einer zufaelligen Unschaerfe ist eine
+erheblich schwerere Aufgabe. Zum Vergleich, jeweils width 128 mit denselben Einstellungen:
+
+| | Verlust nach 400 Schritten | Ausschlag | Pruefung |
+|---|---|---|---|
+| deblur | 0,0525 (Basis 0,0115) | Faktor 4,5 | 1,06 |
+| denoise | 0,00457 (Basis 0,0066, **fallend**) | Faktor 1,6 | **1,53** |
+
+Vorgabe bleibt der quadratische Fehler, damit frueher trainierte Modelle vergleichbar bleiben.
+
 ### Die Szenenbank riss das Training auseinander — Werte bis 1036 statt bis 1
 
 Ein width-256-Lauf schlingerte, ein width-128-Lauf ebenso — und beide lieferten **fast
