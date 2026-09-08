@@ -8,6 +8,30 @@ Alle nennenswerten Änderungen an ForgePix. Format orientiert an
 
 ## [Unreleased]
 
+### Die Szenenbank riss das Training auseinander — Werte bis 1036 statt bis 1
+
+Ein width-256-Lauf schlingerte, ein width-128-Lauf ebenso — und beide lieferten **fast
+identische Verlustwerte** (0,00514/0,01596/0,00513 gegen 0,00520/0,01598/0,00505). Zwei
+verschieden grosse Modelle koennen das nicht zufaellig: der Verlust kam nicht vom Modell,
+sondern von den Daten.
+
+Die grosse Hubble-Bank (48955 Kacheln aus 239 Dateien) hat Werte bis **1036,8**, wo ein
+normiertes Bild bei etwa 0 bis 1 liegen sollte. 45 % der Kacheln haben ein Maximum ueber 2,
+17 % ueber 10, 1,1 % ueber 100. Grund: normiert wird je BILD mit den 0,1/99,9-Perzentilen, und
+in einem Feld mit grossem Helligkeitsumfang landet der Kern weit ueber 1. Auf so einer Kachel
+ist der quadratische Fehler millionenfach groesser als auf einer normalen — diese wenigen
+bestimmen Verlust und Gradienten allein.
+
+Das Training normiert jetzt **je Kachel** mit dem 99,9-Perzentil (nicht mit dem Maximum: ein
+einzelnes heisses Pixel soll die Kachel nicht dunkel machen). Kacheln werden dabei NICHT
+verworfen, die Auswahl bleibt unverzerrt. Gemessen: die Verzerrung des Ergebnisses sank um
+Faktor 12 (mean_bias −6,2e-5 auf −5,3e-6), die Pruefung stieg auf Faktor 1,19.
+
+Die Verlust-Ausschlaege sind damit kleiner, aber nicht weg — sie kommen zum Teil aus den
+synthetischen Sternen selbst, deren Amplitude bis 1,26 laeuft und zwoelfmal aufsummiert wird.
+Bei einem quadratischen Fehler bestimmen die hellsten Pixel das Ergebnis. Der naechste Schritt
+waere ein robusteres Fehlermass.
+
 ### SNR-Gewichtung ist jetzt die Vorgabe — 30 % weniger Rauschen geschenkt
 
 `--astro-weight` stand auf aus. An denselben 203 M51-Aufnahmen gemessen, jeweils am ROHEN

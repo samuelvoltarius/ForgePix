@@ -107,6 +107,24 @@ not calibrated manufacturer camera profiles or real aberration ground truth.
             scenes = scenes.flip(-1)
         if float(rand(1).item()) < .5:
             scenes = scenes.transpose(-1, -2)
+        # JE KACHEL auf einen vergleichbaren Bereich bringen. Die Bank normiert je BILD mit
+        # den 0,1/99,9-Perzentilen, und in einem Feld mit grossem Helligkeitsumfang (heller
+        # Kern plus schwacher Hintergrund) landet der Kern dann weit ueber 1. An der grossen
+        # Hubble-Bank gemessen: Werte bis 1036,8; 45 % der Kacheln haben ein Maximum ueber 2,
+        # 17 % ueber 10, 1,1 % ueber 100.
+        #
+        # Auf so einer Kachel ist der quadratische Fehler millionenfach groesser als auf einer
+        # normalen — diese wenigen bestimmen Verlust und Gradienten allein. Sichtbar daran,
+        # dass width 128 und width 256 fast identische Verlustwerte lieferten (0,00520/0,01598/
+        # 0,00505 gegen 0,00514/0,01596/0,00513): zwei verschieden grosse Modelle koennen das
+        # nicht zufaellig, der Verlust kam von den Daten.
+        #
+        # Skaliert wird mit einem robusten Mass (99,9-Perzentil je Kachel), nicht mit dem
+        # Maximum — ein einzelnes heisses Pixel soll die ganze Kachel nicht dunkel machen.
+        # Kacheln werden dabei NICHT verworfen; die Auswahl bleibt unverzerrt.
+        _flach = scenes.reshape(len(scenes), -1)
+        _skala = torch.quantile(_flach.float(), 0.999, dim=1).clamp_min(1e-3)
+        scenes = scenes / _skala.view(-1, 1, 1, 1)
         scenes = scenes * (rand(*shape)*.5+.05) + (rand(*shape)-.5)*.025
         use_real = rand(*shape) < .25
         clean = torch.where(use_real, scenes, clean)

@@ -8,6 +8,27 @@ All notable changes to ForgePix. Format based on
 
 ## [Unreleased]
 
+### The scene bank was tearing training apart — values up to 1036 instead of 1
+
+A width-256 run thrashed, a width-128 run thrashed too — and both produced **almost identical
+loss values** (0.00514/0.01596/0.00513 against 0.00520/0.01598/0.00505). Two networks of
+different sizes cannot do that by chance: the loss was coming from the data, not the model.
+
+The large Hubble bank (48955 tiles from 239 files) holds values up to **1036.8**, where a
+normalised image should sit around 0 to 1. 45 % of tiles have a maximum above 2, 17 % above 10,
+1.1 % above 100. The cause: normalisation is per IMAGE using the 0.1/99.9 percentiles, and in a
+field with a large brightness range the core lands far above 1. On such a tile the squared
+error is a million times larger than on a normal one — those few dominate loss and gradients.
+
+Training now normalises **per tile** using the 99.9th percentile (not the maximum: a single hot
+pixel should not darken the whole tile). Tiles are NOT rejected; the selection stays unbiased.
+Measured: output bias fell by a factor of 12 (mean_bias −6.2e-5 to −5.3e-6) and validation rose
+to a factor of 1.19.
+
+The loss spikes are smaller but not gone — they partly come from the synthetic stars
+themselves, whose amplitude runs up to 1.26 and is accumulated twelve times. Under a squared
+error the brightest pixels decide the outcome. A more robust loss would be the next step.
+
 ### SNR weighting is now the default — 30 % less noise for free
 
 `--astro-weight` was off. Measured on the same 203 M51 frames, each on the RAW stack (before
