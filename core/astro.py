@@ -16,6 +16,7 @@ Reine OpenCV/NumPy-Abhängigkeiten.
 """
 import math
 import os
+import time
 
 import numpy as np
 import cv2
@@ -917,6 +918,72 @@ def _ref_path(paths, ref_path=None):
     return paths[len(paths) // 2]
 
 
+# --- Registrierung ueber Prozesse ----------------------------------------------------------
+# Der teuerste Schritt beim Stapeln ist die Ausrichtung: 2,7 s je Aufnahme, rund 80 % der Zeit
+# pro Bild. Er lief in einem THREAD-Pool — und brachte damit nichts, weil der Dreiecksabgleich
+# Python-Code ist und den Interpreter haelt. An 8 M51-Aufnahmen gemessen:
+#
+#     seriell     19,10 s
+#     2 Threads   16,90 s   Beschleunigung 1,13x
+#     4 Threads   22,24 s   Beschleunigung 0,86x   <- LANGSAMER als seriell
+#     6 Threads   20,71 s   Beschleunigung 0,92x
+#
+# Auf einer 24-Kern-Maschine lief der teuerste Schritt also auf einem Kern. Mit Prozessen
+# (eigener Interpreter je Prozess) an 16 Aufnahmen gemessen, inklusive Lesen:
+#
+#     seriell       2,98 s je Aufnahme   -> 203 Aufnahmen in 10,1 min
+#      4 Prozesse   Beschleunigung 2,93x -> 3,4 min
+#      8 Prozesse   Beschleunigung 3,84x -> 2,6 min      <- bestes Verhaeltnis
+#     12 Prozesse   Beschleunigung 3,28x -> 3,1 min      (Platte und Speicherbandbreite bremsen)
+#
+# Jeder Prozess bekommt die Einrichtung EINMAL (Referenz, Kalibrierbilder, Optionen) und
+# danach nur noch einen Index; zurueck kommt ein Dateipfad. Es wandern also keine Bilddaten
+# hin und her.
+_REG = {}
+
+
+def _reg_init(zustand):
+    """Einmal je Prozess: Referenz und Optionen ablegen."""
+    _REG.clear()
+    _REG.update(zustand)
+    _REG["refg"] = _gray(zustand["ref"])
+    if zustand.get("tps"):
+        groesse = zustand["out_size"]
+        _REG["tps_refg"] = (cv2.resize(_REG["refg"], groesse)
+                            if zustand["drizzle"] > 1 else _REG["refg"])
+    else:
+        _REG["tps_refg"] = None
+
+
+def _reg_one(i):
+    """Eine Aufnahme kalibrieren, ausrichten und ablegen. Gibt (Index, Pfad oder None)."""
+    z = _REG
+    f = read_calibrated(z["paths"][i], z["dark"], z["flat"])
+    if f.shape[:2] != z["ref"].shape[:2]:
+        raise ForgePixFehler("Aufnahme passt nicht zur Referenzgroesse: %s (%s statt %s)"
+                             % (z["paths"][i], f.shape[:2], z["ref"].shape[:2]))
+    if z["banding"]:
+        f = fix_banding(f, strength=z["banding"], vertical=z["banding_vertikal"])
+    if z["cosmetic"]:
+        f = cosmetic_correct(f)
+    op = os.path.join(z["out_dir"], "reg_%04d.tif" % i)
+    if not z["do_register"]:
+        return (i, _warp_and_save(f, None, z["out_size"], op, z["drizzle"]))
+    fg = _gray(f)
+    refg = z["refg"]
+    if z["align_mode"] == "shift":
+        M = _estimate_star_shift(refg, fg)
+    else:
+        M = _estimate_star_transform(refg, fg)
+        if M is None:
+            M = _estimate_star_transform_robust(refg, fg)
+        if M is None:
+            M = _estimate_rotation(refg, fg, z["detector"])
+    if M is None:
+        return (i, None)
+    return (i, _warp_and_save(f, M, z["out_size"], op, z["drizzle"], z["tps_refg"]))
+
+
 def register_and_cache(paths, out_dir, dark=None, flat=None, do_register=True,
                        align_mode="shift", cosmetic=False, drizzle=1, detector="ORB",
                        tps=False, ref_path=None, banding=0.0, banding_vertikal=False,
@@ -986,7 +1053,33 @@ def register_and_cache(paths, out_dir, dark=None, flat=None, do_register=True,
             return (i, None)                                 # 2. Pass versucht Cluster-Brücke
         return (i, _warp_and_save(f, M, out_size, op, drizzle, tps_refg))
 
-    results = pmap(_one, list(range(len(paths))), memory_heavy=True)
+    # Prozesse statt Threads, sobald es sich lohnt. Der Start eines Prozesses kostet unter
+    # Windows einen frischen Python samt Importen; unter etwa 12 Aufnahmen frisst das den
+    # Gewinn wieder auf. Faellt irgendetwas daran aus, wird der bisherige Thread-Weg
+    # genommen — eine Beschleunigung darf keinen Lauf kosten.
+    results = None
+    if len(paths) >= 12 and os.environ.get("FORGEPIX_KEINE_PROZESSE") != "1":
+        try:
+            from concurrent.futures import ProcessPoolExecutor
+            from parallel import cpu_workers
+            _zustand = dict(paths=list(paths), dark=dark, flat=flat, ref=ref,
+                            out_dir=out_dir, out_size=out_size, drizzle=drizzle,
+                            do_register=do_register, align_mode=align_mode,
+                            detector=detector, banding=banding,
+                            banding_vertikal=banding_vertikal, cosmetic=cosmetic,
+                            tps=bool(tps))
+            _n = min(8, max(2, cpu_workers(memory_heavy=True) + 2), len(paths))
+            t0 = time.time()
+            with ProcessPoolExecutor(max_workers=_n, initializer=_reg_init,
+                                     initargs=(_zustand,)) as ex:
+                results = list(ex.map(_reg_one, range(len(paths))))
+            log("    Registrierung ueber %d Prozesse (%.1f s, %.2f s je Aufnahme)"
+                % (_n, time.time() - t0, (time.time() - t0) / max(len(paths), 1)))
+        except Exception as e:
+            log("    (Prozess-Registrierung nicht moeglich: %s) -> ein Kern" % e)
+            results = None
+    if results is None:
+        results = pmap(_one, list(range(len(paths))), memory_heavy=True)
     aligned = [op for _i, op in sorted(results) if op]
     skipped = [i for i, op in sorted(results) if op is None]
     log(f"    registriert {len(aligned)}/{len(paths)} (Pass 1)")
@@ -2239,6 +2332,12 @@ def _detail_support(lum, thresh=2.5):
 # Schaerfe, macht aber keine Ringe. Andersherum waere es ein sichtbarer Fehler.
 _MAX_STERNFLAECHE_ANTEIL = 0.003
 
+# Wie hell eine Quelle ueber dem LOKALEN Untergrund sein muss, damit sie als ringgefaehrdeter
+# Stern gilt und nicht als Knoten in einem Spiralarm. In Vielfachen des Rauschens des
+# hochpassgefilterten Bildes. An M51 gemessen: die drei Quellen, die in der Galaxie sichtbar
+# ringten, liegen bei 2229, 2418 und 4187; der schwache Knoten, der nicht ringte, bei 91.
+_MIN_SPITZE_SIGMA = 2000.0
+
 
 def deconvolve(f, psf=None, iterations=15, star_protect=0.85, regularize=0.0,
                deringing=True, tiled_psf=False, tiles=3, log=log_print):
@@ -2348,27 +2447,50 @@ def deconvolve(f, psf=None, iterations=15, star_protect=0.85, regularize=0.0,
         hi = np.clip((lum - star_protect) / max(1e-3, 1.0 - star_protect), 0, 1)
         _psf_px = psf.shape[0] if (psf is not None and not tiled_psf) else 21
         _r = max(4, int(round(_psf_px * 0.6)))
-        # Die Glaettung muss deutlich groesser sein als ein Stern samt Ring, sonst frisst sie
-        # den Stern gleich mit. Vier Ringradien haben sich an M51 bewaehrt.
-        _ueber = lum - cv2.GaussianBlur(lum, (0, 0), max(8.0, 4.0 * _r))
-        _sigma = float(np.median(np.abs(_ueber - np.median(_ueber)))) * 1.4826
-        if _sigma > 0:
-            _kerne = (_ueber > 8.0 * _sigma).astype(np.uint8)
-            _n, _marken, _stats, _ = cv2.connectedComponentsWithStats(_kerne, 8)
-            if _n > 1:
-                # Kompakt = Stern. Was auch nach dem Abzug des lokalen Untergrunds noch
-                # grossflaechig ist, ist echte ausgedehnte Struktur und bleibt ungeschuetzt.
-                _tab = np.zeros(_n, np.uint8)
-                _grenze = max(2000, int(_MAX_STERNFLAECHE_ANTEIL * lum.shape[0] * lum.shape[1]))
-                _tab[1:] = (_stats[1:, cv2.CC_STAT_AREA] <= _grenze).astype(np.uint8)
-                _sterne = _tab[_marken]
-                _scheiben = cv2.dilate(_sterne, cv2.getStructuringElement(
-                    cv2.MORPH_ELLIPSE, (2 * _r + 1, 2 * _r + 1)))
-                _weich = cv2.GaussianBlur(_scheiben.astype(np.float32), (0, 0),
-                                          max(1.0, _r / 3.0))
-                hi = np.maximum(hi, np.clip(_weich, 0, 1))
-                log("    Stern-Schutz: %d Sterne, Radius %d px, %.1f %% der Flaeche geschuetzt"
-                    % (int(_tab.sum()), _r, 100.0 * float((_scheiben > 0).mean())))
+        _grenze = max(2000, int(_MAX_STERNFLAECHE_ANTEIL * lum.shape[0] * lum.shape[1]))
+        _sterne = None
+
+        def _kompakte(bild, schwelle_sigma, min_spitze_sigma=0.0):
+            """Kompakte Quellen ueber einem Bezugsbild finden. Gibt eine 0/1-Karte."""
+            _sg = float(np.median(np.abs(bild - np.median(bild)))) * 1.4826
+            if _sg <= 0:
+                return None
+            _n, _mk, _st, _ = cv2.connectedComponentsWithStats(
+                (bild > schwelle_sigma * _sg).astype(np.uint8), 8)
+            if _n <= 1:
+                return None
+            _ok = _st[:, cv2.CC_STAT_AREA] <= _grenze
+            _ok[0] = False
+            if min_spitze_sigma > 0:
+                _sp = np.zeros(_n, np.float32)
+                np.maximum.at(_sp, _mk.ravel(), bild.ravel())
+                _ok &= _sp >= min_spitze_sigma * _sg
+            return np.asarray(_ok, np.uint8)[_mk]
+
+        # (a) Ueber dem HIMMELSPEGEL — findet alle Feldsterne. Das ist der Weg, der die Sterne
+        #     im freien Feld zuverlaessig erwischt.
+        _a = _kompakte(lum - float(np.median(lum)), 8.0)
+        # (b) Ueber dem LOKALEN Untergrund — findet die Quellen, die AUF einem ausgedehnten
+        #     Objekt stehen und in (a) mit ihm zu einem Bereich verschmelzen. Dort greift
+        #     zusaetzlich eine Helligkeitsschwelle: sonst zaehlen auch die schwachen Knoten in
+        #     den Spiralarmen als Stern, ihre Schutzscheiben verbinden sich zu einer Decke, und
+        #     die Galaxie wird gar nicht mehr geschaerft. An M51 gemessen, Abdeckung im
+        #     Galaxienfenster: ohne Schwelle 28,5 %, mit 7,6 % — bei 17,7 % fuer (a) allein.
+        #     Die drei Quellen, die dort sichtbar ringten, liegen bei 2229, 2418 und 4187 mal
+        #     Sigma; der schwache Knoten, der nicht ringte, bei 91.
+        _lokal = lum - cv2.GaussianBlur(lum, (0, 0), max(8.0, 4.0 * _r))
+        _b = _kompakte(_lokal, 8.0, min_spitze_sigma=_MIN_SPITZE_SIGMA)
+        for _teil in (_a, _b):
+            if _teil is not None:
+                _sterne = _teil if _sterne is None else np.maximum(_sterne, _teil)
+        if _sterne is not None and _sterne.any():
+            _scheiben = cv2.dilate(_sterne, cv2.getStructuringElement(
+                cv2.MORPH_ELLIPSE, (2 * _r + 1, 2 * _r + 1)))
+            _weich = cv2.GaussianBlur(_scheiben.astype(np.float32), (0, 0),
+                                      max(1.0, _r / 3.0))
+            hi = np.maximum(hi, np.clip(_weich, 0, 1))
+            log("    Stern-Schutz: Radius %d px, %.1f %% der Flaeche geschuetzt"
+                % (_r, 100.0 * float((_scheiben > 0).mean())))
         hi = cv2.GaussianBlur(hi, (0, 0), 2.0)
         m = hi[..., None] if out.ndim == 3 else hi
         out = out * (1 - m) + f.astype(np.float32) * m

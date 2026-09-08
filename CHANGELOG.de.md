@@ -8,6 +8,41 @@ Alle nennenswerten Änderungen an ForgePix. Format orientiert an
 
 ## [Unreleased]
 
+### Registrierung ueber Prozesse — Threads brachten nichts
+
+Der teuerste Schritt beim Stapeln ist die Ausrichtung: 2,7 s je Aufnahme, rund 80 % der Zeit
+pro Bild. Sie lief in einem THREAD-Pool und brachte damit nichts, weil der Dreiecksabgleich
+Python-Code ist und den Interpreter haelt. An 8 M51-Aufnahmen gemessen:
+
+| | Zeit | |
+|---|---|---|
+| seriell | 19,10 s | |
+| 2 Threads | 16,90 s | 1,13x |
+| 4 Threads | 22,24 s | **0,86x — langsamer als seriell** |
+| 6 Threads | 20,71 s | 0,92x |
+
+Auf einer 24-Kern-Maschine lief der teuerste Schritt also auf einem Kern. Jetzt laeuft er in
+Prozessen (eigener Interpreter je Prozess), die je Aufnahme nur einen Index bekommen und einen
+Pfad zurueckgeben — es wandern keine Bilddaten hin und her.
+
+Ehrlich zum Gewinn: der isolierte Prueflauf sagte 3,84-fach voraus, im echten Lauf sind es
+**rund 1,3-fach** (203 Aufnahmen in 450 s statt geschaetzten 600 s). Der Unterschied: im echten
+Lauf schreiben die Prozesse auch die registrierten TIFFs mit 140 MB je Stueck, und da bremst
+die Platte. Der Pruefstand hatte das Schreiben weggelassen.
+
+Abschaltbar mit `FORGEPIX_KEINE_PROZESSE=1`; unter 12 Aufnahmen und bei jedem Fehler faellt es
+von selbst auf den bisherigen Weg zurueck.
+
+### Warum die Grafikkarte beim Stapeln nicht hilft
+
+Gemessen, je Aufnahme: FITS lesen und debayern 1,09 s, Sterne finden 0,50 s, **Ausrichtung
+bestimmen 2,71 s**, Ausrichten 0,07 s. Der teuerste Schritt ist Dreiecksabgleich auf
+Sternlisten — viele Vergleiche und Verzweigungen auf winzigen Datenmengen, also das Gegenteil
+dessen, wofuer eine Grafikkarte gebaut ist. Der eine Schritt, der ideal dazu passt (die
+Sigma-Rejection ueber alle Aufnahmen), macht hochgerechnet 3,1 Minuten von rund 90 aus.
+
+Fuer die KI-Modelle ist es umgekehrt — dort bringt sie Faktor 17 bis 46.
+
 ### Sterne VOR einem Objekt behielten ihren Ring — die Maske suchte am falschen Bezug
 
 Der Stern-Schutz suchte Sterne als zusammenhaengende Bereiche ueber dem HIMMELSPEGEL. Ein

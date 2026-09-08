@@ -8,6 +8,41 @@ All notable changes to ForgePix. Format based on
 
 ## [Unreleased]
 
+### Registration on processes — threads achieved nothing
+
+The most expensive step in stacking is alignment: 2.7 s per frame, about 80 % of the per-image
+time. It ran in a THREAD pool and gained nothing, because triangle matching is Python code and
+holds the interpreter. Measured on 8 M51 frames:
+
+| | Time | |
+|---|---|---|
+| serial | 19.10 s | |
+| 2 threads | 16.90 s | 1.13x |
+| 4 threads | 22.24 s | **0.86x — slower than serial** |
+| 6 threads | 20.71 s | 0.92x |
+
+On a 24-core machine the most expensive step ran on one core. It now runs in processes (a
+separate interpreter each), which receive only an index per frame and return a path — no image
+data travels back and forth.
+
+Honest about the gain: the isolated benchmark predicted 3.84x, the real run delivers **about
+1.3x** (203 frames in 450 s instead of an estimated 600 s). The difference: in the real run the
+processes also write the registered TIFFs at 140 MB each, and the disk becomes the limit. The
+benchmark had left the writing out.
+
+Disable with `FORGEPIX_KEINE_PROZESSE=1`; below 12 frames and on any failure it falls back to
+the previous path by itself.
+
+### Why the graphics card does not help with stacking
+
+Measured, per frame: reading and debayering the FITS 1.09 s, finding stars 0.50 s, **determining
+the alignment 2.71 s**, warping 0.07 s. The most expensive step is triangle matching on star
+lists — many comparisons and branches on tiny amounts of data, the opposite of what a graphics
+card is built for. The one step that suits it perfectly (sigma rejection across all frames)
+accounts for an extrapolated 3.1 minutes out of roughly 90.
+
+For the AI models it is the other way round — there it delivers a factor of 17 to 46.
+
 ### Stars in FRONT of an object kept their ring — the mask used the wrong reference
 
 Star protection looked for stars as connected regions above the SKY LEVEL. A star sitting on a

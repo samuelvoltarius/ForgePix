@@ -57,9 +57,21 @@ KAMERAS = [
 ]
 
 # Streuung um die gemessenen Werte. Ein Modell, das NUR diese drei Kameras kennt, faellt bei
-# der vierten um; ein Modell, das alles kennt, kann nichts richtig. Der Kompromiss: um die
-# gemessenen Werte herum streuen, mit genug Breite fuer verwandte Sensoren.
-VOLLSKALA_STREUUNG = 2.2      # multiplikativ, also rund Faktor 2 nach oben und unten
+# der vierten um; ein Modell, das alles kennt, kann nichts richtig.
+#
+# WICHTIG, an echten Daten gelernt: die Werte oben sind am ROHEN Sensor gemessen. Training und
+# Anwendung arbeiten aber am DEBAYERTEN Bild, und Debayering mittelt Nachbarpixel — das
+# Rauschen sinkt dabei um Faktor 2 bis 3, was einer drei- bis zehnfach hoeheren effektiven
+# Elektronenzahl entspricht. Dazu kommt, dass jemand auch schon gestapeltes Material
+# nachbearbeitet; bei 100 Aufnahmen ist das Rauschen nochmal zehnfach kleiner.
+#
+# Ein erster Anlauf mit enger Streuung (Faktor 2,2, also 2383 bis 40513 Elektronen) hat genau
+# das verfehlt: eine echte 120-Sekunden-Aufnahme der ASI294MC entspricht nach dem Debayern
+# rund 96000 Elektronen. Das Modell hatte nie ein so ruhiges Bild gesehen, hielt es fuer
+# bereits sauber und tat NICHTS — an kuenstlichem Rauschen 8,8-fache Minderung, an der echten
+# Aufnahme 1,00-fach. Der Bereich muss nach OBEN weit offen sein.
+VOLLSKALA_STREUUNG_UNTEN = 3.0      # verrauschter als gemessen (kurze Belichtung, warm)
+VOLLSKALA_STREUUNG_OBEN = 30.0      # ruhiger als gemessen (Debayering, gestapeltes Material)
 HOTPIXEL_STREUUNG = 3.0
 
 
@@ -68,10 +80,11 @@ def bereich():
 
     Zum Vergleich der alte, willkuerliche Bereich: 250 bis 125000 Elektronen, Faktor 500.
     Gemessen liegen die drei Kameras zwischen 5243 und 18415, also innerhalb eines Faktors
-    von 3,5 — mit Streuung wird daraus rund 2400 bis 40000, Faktor 17.
+    von 3,5 — mit der Streuung wird daraus rund 1750 bis 552000. Nach oben weit offen, weil
+    Debayering und Stapeln das Rauschen weiter senken; siehe die Erklaerung bei den Konstanten.
     """
     werte = [k["vollskala_e"] for k in KAMERAS]
-    return min(werte) / VOLLSKALA_STREUUNG, max(werte) * VOLLSKALA_STREUUNG
+    return min(werte) / VOLLSKALA_STREUUNG_UNTEN, max(werte) * VOLLSKALA_STREUUNG_OBEN
 
 
 def als_text():
