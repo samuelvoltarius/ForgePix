@@ -8,6 +8,22 @@ All notable changes to ForgePix. Format based on
 
 ## [Unreleased]
 
+### The learning rate is configurable — large networks were thrashing otherwise
+
+`--lr` (default 2e-4, as before). The fixed value was right for width 16 (1.8 M parameters);
+at width 256 (107 M) and batch size 4 the training visibly thrashed: the loss jumped between
+0.00016 and 0.0153 from step to step, across two orders of magnitude, and validation fell from
+a factor of 1.38 to **0.86** — the model was making the image worse than it came in. With
+`--lr 5e-5` and batch size 16 it runs calmly.
+
+A rule for future runs: **large networks need either a smaller learning rate or larger
+batches, preferably both.** A model whose loss swings across two orders of magnitude is not
+converging — it is not worth letting it finish.
+
+And a practical limit that belongs with model size: width 256 took **574 seconds on the CPU**
+for an 800x800 crop, width 16 only 8 — a factor of 72. Extrapolated to a full image (11
+megapixels) that is roughly 2.5 hours without a GPU.
+
 ### The largest stars kept their ring — the area limit was in the wrong place
 
 Star protection only counted regions up to **2000 px** as a star; anything larger was treated

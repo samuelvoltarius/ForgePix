@@ -243,7 +243,13 @@ def train(args):
     # Exact identity initialization; an untrained model must not invent structure.
     torch.nn.init.zeros_(model.ending.weight)
     torch.nn.init.zeros_(model.ending.bias)
-    optimizer = torch.optim.AdamW(model.parameters(),lr=2e-4)
+    # Lernrate einstellbar. 2e-4 war fuer width 16 (1,8 Mio Parameter) richtig; bei width 256
+    # (107 Mio) und kleiner Stapelgroesse schlingert das Training: der Verlust sprang zwischen
+    # 0,00016 und 0,0153 von Schritt zu Schritt, und die Pruefung fiel von Faktor 1,38 auf 0,86 —
+    # das Modell machte das Bild schlechter als es hereinkam. Grosse Netze brauchen entweder
+    # eine kleinere Lernrate oder groessere Stapel (weniger verrauschte Gradienten), am besten
+    # beides.
+    optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer,args.steps,eta_min=2e-5)
     best, best_step = float("inf"),0
     start = time.perf_counter()
@@ -303,6 +309,8 @@ if __name__ == "__main__":
                     help="1 = mono, jeder Farbkanal einzeln (bisher). 3 = farbig. Mono war "
                          "gewaehlt, damit das Netz nicht die Kanaele mitteln und so die Farbe "
                          "zerstoeren kann; GraXpert entrauscht dagegen dreikanalig.")
+    ap.add_argument("--lr", type=float, default=2e-4,
+                    help="Lernrate (Vorgabe 2e-4; bei width>=128 eher 5e-5 bis 1e-4)")
     ap.add_argument("--bloecke",type=int,default=2,
                     help="Bloecke im mittleren Teil (Vorgabe 2).")
     options=ap.parse_args()

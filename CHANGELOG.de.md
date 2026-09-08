@@ -8,6 +8,22 @@ Alle nennenswerten Änderungen an ForgePix. Format orientiert an
 
 ## [Unreleased]
 
+### Die Lernrate ist einstellbar — grosse Netze schlingerten sonst
+
+`--lr` (Vorgabe 2e-4 wie bisher). Fuer width 16 (1,8 Mio Parameter) war der feste Wert
+richtig; bei width 256 (107 Mio) und Stapelgroesse 4 schlingerte das Training sichtbar: der
+Verlust sprang von Schritt zu Schritt zwischen 0,00016 und 0,0153, also ueber zwei
+Groessenordnungen, und die Pruefung fiel von Faktor 1,38 auf **0,86** — das Modell machte das
+Bild schlechter, als es hereinkam. Mit `--lr 5e-5` und Stapelgroesse 16 laeuft es ruhig.
+
+Merksatz fuer kuenftige Laeufe: **grosse Netze brauchen entweder eine kleinere Lernrate oder
+groessere Stapel, am besten beides.** Ein Modell, dessen Verlust ueber zwei Groessenordnungen
+springt, konvergiert nicht — es lohnt nicht, es fertig rechnen zu lassen.
+
+Und eine praktische Grenze, die zur Modellgroesse gehoert: width 256 brauchte fuer einen
+800x800-Ausschnitt **574 Sekunden auf der CPU**, width 16 nur 8 — Faktor 72. Auf ein volles
+Bild (11 Megapixel) hochgerechnet waeren das rund 2,5 Stunden ohne Grafikkarte.
+
 ### Die groessten Sterne behielten ihren Ring — die Flaechengrenze lag falsch
 
 Der Stern-Schutz nahm nur Bereiche bis **2000 px** als Stern; alles Groessere galt als
