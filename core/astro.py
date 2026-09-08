@@ -2332,21 +2332,32 @@ def deconvolve(f, psf=None, iterations=15, star_protect=0.85, regularize=0.0,
     #    achtmal so hoch. Nach der Streckung wird daraus das 2,5-fache der Himmelshelligkeit
     #    — der sichtbare helle Ring um jeden Stern.
     #
-    # Also: Sterne ueber dem RAUSCHEN suchen (nicht ueber einer festen Helligkeit), und den
-    # Schutz bis an den Ringradius aufblasen. Ausgedehnte helle Flaechen bleiben ausgenommen —
-    # im Galaxienkern und im Nebel SOLL geschaerft werden, dort ringt nichts.
+    # 3. Ueber den HIMMELSPEGEL gemessen, verschmilzt jeder Stern, der AUF einem ausgedehnten
+    #    Objekt steht, mit diesem zu einem einzigen zusammenhaengenden Bereich. Er bekommt
+    #    keinen eigenen und faellt mit dem Objekt aus dem Schutz. An M51 gemessen: die Galaxie
+    #    ist EIN Bereich von 139664 px, und darin liegen 88 kompakte Spitzen — Sterne und helle
+    #    Knoten —, von denen KEINE einzige geschuetzt war. Im Bild zeigte sich das als schwarze
+    #    und weisse Ringe genau dort, wo Sterne vor der Galaxie stehen.
+    #
+    # Also: Sterne ueber dem LOKALEN Untergrund suchen, nicht ueber dem Himmelspegel. Von der
+    # Helligkeit wird eine grossflaechige Glaettung abgezogen; damit verschwindet die glatte
+    # Emission der Galaxie, und uebrig bleiben nur kompakte Quellen — auch die mitten darin.
+    # Der Schutz wird bis an den Ringradius aufgeblasen. Ausgedehnte helle Flaechen bleiben
+    # ausgenommen, im Nebel und im Galaxienkern SOLL geschaerft werden.
     if star_protect is not None and star_protect < 1.0:
         hi = np.clip((lum - star_protect) / max(1e-3, 1.0 - star_protect), 0, 1)
         _psf_px = psf.shape[0] if (psf is not None and not tiled_psf) else 21
         _r = max(4, int(round(_psf_px * 0.6)))
-        _himmel = float(np.median(lum))
-        _sigma = float(np.median(np.abs(lum - _himmel))) * 1.4826
+        # Die Glaettung muss deutlich groesser sein als ein Stern samt Ring, sonst frisst sie
+        # den Stern gleich mit. Vier Ringradien haben sich an M51 bewaehrt.
+        _ueber = lum - cv2.GaussianBlur(lum, (0, 0), max(8.0, 4.0 * _r))
+        _sigma = float(np.median(np.abs(_ueber - np.median(_ueber)))) * 1.4826
         if _sigma > 0:
-            _kerne = (lum > _himmel + 8.0 * _sigma).astype(np.uint8)
+            _kerne = (_ueber > 8.0 * _sigma).astype(np.uint8)
             _n, _marken, _stats, _ = cv2.connectedComponentsWithStats(_kerne, 8)
             if _n > 1:
-                # Kompakt = Stern. Die Galaxie haengt als EIN grosser Bereich zusammen und
-                # faellt hier heraus; ihr Kern wird weiter geschaerft.
+                # Kompakt = Stern. Was auch nach dem Abzug des lokalen Untergrunds noch
+                # grossflaechig ist, ist echte ausgedehnte Struktur und bleibt ungeschuetzt.
                 _tab = np.zeros(_n, np.uint8)
                 _grenze = max(2000, int(_MAX_STERNFLAECHE_ANTEIL * lum.shape[0] * lum.shape[1]))
                 _tab[1:] = (_stats[1:, cv2.CC_STAT_AREA] <= _grenze).astype(np.uint8)

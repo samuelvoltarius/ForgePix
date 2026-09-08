@@ -8,6 +8,42 @@ Alle nennenswerten Änderungen an ForgePix. Format orientiert an
 
 ## [Unreleased]
 
+### Sterne VOR einem Objekt behielten ihren Ring — die Maske suchte am falschen Bezug
+
+Der Stern-Schutz suchte Sterne als zusammenhaengende Bereiche ueber dem HIMMELSPEGEL. Ein
+Stern, der auf einer Galaxie oder in einem Nebel steht, verschmilzt dabei mit dem Objekt zu
+EINEM Bereich, bekommt keinen eigenen und faellt mit dem Objekt aus dem Schutz.
+
+An M51 gemessen: die Galaxie ist ein Bereich von 139664 px, und darin liegen **88 kompakte
+Spitzen** — Sterne und helle Knoten —, von denen **keine einzige** geschuetzt war. Im fertigen
+Bild waren das schwarze und weisse Ringe genau dort, wo Sterne vor der Galaxie stehen.
+
+Gesucht wird jetzt ueber dem LOKALEN Untergrund: von der Helligkeit wird eine grossflaechige
+Glaettung abgezogen (vier Ringradien breit, damit sie den Stern nicht mitfrisst). Die glatte
+Emission der Galaxie verschwindet dabei, uebrig bleiben kompakte Quellen — auch die mitten
+darin. Gemessen: von acht geprueften Sternen in der Galaxie sind jetzt sieben geschuetzt, der
+achte ist keine Punktquelle sondern Teil des Kerns. Der Galaxienkern selbst bleibt ungeschuetzt
+und wird weiter geschaerft.
+
+### ForgePix sagt jetzt, wenn die Grafikkarte brachliegt
+
+`ai_restore` nimmt die GPU von selbst (`device="auto"` versucht CUDA, dann DirectML unter
+Windows, dann CoreML unter macOS). Das mitgelieferte `onnxruntime` ist aber die reine
+CPU-Fassung; die GPU-Anbieter stecken in einem anderen Paket. Bisher stand im Protokoll nur
+"Verarbeitung auf CPU" — ohne zu sagen, was fehlt.
+
+Auf einer RTX 3060 Ti gemessen, je 256er-Kachel:
+
+| | CPU | GPU (DirectML) | |
+|---|---|---|---|
+| denoise width 16 | 0,062 s | 0,004 s | **17-fach** |
+| deblur width 256 | 3,967 s | 0,087 s | **46-fach** |
+
+Auf ein Bild von 3978x2691 (315 Kacheln) sind das beim grossen Modell **21 Minuten gegen 27
+Sekunden**. Der Hinweis nennt jetzt das Paket (`onnxruntime-directml` unter Windows,
+`onnxruntime-gpu` unter Linux). Ohne ihn rechnet jemand mit Grafikkarte stundenlang auf der
+CPU und weiss nicht, warum.
+
 ### Robustes Fehlermass fuer das Training (`--robuster-verlust`)
 
 Der quadratische Fehler wird von den HELLSTEN Pixeln bestimmt. Bei Astro-Daten ist der

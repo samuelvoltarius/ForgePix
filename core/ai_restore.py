@@ -192,7 +192,21 @@ def _create_session(content, *, device="auto", execution=None, log=log_print, ca
         reason = "Keine passende GPU-Laufzeit verfügbar (Anforderung: %s)." % device
         execution["fallback_used"] = True
         execution["fallback_reasons"].append(reason)
-        log(reason + " Verarbeitung auf CPU.")
+        # Konkret sagen, WAS fehlt. Das mitgelieferte `onnxruntime` ist die reine
+        # CPU-Fassung; die GPU-Anbieter stecken in einem anderen Paket. Der Unterschied ist
+        # nicht klein — auf einer RTX 3060 Ti gemessen, je 256er-Kachel:
+        #
+        #     denoise width 16    CPU 0,062 s   GPU 0,004 s   Faktor 17
+        #     deblur  width 256   CPU 3,967 s   GPU 0,087 s   Faktor 46
+        #
+        # Auf ein Bild von 3978x2691 (315 Kacheln) sind das beim grossen Modell 21 Minuten
+        # gegen 27 Sekunden. Ohne diesen Hinweis rechnet jemand mit Grafikkarte stundenlang
+        # auf der CPU und weiss nicht, warum.
+        _paket = {"win32": "onnxruntime-directml",
+                  "linux": "onnxruntime-gpu"}.get(sys.platform)
+        _rat = (" Mit einer Grafikkarte geht es ein Vielfaches schneller: dafuer statt "
+                "`onnxruntime` das Paket `%s` installieren." % _paket) if _paket else ""
+        log(reason + " Verarbeitung auf CPU." + _rat)
     if "cpu" not in candidates:
         candidates.append("cpu")
     for candidate in candidates:

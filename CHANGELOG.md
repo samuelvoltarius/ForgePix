@@ -8,6 +8,41 @@ All notable changes to ForgePix. Format based on
 
 ## [Unreleased]
 
+### Stars in FRONT of an object kept their ring — the mask used the wrong reference
+
+Star protection looked for stars as connected regions above the SKY LEVEL. A star sitting on a
+galaxy or inside a nebula merges with that object into ONE region, gets none of its own, and
+drops out of the protection along with the object.
+
+Measured on M51: the galaxy is a single region of 139664 px, and inside it lie **88 compact
+peaks** — stars and bright knots — of which **not one** was protected. In the finished image
+those were black and white rings exactly where stars sit in front of the galaxy.
+
+Stars are now found above the LOCAL background: a wide smoothing is subtracted from the
+luminance (four ring radii wide, so it does not eat the star itself). The galaxy's smooth
+emission disappears, leaving compact sources — including those inside it. Measured: of eight
+stars checked inside the galaxy, seven are now protected; the eighth is not a point source but
+part of the core. The galaxy core itself stays unprotected and is still sharpened.
+
+### ForgePix now says when the graphics card is going unused
+
+`ai_restore` takes the GPU by itself (`device="auto"` tries CUDA, then DirectML on Windows,
+then CoreML on macOS). But the bundled `onnxruntime` is the CPU-only build; the GPU providers
+live in a different package. Until now the log only said "processing on CPU" — without saying
+what was missing.
+
+Measured on an RTX 3060 Ti, per 256-pixel tile:
+
+| | CPU | GPU (DirectML) | |
+|---|---|---|---|
+| denoise width 16 | 0.062 s | 0.004 s | **17x** |
+| deblur width 256 | 3.967 s | 0.087 s | **46x** |
+
+On an image of 3978x2691 (315 tiles) that is **21 minutes against 27 seconds** for the large
+model. The hint now names the package (`onnxruntime-directml` on Windows, `onnxruntime-gpu` on
+Linux). Without it, someone with a graphics card computes for hours on the CPU and never learns
+why.
+
 ### Robust loss for training (`--robuster-verlust`)
 
 Squared error is dominated by the BRIGHTEST pixels. Astro data has an enormous brightness
