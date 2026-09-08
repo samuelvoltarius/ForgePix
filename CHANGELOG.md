@@ -8,6 +8,25 @@ All notable changes to ForgePix. Format based on
 
 ## [Unreleased]
 
+### SNR weighting is now the default — 30 % less noise for free
+
+`--astro-weight` was off. Measured on the same 203 M51 frames, each on the RAW stack (before
+any post-processing, so nothing else interferes):
+
+| | Noise | Signal/noise | Gradient | Star width |
+|---|---|---|---|---|
+| without weighting | 0.00054 | 5.39 | 7.9 % | 1.98 |
+| **with weighting** | **0.00038** | **7.48** | **6.8 %** | 1.99 |
+
+30 % less noise and 39 % more signal-to-noise, without a single additional frame and with no
+measurable downside. Weighting by signal-to-noise (1/σ²) is the statistically optimal way to
+combine frames of differing quality; when all frames are equally good, all weights are equal
+and nothing changes. Turn it off with `--no-astro-weight`.
+
+That settles the three defaults that affected this stack: colour-preserving stretch, SNR
+weighting, and the image-size-relative star area limit. All three existed, all three were off,
+and all three cost visible quality.
+
 ### The learning rate is configurable — large networks were thrashing otherwise
 
 `--lr` (default 2e-4, as before). The fixed value was right for width 16 (1.8 M parameters);

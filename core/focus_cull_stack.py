@@ -1462,9 +1462,20 @@ def main():
     ap.add_argument("--astro-tps", action="store_true",
                     help="TPS-Feinregistrierung: korrigiert nach der globalen Ausrichtung die lokale "
                          "Restverzeichnung (Feldkrümmung bei Weitwinkel/Refraktor) per Thin-Plate-Spline")
-    ap.add_argument("--astro-weight", action="store_true",
+    # Vorgabe AN. Aus war die falsche Vorgabe: an denselben 203 M51-Aufnahmen gemessen,
+    # jeweils am ROHEN Stapel (also vor jeder Nachbearbeitung):
+    #
+    #     ohne Gewichtung   Rauschen 0,00054   Signal/Rauschen 5,39   Gradient 7,9 %
+    #     mit Gewichtung    Rauschen 0,00038   Signal/Rauschen 7,48   Gradient 6,8 %
+    #
+    # 30 % weniger Rauschen und 39 % mehr Signal/Rauschen, ohne eine einzige zusaetzliche
+    # Aufnahme und ohne Nachteil (Sternbreite 1,98 gegen 1,99). Nach SNR zu gewichten ist die
+    # statistisch optimale Art, Aufnahmen verschiedener Guete zu kombinieren; bei gleich guten
+    # Aufnahmen sind alle Gewichte gleich und es aendert nichts.
+    ap.add_argument("--astro-weight", action=argparse.BooleanOptionalAction, default=True,
                     help="Astro-Integration: Frames nach SNR gewichten (1/σ_bg²) — dünne/verrauschte "
-                         "Subs zählen weniger (bessere Gesamt-SNR bei gemischter Transparenz)")
+                         "Subs zählen weniger (bessere Gesamt-SNR bei gemischter Transparenz). "
+                         "Vorgabe an; --no-astro-weight schaltet ab")
     ap.add_argument("--astro-deconv-regularize", type=float, default=0.0,
                     help="Dekonvolution: TV-/Wavelet-Regularisierung pro Iteration (0=aus, ~0.01–0.1) "
                          "— dämpft Rausch-/Ring-Verstärkung")

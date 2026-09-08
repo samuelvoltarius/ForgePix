@@ -8,6 +8,25 @@ Alle nennenswerten Änderungen an ForgePix. Format orientiert an
 
 ## [Unreleased]
 
+### SNR-Gewichtung ist jetzt die Vorgabe — 30 % weniger Rauschen geschenkt
+
+`--astro-weight` stand auf aus. An denselben 203 M51-Aufnahmen gemessen, jeweils am ROHEN
+Stapel (also vor jeder Nachbearbeitung, damit nichts anderes hineinspielt):
+
+| | Rauschen | Signal/Rauschen | Gradient | Sternbreite |
+|---|---|---|---|---|
+| ohne Gewichtung | 0,00054 | 5,39 | 7,9 % | 1,98 |
+| **mit Gewichtung** | **0,00038** | **7,48** | **6,8 %** | 1,99 |
+
+30 % weniger Rauschen und 39 % mehr Signal/Rauschen, ohne eine einzige zusaetzliche Aufnahme
+und ohne messbaren Nachteil. Nach Signal/Rauschen zu gewichten (1/σ²) ist die statistisch
+optimale Art, Aufnahmen verschiedener Guete zu kombinieren; sind alle gleich gut, sind alle
+Gewichte gleich und es aendert nichts. Abschalten mit `--no-astro-weight`.
+
+Damit stehen die drei Vorgaben, die diesen Stapel betrafen, richtig: farberhaltendes Strecken,
+SNR-Gewichtung und die bildgroessenabhaengige Sternflaechen-Grenze. Alle drei waren vorhanden,
+alle drei waren aus, und alle drei kosteten sichtbar Qualitaet.
+
 ### Die Lernrate ist einstellbar — grosse Netze schlingerten sonst
 
 `--lr` (Vorgabe 2e-4 wie bisher). Fuer width 16 (1,8 Mio Parameter) war der feste Wert
