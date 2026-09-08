@@ -84,7 +84,10 @@ own):
 So a third of the colour and 50 % more blown-out area. In the LINEAR result the colour is
 equally present in every case (B/G 0.597 against 0.603) — it is lost only in the stretch.
 
-The default is now 1.0: hue is preserved, with no extra boost. The UI follows suit.
+The default is now **1.8**. At 1.0 (hue preserved only) half the colour came back — star
+colour 15 instead of 8. At 1.8 it is **27**, just above the reference image without
+deconvolution (25), at practically the same blown-out area (0.12 against 0.11 %). Checked
+on the image: star colours as in the reference, not overdone. The UI follows suit.
 
 ### Training now emulates MEASURED cameras instead of random ranges
 

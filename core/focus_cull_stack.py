@@ -1373,10 +1373,16 @@ def main():
     #     ohne                             8 und  8    ("alles weiss und unscharf")
     #
     # Dazu 50 % mehr Pixel ueber Helligkeit 200: kleinere farbige Sterne gegen groessere
-    # weisse. Der Wert 1.0 erhaelt nur den Farbton; groesser verstaerkt die Farbe zusaetzlich.
-    ap.add_argument("--astro-color-stretch", type=float, default=1.0, metavar="SAETTIGUNG",
-                    help="Farberhaltend strecken (Vorgabe 1.0 = an ohne Verstaerkung, 0 = aus, "
-                         "1.8 = kraeftiger): nur die Helligkeit laeuft durch die Kurve, die "
+    # weisse.
+    #
+    # Warum 1.8 und nicht 1.0: 1.0 erhaelt nur den Farbton und holte damit die Haelfte
+    # zurueck (Sternfarbe 15). Mit 1.8 sind es 27 — knapp ueber dem Bezugsbild ohne
+    # Dekonvolution (25), bei praktisch gleicher ausgebrannter Flaeche (0,12 gegen
+    # 0,11 %). Am Bild geprueft: Sternfarben wie im Bezugsbild, nicht ueberzeichnet.
+    ap.add_argument("--astro-color-stretch", type=float, default=1.8, metavar="SAETTIGUNG",
+                    help="Farberhaltend strecken (Vorgabe 1.8, 0 = aus, 1.0 = Farbton "
+                         "erhalten ohne Verstaerkung, hoeher = kraeftiger): nur die "
+                         "Helligkeit laeuft durch die Kurve, die "
                          "Kanalverhaeltnisse bleiben. Gegen das Ausgewaschene einer kanalweisen "
                          "Streckung, bei der der staerkste Kanal durchschlaegt")
     ap.add_argument("--astro-starless-stretch", type=float, default=None, metavar="STERNSTAERKE",

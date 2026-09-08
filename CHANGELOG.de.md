@@ -85,8 +85,10 @@ Also ein Drittel der Farbe und 50 % mehr ausgebrannte Flaeche. Im LINEAREN Ergeb
 Farbe in allen Faellen gleich vorhanden (B/G 0,597 gegen 0,603) — verloren geht sie erst beim
 Strecken.
 
-Vorgabe ist jetzt 1.0: Farbton bleibt erhalten, ohne zusaetzliche Verstaerkung. Die Oberflaeche
-zieht mit.
+Vorgabe ist jetzt **1.8**. Mit 1.0 (nur Farbton erhalten) kam die Haelfte zurueck —
+Sternfarbe 15 statt 8. Mit 1.8 sind es **27**, also knapp ueber dem Bezugsbild ohne
+Dekonvolution (25), bei praktisch gleicher ausgebrannter Flaeche (0,12 gegen 0,11 %). Am
+Bild geprueft: Sternfarben wie im Bezugsbild, nicht ueberzeichnet. Die Oberflaeche zieht mit.
 
 ### Das Training bildet jetzt GEMESSENE Kameras nach statt Zufallsbereiche
 
