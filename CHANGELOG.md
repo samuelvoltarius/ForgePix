@@ -8,6 +8,72 @@ All notable changes to ForgePix. Format based on
 
 ## [Unreleased]
 
+### Drizzle 2x measured on real data — and it costs more than it gives
+
+For undersampled material the rule engine has been recommending
+`--astro-drizzle 2 --astro-drizzle-true` for twenty runs. It had never been executed. Now it
+has: the same M51 stack (203 frames) once normally, once with true CFA drizzle, all other
+switches identical.
+
+The comparison is **scale-corrected**: the drizzle result has twice as many pixels, so every
+size in pixels would be twice as large without anything having improved. So it was binned 2x2
+back, both images aligned by cross-correlation (offset 45/18 px, match 0.83), measured in the
+**common** region and with **one** mask taken from the reference — otherwise you measure
+different pixel populations and call the result a difference.
+
+| | normal | drizzle 2x |
+|---|---|---|
+| star width on 194 COMMON stars | 4.65 px | **4.65 px** (factor 1.00) |
+| background noise | 0.000024 | **0.000057** (2.42x) |
+| fine structure | 0.014508 | 0.016821 (1.16x) |
+| detail per noise | **614** | 294 |
+| usable field after cropping | 3978x2709 (92 %) | **3240x1098 (33 %)** |
+| runtime | about 1.5 h | about 2.5 h |
+
+**No sharpening, 2.4x the noise, two thirds of the field gone.**
+
+Why: the sampling rule switches to "undersampled" below a star half-width of **2.0 px**
+(Nyquist). M51 measures **1.99 px** — the threshold tipped by 0.01 px. That close below it,
+there is nothing to recover that is not already there. The crop was brutal on top of that
+because the series drifts 218 px across several nights: 8288x5644 became 6480x2196.
+
+The advice stays — drizzle is the right tool for clearly undersampled material — but it now
+**carries this measurement** and says: the closer to 2 px, the less it pays; just below, compare
+the result rather than switching it on blindly. No second threshold is invented in the process:
+there is ONE measured point, and a boundary is not derived from one point.
+
+### `--dark-skalieren` could never convert the temperature
+
+A dark test on NGC 7023 was meant to compare three runs. Two of them aborted — including the
+one with `--dark-skalieren`:
+
+    Calibration/series mismatch: sensor temperature -15.0 instead of -20.2
+
+The data matched in everything else: ASI533MC Pro, 60 s, gain 95, offset 30, RGGB, 3008x3008.
+Only the temperature differed by 5.2 degrees — **exactly the case the switch exists for**. Two
+independent barriers stood in front of it:
+
+1. `validate()` exempted `scale_dark` only for the **exposure time**. The temperature was
+   always checked against 2 K, so the abort came before anything could be scaled at all.
+2. And even without that barrier it would not have helped: `dark_skalieren()` was only called
+   when the **exposure times** differed. With equal times and a differing temperature — the
+   normal case for a dark library — the conversion never ran, even though the function handles
+   the temperature term (`2^((T_target-T_dark)/6)`) and its own docstring says so.
+
+Now the temperature tolerance follows the switch (2 K without, 10 K with), and exposure time
+**or** temperature (from 0.5 K) triggers the conversion. A real run now prints
+
+    Dark scaling: factor 0.548 (60 s -> 60 s, -15.0 -> -20.2 °C)
+
+The **10 K is a model limit, not a measurement**, and the code says so: `2^(dT/6)` describes
+the mean dark current, not the behaviour of individual hot pixels, and those stop following the
+same factor across larger jumps. The darks **among themselves** stay at 2 K — a master built
+from frames at different temperatures is wrong before any scaling.
+
+What was **not** changed: without `--dark-skalieren` the abort stands. 5.2 K is roughly 80 %
+more dark current; subtracting it uncorrected would be wrong, and doing so silently would be
+worse than aborting.
+
 ### A single wrong header entry advised taking the folder apart
 
 The pre-check reports when a folder holds several sky fields — sound advice, because when

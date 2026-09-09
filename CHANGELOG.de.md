@@ -8,6 +8,77 @@ Alle nennenswerten Änderungen an ForgePix. Format orientiert an
 
 ## [Unreleased]
 
+### Drizzle 2x an echten Daten gemessen — und es kostet mehr, als es bringt
+
+Das Regelwerk empfiehlt bei unterabgetastetem Material seit zwanzig Laeufen
+`--astro-drizzle 2 --astro-drizzle-true`. Ausgefuehrt wurde es nie. Jetzt schon: derselbe
+M51-Stapel (203 Aufnahmen) einmal normal, einmal mit echtem CFA-Drizzle, sonst identische
+Schalter.
+
+Verglichen wird **massstabsbereinigt**: das Drizzle-Ergebnis hat doppelt so viele Pixel, jede
+Groesse in Pixeln waere also doppelt so gross, ohne dass irgendetwas besser geworden waere.
+Also 2x2 zurueckgebinnt, beide Bilder ueber Kreuzkorrelation aufeinander gelegt (Versatz 45/18
+px, Uebereinstimmung 0,83), im **gemeinsamen** Bereich gemessen und mit **einer** Maske aus
+dem Referenzbild — sonst misst man verschiedene Pixelmengen und nennt das Ergebnis Unterschied.
+
+| | normal | Drizzle 2x |
+|---|---|---|
+| Sternbreite an 194 GEMEINSAMEN Sternen | 4,65 px | **4,65 px** (Faktor 1,00) |
+| Untergrundrauschen | 0,000024 | **0,000057** (2,42x) |
+| Feinstruktur | 0,014508 | 0,016821 (1,16x) |
+| Detail je Rauschen | **614** | 294 |
+| nutzbares Feld nach Zuschnitt | 3978x2709 (92 %) | **3240x1098 (33 %)** |
+| Rechenzeit | rund 1,5 h | rund 2,5 h |
+
+**Kein Schaerfegewinn, 2,4-faches Rauschen, zwei Drittel des Feldes weg.**
+
+Warum: die Abtastungsregel schaltet bei einer Sternhalbwertsbreite unter **2,0 px** auf
+„unterabgetastet" (Nyquist). M51 misst **1,99 px** — die Schwelle kippte um 0,01 px. So knapp
+darunter ist nichts zurueckzuholen, was nicht schon da waere. Der Zuschnitt fiel zusaetzlich
+brutal aus, weil die Serie ueber mehrere Naechte 218 px wandert: aus 8288x5644 blieben
+6480x2196.
+
+Der Rat bleibt bestehen — Drizzle ist fuer deutlich unterabgetastetes Material das richtige
+Werkzeug —, aber er **traegt jetzt diese Messung** und sagt: je knapper unter 2 px, desto
+weniger lohnt es; knapp darunter erst das Ergebnis vergleichen, nicht blind einschalten.
+Erfunden wird dabei keine zweite Schwelle: es liegt EIN gemessener Punkt vor, und aus einem
+Punkt wird keine Grenze abgeleitet.
+
+### `--dark-skalieren` konnte die Temperatur nie umrechnen
+
+Ein Dark-Test an NGC 7023 sollte drei Laeufe vergleichen. Zwei davon brachen ab — auch der
+mit `--dark-skalieren`:
+
+    Kalibrierung/Aufnahmeserie passt nicht: Sensortemperatur -15.0 statt -20.2
+
+Die Daten passten in allem zusammen: ASI533MC Pro, 60 s, Gain 95, Offset 30, RGGB, 3008x3008.
+Nur die Temperatur wich um 5,2 Grad ab — **genau der Fall, fuer den es den Schalter gibt**.
+Davor lagen zwei unabhaengige Sperren:
+
+1. `validate()` nahm `scale_dark` nur fuer die **Belichtungszeit** aus der Pruefung. Die
+   Temperatur wurde immer mit 2 K geprueft, der Abbruch kam also, bevor ueberhaupt etwas
+   skaliert werden konnte.
+2. Und selbst ohne diese Sperre haette es nichts genutzt: `dark_skalieren()` wurde nur
+   aufgerufen, wenn die **Belichtungszeiten** auseinanderlagen. Bei gleichen Zeiten und
+   abweichender Temperatur — dem Normalfall einer Dark-Bibliothek — lief die Umrechnung nie
+   an, obwohl die Funktion den Temperaturteil kann (`2^((T_ziel-T_dark)/6)`) und ihre
+   Beschreibung ihn ausdruecklich nennt.
+
+Neu: die Temperaturtoleranz haengt am Schalter (2 K ohne, 10 K mit), und Belichtungszeit
+**oder** Temperatur (ab 0,5 K) loesen die Umrechnung aus. Im echten Lauf steht jetzt
+
+    Dark-Skalierung: Faktor 0.548 (60 s -> 60 s, -15.0 -> -20.2 °C)
+
+Die **10 K sind eine Modellgrenze, keine Messung**, und im Code steht das auch so: `2^(dT/6)`
+beschreibt den mittleren Dunkelstrom, nicht das Verhalten einzelner heisser Pixel, und die
+werden bei groesseren Spruengen nicht mehr vom selben Faktor getroffen. Die Darks
+**untereinander** bleiben bei 2 K — ein Master aus Aufnahmen verschiedener Temperatur ist
+schon vor jeder Skalierung falsch.
+
+Was **nicht** geaendert wurde: ohne `--dark-skalieren` bleibt der Abbruch. 5,2 K sind rund
+80 % mehr Dunkelstrom; ihn unkorrigiert abzuziehen waere falsch, und stillschweigend waere es
+schlimmer als ein Abbruch.
+
 ### Ein einziger falscher Kopfeintrag riet dazu, den Ordner zu zerlegen
 
 Die Vorpruefung meldet, wenn in einem Ordner mehrere Himmelsausschnitte stecken — ein sinnvoller

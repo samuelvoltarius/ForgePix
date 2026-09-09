@@ -230,11 +230,22 @@ def pruefen(bericht, komet=False, bereits=None):
     # --- Abtastung ---------------------------------------------------------------
     sampling = _w(bericht, "ausruestung", "sampling")
     if sampling == "unterabgetastet":
+        # Die Schwelle steht bei FWHM 2,0 px (Nyquist). Wer knapp darunter liegt, gewinnt
+        # nichts — an M51 mit gemessenen 1,99 px nachgefahren, 203 Aufnahmen, echtes Drizzle
+        # 2x gegen denselben Lauf ohne: Sternbreite an 194 GEMEINSAMEN Sternen 4,65 px zu
+        # 4,65 px, also Faktor 1,00. Bezahlt wurde das mit 2,42-fachem Rauschen (auf 1x
+        # zurueckgebinnt gemessen) und 33 % Restfeld nach dem Zuschnitt (3240x1098 statt
+        # 3978x2709). Der Rat bleibt, aber er sagt jetzt, was er kostet.
         raete.append(Rat(
             HINWEIS, "Unterabgetastet",
-            "Die Sterne sind schmaler, als das Pixelraster aufloesen kann. Drizzle holt hier "
-            "echte Aufloesung zurueck — aber NUR bei gedithertem Material.",
-            "Dithering pruefen, dann Drizzle.",
+            "Die Sterne sind schmaler, als das Pixelraster aufloesen kann (Grenze: 2,0 px "
+            "Halbwertsbreite). Drizzle kann hier echte Aufloesung zurueckholen — aber NUR bei "
+            "gedithertem Material, und je knapper es unter der Grenze liegt, desto weniger. "
+            "An M51 mit 1,99 px gemessen: KEIN Schaerfegewinn (Sternbreite 4,65 zu 4,65 px an "
+            "194 gemeinsamen Sternen), dafuer 2,4-faches Rauschen und nur noch 33 % des "
+            "Feldes uebrig.",
+            "Lohnt sich, je deutlicher die Halbwertsbreite unter 2 px liegt. Knapp darunter "
+            "erst das Ergebnis vergleichen, nicht blind einschalten.",
             "--astro-drizzle 2 --astro-drizzle-true"))
     elif sampling == "ueberabgetastet":
         raete.append(Rat(
