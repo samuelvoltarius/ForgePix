@@ -14,16 +14,22 @@ from training.vendor.nafnet_upstream import NAFNet
 def export(checkpoint_path, output, evaluation=None):
     checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
     contract = checkpoint["contract"]
-    if contract != dict(channels=1, tile_size=256, halo=32,
-                        normalization="affine_percentile_v1", output="complete_target"):
+    # Nur BEKANNTE Vertraege — mono und farbig. Alles andere wird nicht geraten: die
+    # Normierung laesst sich aus den Gewichten nicht ablesen, und ein falsch normierter
+    # Entrauscher macht Bilder schlechter, ohne dabei zu scheitern.
+    bekannt = [dict(channels=k, tile_size=256, halo=32,
+                    normalization="affine_percentile_v1", output="complete_target")
+               for k in (1, 3)]
+    if contract not in bekannt:
         raise ValueError("Unknown preprocessing contract; do not guess normalization")
+    kanaele = int(contract["channels"])
     task = checkpoint["report"]["task"]
     model = NAFNet(**checkpoint["config"]).eval()
     model.load_state_dict(checkpoint["model"])
     torch.set_num_threads(4)
     output.mkdir(parents=True, exist_ok=False)
     destination = output/"model.onnx"
-    torch.onnx.export(model, torch.zeros(1,1,256,256), str(destination),
+    torch.onnx.export(model, torch.zeros(1,kanaele,256,256), str(destination),
                       input_names=["image"], output_names=["restored"],
                       opset_version=17, dynamo=False, external_data=False)
     onnx.checker.check_model(onnx.load(destination))
@@ -31,9 +37,10 @@ def export(checkpoint_path, output, evaluation=None):
     session = ort.InferenceSession(str(destination), sess_options=opts,
                                    providers=["CPUExecutionProvider"])
     rng=np.random.default_rng(789055)
-    inputs=[np.zeros((1,1,256,256),np.float32),
-            rng.normal(.08,.03,(1,1,256,256)).astype(np.float32),
-            rng.uniform(-.2,2.,(1,1,256,256)).astype(np.float32)]
+    form=(1,kanaele,256,256)
+    inputs=[np.zeros(form,np.float32),
+            rng.normal(.08,.03,form).astype(np.float32),
+            rng.uniform(-.2,2.,form).astype(np.float32)]
     errors=[]
     for data in inputs:
         with torch.no_grad():
@@ -53,11 +60,13 @@ def export(checkpoint_path, output, evaluation=None):
             raise ValueError("Evaluation task/checkpoint hash does not match exported weights")
         (output/"evaluation.json").write_text(json.dumps(independent,indent=2))
     (output/"training_report.json").write_text(json.dumps(report,indent=2))
-    manifest=dict(schema_version=1,id=f"forgepix-{task}-mono-v2",task=task,
+    art="mono" if kanaele==1 else "farbe"
+    manifest=dict(schema_version=1,id=f"forgepix-{task}-{art}-v2",task=task,
         model_file="model.onnx",sha256=hashlib.sha256(destination.read_bytes()).hexdigest(),
         **contract,status="experimental",release_approved=False,
         license="MIT",weights_origin="Trained by ForgePix; no third-party pretrained weights",
-        architecture="NAFNet mono width16; upstream licence retained",
+        architecture="NAFNet %s width%d; upstream licence retained" % (
+            art, checkpoint["config"]["width"]),
         upstream="https://github.com/megvii-research/NAFNet/tree/2b4af71ebe098a92a75910c233a3965a3e93ede4",
         checkpoint_sha256=hashlib.sha256(checkpoint_path.read_bytes()).hexdigest(),
         photometry_validated=False,onnx_opset=17,export_max_abs_errors=errors,

@@ -8,6 +8,56 @@ All notable changes to ForgePix. Format based on
 
 ## [Unreleased]
 
+### A single wrong header entry advised taking the folder apart
+
+The pre-check reports when a folder holds several sky fields — sound advice, because when
+stacking, the frames of the second target drop out as "not alignable" without anyone learning
+they existed. But the span was computed as *distance to the mean x 2*, and a single outlier
+both drags the mean and sets the maximum.
+
+Measured on NGC 7023: **215 frames, exactly one with DEC +28.81 instead of +68.18** (a mount
+misreport during the exposure). The pre-check then reported "orientations up to **78.4
+degrees** apart" and advised CRITICALLY to split the folder by object. The other 214 frames lay
+within 0.12 degrees. There was nothing to split.
+
+The directions are now grouped into fields (the function for that already existed) and the span
+is measured over the RETAINED frames: **0.43 degrees** instead of 78.4 — below the threshold,
+no warning. The outlier does not disappear; it gets its own note, because a broken header is a
+different message from a second target and needs different advice: nothing to do, alignment
+works on the stars, not on the header entry.
+
+The outlier rule requires **both**: fewer than three frames AND less than 5 % of the series. A
+pure ratio threshold does not work — with 50 frames, 2 % is exactly one, and the broken header
+would slip through. A pure count threshold does not work either — with three frames in total,
+one of them is a third of the data. Both cases are covered by tests.
+
+The counter-test that matters: on the `whirl` folder with genuinely five targets the span stays
+at **24.3 degrees** and the critical warning still fires.
+
+### Three-channel AI models — and the first one is trained
+
+Our own models were single-channel so far: each colour channel separately through the same
+network. That was a deliberate choice (a three-channel network can average the channels and
+destroy colour), but it was no longer the only possible one. `core/ai_restore.py` now knows
+both contracts: the manifest says `channels: 1` or `3`, and that decides whether it computes
+per channel or once with all three. The strict shape check of the ONNX file stays — it simply
+takes the expected channel count from that manifest instead of from the code.
+
+The first colour model is trained: NAFNet width 128, three-channel, 4,000 steps on **24,000
+tiles from our own nights** (Seestar S30, ASI294MC Pro, ASI533MC Pro).
+
+And the number that counts is not the pretty one: on the synthetic test bench it reaches a
+factor of **69**, on REAL leave-one-out pairs **2.32** (median 2.71; 7.3 % of tiles get worse).
+That gap is known and expensive — an earlier model reported 73.4 synthetically and did nothing
+on real frames (1.05). The model manifest therefore now carries the real-pair measurement
+itself, under `echte_paare`.
+
+On a real single frame (M51, ASI294MC Pro, 120 s): background noise **0.001003 to 0.000161**,
+total flux 1.00036, star width unchanged (16 pixels above half maximum). On a FINISHED stack of
+203 frames, by contrast: factor **1.02** — there is nothing left to do there, stacking has
+already done the work. So the model belongs where few frames are available, not behind a deep
+stack. It stays `experimental` and runs only with `--ki-experimentell`.
+
 ### 90 % of the "noise pairs" was not noise
 
 The real training pairs are built leave-one-out: `rauschig` is ONE registered frame, `sauber`

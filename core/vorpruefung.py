@@ -197,11 +197,46 @@ def uebersicht(koepfe, gesamt=None):
             groessen[(int(b), int(ho))] += 1
     # Wie weit liegen die Ausrichtungen auseinander? Ein Wert, keine Liste — es geht nur um die
     # Frage, ob hier ein Feld aufgenommen wurde oder mehrere.
+    #
+    # Der Abstand zum MITTELWERT taugt dafuer nicht: ein einziger Kopf mit falscher Koordinate
+    # zieht den Mittelwert weg UND setzt das Maximum. An NGC 7023 gemessen — 215 Aufnahmen,
+    # eine einzige mit DEC +28,81 statt +68,18 (Fehlmeldung der Montierung) — meldete die
+    # Vorpruefung "Ausrichtungen bis 78,4 Grad auseinander" und riet KRITISCH dazu, den Ordner
+    # nach Objekten zu trennen. Die anderen 214 lagen innerhalb von 0,12 Grad.
+    #
+    # Darum wird gruppiert statt gemittelt: Felder mit weniger als 2 % der Aufnahmen (mindestens
+    # aber 2) sind Ausreisser und zaehlen fuer die Spanne nicht mit. Sie verschwinden nicht,
+    # sie werden getrennt gemeldet — ein kaputter Kopf ist eine andere Nachricht als ein
+    # zweites Ziel, und sie braucht einen anderen Rat.
     spanne_grad = None
+    ausreisser_richtung = 0
     if len(richtungen) >= 2:
-        mitte = (sum(x for x, _y in richtungen) / len(richtungen),
-                 sum(y for _x, y in richtungen) / len(richtungen))
-        spanne_grad = max(_winkelabstand(r, mitte) for r in richtungen) * 2.0
+        zuordnung, mitten = _felder_bilden(richtungen)
+        haeufig = collections.Counter(zuordnung)
+        # Was unterscheidet einen kaputten Kopfeintrag von einem zweiten Ziel? Ein zweites
+        # Ziel hat MEHRERE Aufnahmen — niemand belichtet ein Objekt genau einmal. Ein
+        # Fehleintrag der Montierung trifft eine oder zwei.
+        #
+        # Darum beides fordern, absolut UND relativ: Ausreisser ist ein Feld nur, wenn es
+        # weniger als drei Aufnahmen hat und dabei unter 5 % der Serie bleibt. Eine reine
+        # Verhaeltnisschwelle taugt nicht — bei 50 Aufnahmen waeren 2 % genau eine, und der
+        # kaputte Kopf kaeme durch. Eine reine Stueckzahlschwelle taugt auch nicht — bei drei
+        # Aufnahmen insgesamt ist eine davon ein Drittel der Daten und kein Ausreisser.
+        echte = [i for i, n in haeufig.items()
+                 if n >= 3 or n >= 0.05 * len(richtungen)]
+        ausreisser_richtung = sum(n for i, n in haeufig.items() if i not in echte)
+        if echte:
+            # Ueber die BEHALTENEN Aufnahmen messen, nicht nur ueber die Feldmitten: bei einem
+            # einzigen Feld waere der Abstand der Mitten sonst 0, und die Zeile "Ausrichtungen
+            # bis 0,00 Grad auseinander" verschwiege die echten 0,12 Grad Dithering.
+            behalten = [r for r, z in zip(richtungen, zuordnung) if z in echte]
+            mitte = (sum(x for x, _y in behalten) / len(behalten),
+                     sum(y for _x, y in behalten) / len(behalten))
+            spanne_grad = max(_winkelabstand(r, mitte) for r in behalten) * 2.0
+        else:
+            # Alle Felder sind klein — dann ist keines ein Ausreisser, und die volle Spanne gilt.
+            spanne_grad = max(_winkelabstand(a, b) for a in mitten for b in mitten)
+            ausreisser_richtung = 0
     zeitraum_min = None
     if len(zeitpunkte) >= 2:
         try:
@@ -220,6 +255,7 @@ def uebersicht(koepfe, gesamt=None):
         "verstaerkungen": dict(verstaerkungen),
         "naechte": sorted(naechte),
         "richtungsspanne_grad": spanne_grad,
+        "richtung_ausreisser": ausreisser_richtung,
         "gesamt_minuten": ((gesamt_s / 60.0)
                            * (float(gesamt) / max(1, len(koepfe)) if gesamt else 1.0)
                            if gesamt_s > 0 else None),
@@ -273,6 +309,21 @@ def pruefen(uebersicht_, *, align_mode=None, hat_dark=None, hat_flat=None):
             "Aufnahmen einer Serie weggeworfen." % spanne,
             "Nach Objekt trennen und getrennt stapeln. Fuer ein Mosaik ist der Mosaik-Modus "
             "zustaendig, nicht der Astro-Stapel.",
+            None))
+
+    # Ein einzelner Kopf mit falscher Koordinate ist etwas anderes als ein zweites Ziel im
+    # Ordner. Der Rat "trenne deine Daten" waere hier falsch — es gibt nichts zu trennen.
+    ausreisser = u.get("richtung_ausreisser") or 0
+    if ausreisser:
+        raete.append(Rat(
+            HINWEIS, "Einzelne Aufnahmen mit unglaubwuerdiger Koordinate",
+            "%d von %d Aufnahmen tragen eine Himmelsrichtung im Kopf, die weit von allen "
+            "anderen abliegt. Das ist meist eine Fehlmeldung der Montierung waehrend der "
+            "Aufnahme, kein zweites Ziel — an NGC 7023 gesehen: eine Aufnahme mit DEC +28,8 "
+            "statt +68,2, die uebrigen 214 innerhalb von 0,12 Grad."
+            % (ausreisser, u.get("gelesen") or u.get("anzahl") or 0),
+            "Nichts zu tun: die Ausrichtung arbeitet an den Sternen, nicht am Kopfeintrag. Die "
+            "Angabe zaehlt nur nicht mehr fuer die Feldspanne mit.",
             None))
 
     groessen = u.get("bildgroessen") or {}

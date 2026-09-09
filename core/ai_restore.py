@@ -73,7 +73,11 @@ def _manifest(path, cancel=None):
             raise ValueError("unbekannte Modellaufgabe")
         if data.get("output") != "complete_target":
             raise ValueError("unbekannte Ausgabe-Semantik; erwartet wird complete_target")
-        for key, expected in (("channels", 1), ("tile_size", TILE_SIZE), ("halo", HALO)):
+        # Kanalzahl: 1 (jeder Farbkanal einzeln) oder 3 (das Netz sieht Farbe). Beides sind
+        # bekannte Vertraege, alles andere wird nicht geraten.
+        if type(data.get("channels")) is not int or data["channels"] not in (1, 3):
+            raise ValueError("unpassender Modellvertrag: channels")
+        for key, expected in (("tile_size", TILE_SIZE), ("halo", HALO)):
             if type(data.get(key)) is not int or data[key] != expected:
                 raise ValueError("unpassender Modellvertrag: " + key)
         normalization = data.get("normalization")
@@ -167,7 +171,8 @@ def _execution_record(device):
             "applied": False}
 
 
-def _create_session(content, *, device="auto", execution=None, log=log_print, cancel=None):
+def _create_session(content, *, device="auto", execution=None, log=log_print, cancel=None,
+                    kanaele=1):
     _cancelled(cancel)
     device = _device(device)
     if execution is None:
@@ -249,9 +254,14 @@ def _create_session(content, *, device="auto", execution=None, log=log_print, ca
             inputs, outputs = session.get_inputs(), session.get_outputs()
             if (len(inputs) != 1 or len(outputs) != 1
                     or inputs[0].type != "tensor(float)" or outputs[0].type != "tensor(float)"
-                    or list(inputs[0].shape) != [1, 1, TILE_SIZE, TILE_SIZE]
-                    or list(outputs[0].shape) != [1, 1, TILE_SIZE, TILE_SIZE]):
-                raise ValueError("erwartet wird genau ein Float32-Ein-/Ausgang mit Form 1×1×256×256")
+                    or list(inputs[0].shape) != [1, kanaele, TILE_SIZE, TILE_SIZE]
+                    or list(outputs[0].shape) != [1, kanaele, TILE_SIZE, TILE_SIZE]):
+                # Die Pruefung bleibt hart — sie stellt sicher, dass die ONNX-Datei zu dem
+                # Vertrag passt, den ihr Ausweis behauptet. Nur die erwartete Kanalzahl kommt
+                # jetzt aus eben diesem Ausweis statt fest aus dem Code.
+                raise ValueError(
+                    "erwartet wird genau ein Float32-Ein-/Ausgang mit Form 1×%d×%d×%d"
+                    % (kanaele, TILE_SIZE, TILE_SIZE))
             attempt["status"] = "ready"
             execution.update(provider=provider, registered_providers=registered,
                              provider_options=provider_options)
@@ -291,7 +301,9 @@ def _predict(session, input_name, output_name, tile, cancel):
     except Exception as exc:
         raise _InferenceError("KI-Inferenz fehlgeschlagen: %s" % exc) from exc
     _cancelled(cancel)
-    if prediction.shape != (1, 1, TILE_SIZE, TILE_SIZE) or not np.isfinite(prediction).all():
+    # Die Ausgabe muss zur EINGABE passen — die Kanalzahl steht schon in `tile`, sie muss
+    # hier nicht ein zweites Mal durchgereicht werden.
+    if prediction.shape != tile.shape or not np.isfinite(prediction).all():
         raise _InferenceError("Das KI-Modell lieferte ungültige Pixel oder eine unpassende Bildgröße.")
     return prediction
 
@@ -333,7 +345,8 @@ def _global_background(image, session, input_name, output_name, offset, scale, s
     return result
 
 
-def _infer(image, content, strength, progress, cancel, task="denoise", *, device="auto", log=log_print):
+def _infer(image, content, strength, progress, cancel, task="denoise", *, device="auto",
+           log=log_print, modell_kanaele=1):
     # Shared statistics across all channels, never per tile or per channel.
     low, high = np.percentile(image, [.1, 99.9])
     offset, scale = float(low), max(float(high) - float(low), 1e-6)
@@ -353,11 +366,13 @@ def _infer(image, content, strength, progress, cancel, task="denoise", *, device
             progress(1, 1)
         return image.copy(), info
     execution = info["execution"]
-    session, input_name, output_name = _create_session(content, device=device, execution=execution, log=log, cancel=cancel)
+    session, input_name, output_name = _create_session(
+        content, device=device, execution=execution, log=log, cancel=cancel,
+        kanaele=int(modell_kanaele))
     retry_cpu = False
     try:
         result = _infer_session(image, session, input_name, output_name, offset, scale,
-                                strength, progress, cancel, task)
+                                strength, progress, cancel, task, modell_kanaele)
     except _InferenceError as exc:
         _cancelled(cancel)
         if execution["provider"] not in {_PROVIDERS[name] for name in ("cuda", "directml", "coreml")}:
@@ -374,14 +389,17 @@ def _infer(image, content, strength, progress, cancel, task="denoise", *, device
         # the failed session and partially accumulated image-sized arrays.
         session = None
         _cancelled(cancel)
-        session, input_name, output_name = _create_session(content, device="cpu", execution=execution, log=log, cancel=cancel)
+        session, input_name, output_name = _create_session(
+            content, device="cpu", execution=execution, log=log, cancel=cancel,
+            kanaele=int(modell_kanaele))
         result = _infer_session(image, session, input_name, output_name, offset, scale,
-                                strength, progress, cancel, task)
+                                strength, progress, cancel, task, modell_kanaele)
     execution["applied"] = True
     return result, info
 
 
-def _infer_session(image, session, input_name, output_name, offset, scale, strength, progress, cancel, task):
+def _infer_session(image, session, input_name, output_name, offset, scale, strength,
+                   progress, cancel, task, modell_kanaele=1):
     """One complete image attempt; no accumulated values survive a retry."""
     if task == "background":
         return _global_background(image, session, input_name, output_name, offset, scale,
@@ -396,41 +414,62 @@ def _infer_session(image, session, input_name, output_name, offset, scale, stren
     window[:overlap], window[-overlap:] = ramp, ramp[::-1]
     weights = window[:, None] * window[None, :]
     result = np.empty_like(image)
-    total, done = ny * nx * channels, 0
+    # Ein Farbmodell sieht alle drei Kanaele auf einmal — es KANN Farbe verrechnen, und
+    # genau dafuer ist es da. Ein Mono-Modell bekommt jeden Kanal einzeln; das war die
+    # bewusste Entscheidung dahinter, damit es die Kanaele nicht mitteln und so die Farbe
+    # zerstoeren kann. Beide brauchen denselben Kachelrahmen, nur die Schleife unterscheidet
+    # sich.
+    farbmodell = int(modell_kanaele) == 3
+    if farbmodell and channels != 3:
+        raise ForgePixFehler(
+            "Das Farbmodell erwartet drei Kanaele, das Bild hat %d." % channels)
+    durchgaenge = 1 if farbmodell else channels
+    total, done = ny * nx * durchgaenge, 0
     if progress:
         progress(0, total)
-    for channel in range(channels):
+    for durchgang in range(durchgaenge):
         _cancelled(cancel)
-        plane = image if image.ndim == 2 else image[..., channel]
+        plane = image if farbmodell or image.ndim == 2 else image[..., durchgang]
         # Calculate in float64 to avoid overflow of finite physical pixel values,
         # then use the explicitly float32 network contract without clipping.
         normalized = ((plane.astype(np.float64) - offset) / scale).astype(np.float32)
         if not np.isfinite(normalized).all():
             raise ForgePixFehler("Die Bilddynamik überschreitet den Bereich des KI-Modells.")
-        padded = np.pad(normalized, ((HALO, ph - h - HALO), (HALO, pw - w - HALO)), mode="reflect")
-        accumulator, denominator = np.zeros((ph, pw), np.float32), np.zeros((ph, pw), np.float32)
+        rand = ((HALO, ph - h - HALO), (HALO, pw - w - HALO))
+        padded = np.pad(normalized, rand + (((0, 0),) if farbmodell else ()), mode="reflect")
+        accumulator = np.zeros((ph, pw, 3) if farbmodell else (ph, pw), np.float32)
+        denominator = np.zeros((ph, pw), np.float32)
         for y in range(0, ph - TILE_SIZE + 1, STRIDE):
             for x in range(0, pw - TILE_SIZE + 1, STRIDE):
                 _cancelled(cancel)
-                tile = np.ascontiguousarray(padded[y:y + TILE_SIZE, x:x + TILE_SIZE][None, None])
+                aus = padded[y:y + TILE_SIZE, x:x + TILE_SIZE]
+                # Das Netz will die Kanaele vorn: (h, w, 3) -> (1, 3, h, w).
+                tile = np.ascontiguousarray(
+                    aus.transpose(2, 0, 1)[None] if farbmodell else aus[None, None])
                 prediction = _predict(session, input_name, output_name, tile, cancel)
-                accumulator[y:y + TILE_SIZE, x:x + TILE_SIZE] += prediction[0, 0] * weights
+                if farbmodell:
+                    accumulator[y:y + TILE_SIZE, x:x + TILE_SIZE] += (
+                        prediction[0].transpose(1, 2, 0) * weights[..., None])
+                else:
+                    accumulator[y:y + TILE_SIZE, x:x + TILE_SIZE] += prediction[0, 0] * weights
                 denominator[y:y + TILE_SIZE, x:x + TILE_SIZE] += weights
                 done += 1
                 if progress:
                     progress(done, total)
         region = np.s_[HALO:HALO + h, HALO:HALO + w]
-        predicted = accumulator[region].astype(np.float64) / denominator[region]
+        teiler = denominator[region]
+        predicted = accumulator[region].astype(np.float64) / (
+            teiler[..., None] if farbmodell else teiler)
         restored = offset + scale * predicted
         mixed = plane.astype(np.float64) + strength * (restored - plane)
         with np.errstate(over="ignore", invalid="ignore"):
             mixed = mixed.astype(np.float32)
         if not np.isfinite(mixed).all():
             raise ForgePixFehler("Die KI-Verarbeitung erzeugte Werte außerhalb des Float32-Bereichs.")
-        if image.ndim == 2:
+        if farbmodell or image.ndim == 2:
             result[...] = mixed
         else:
-            result[..., channel] = mixed
+            result[..., durchgang] = mixed
     return result
 
 
@@ -439,7 +478,9 @@ def restore(image, model_id, *, model_dir=None, strength=.5, allow_experimental=
     """Restore an array without changing its channel order; return a float32 array."""
     source, manifest, content, strength = _prepare(image, model_id, model_dir, strength, allow_experimental, cancel)
     log("Lokale experimentelle KI: %s; Stärke %.0f %%" % (manifest["task"], strength * 100))
-    result, _ = _infer(source, content, strength, progress, cancel, task=manifest["task"], device=device, log=log)
+    result, _ = _infer(source, content, strength, progress, cancel, task=manifest["task"],
+                       device=device, log=log,
+                       modell_kanaele=int(manifest.get("channels", 1) or 1))
     _cancelled(cancel)
     return result
 

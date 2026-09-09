@@ -6,6 +6,8 @@ import sys
 import tempfile
 import threading
 import unittest
+import unittest.mock
+import types
 from unittest.mock import patch
 
 import numpy as np
@@ -219,10 +221,15 @@ class AIRestoreTests(unittest.TestCase):
             with self.assertRaisesRegex(ForgePixFehler, "neben dem Manifest"):
                 self._restore(np.ones((2, 2)), strength=0)
         self.manifest["model_file"] = "model.onnx"
-        self.manifest["channels"] = 3
-        self._save_manifest()
-        with self.assertRaisesRegex(ForgePixFehler, "channels"):
-            self._restore(np.ones((2, 2)), strength=0)
+        # 1 und 3 Kanaele sind bekannte Vertraege (mono bzw. farbig). Alles andere bleibt
+        # abgelehnt: die Normierung eines Modells laesst sich aus den Gewichten nicht ablesen,
+        # und ein falsch normierter Entrauscher macht Bilder schlechter, ohne zu scheitern.
+        for value in (0, 2, 4, "3", None):
+            self.manifest["channels"] = value
+            self._save_manifest()
+            with self.assertRaisesRegex(ForgePixFehler, "channels"):
+                self._restore(np.ones((2, 2)), strength=0)
+        self.manifest["channels"] = 1
 
     def test_unknown_or_missing_model_output_contract_is_rejected(self):
         for value in (None, "residual", "noise"):
@@ -529,3 +536,64 @@ class AIRestoreTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FarbmodellVertrag(unittest.TestCase):
+    """Ein dreikanaliges Modell muss durchlaufen — und die Formpruefung muss trotzdem greifen.
+
+    Die Kachelschleife rechnete fest je Kanal mit Form 1x1x256x256. Ein Farbmodell scheiterte
+    daran an drei Stellen nacheinander: am Ausweis-Vertrag, an der Formpruefung der
+    ONNX-Sitzung und an der Formpruefung der Vorhersage. Alle drei sind sinnvolle Sperren; sie
+    duerfen nur nicht die Kanalzahl erfinden, sondern muessen sie aus dem Ausweis nehmen.
+    """
+
+    def test_dreikanalige_form_wird_erwartet_und_falsche_abgelehnt(self):
+        import ai_restore
+        aufrufe = []
+
+        class Sitzung:
+            def __init__(self, kanaele):
+                self.kanaele = kanaele
+
+            def get_inputs(self):
+                return [types.SimpleNamespace(
+                    name="image", type="tensor(float)",
+                    shape=[1, self.kanaele, ai_restore.TILE_SIZE, ai_restore.TILE_SIZE])]
+
+            def get_outputs(self):
+                return [types.SimpleNamespace(
+                    name="restored", type="tensor(float)",
+                    shape=[1, self.kanaele, ai_restore.TILE_SIZE, ai_restore.TILE_SIZE])]
+
+            def run(self, _namen, speisung):
+                kachel = speisung["image"]
+                aufrufe.append(kachel.shape)
+                return [kachel * 0.5]
+
+            def disable_fallback(self):
+                pass
+
+            def get_providers(self):
+                return ["CPUExecutionProvider"]
+
+        def sitzung_bauen(_inhalt, **kw):
+            s = Sitzung(int(kw.get("kanaele", 1)))
+            if kw.get("execution") is not None:
+                kw["execution"].update(provider="CPUExecutionProvider",
+                                       registered_providers=["CPUExecutionProvider"],
+                                       provider_options={})
+            return s, "image", "restored"
+
+        bild = np.random.default_rng(3).random((300, 300, 3)).astype(np.float32)
+        with unittest.mock.patch.object(ai_restore, "_create_session", sitzung_bauen):
+            erg, _info = ai_restore._infer(bild, b"", 1.0, None, None, task="denoise",
+                                           modell_kanaele=3)
+        self.assertEqual(erg.shape, bild.shape)
+        # EIN Durchgang mit drei Kanaelen, nicht drei mit je einem.
+        self.assertTrue(all(f[1] == 3 for f in aufrufe), aufrufe[:3])
+
+        # Ein Farbmodell auf ein Graubild loszulassen muss scheitern, nicht raten.
+        grau = np.zeros((300, 300), np.float32)
+        with unittest.mock.patch.object(ai_restore, "_create_session", sitzung_bauen):
+            with self.assertRaisesRegex(ForgePixFehler, "drei Kanaele"):
+                ai_restore._infer(grau, b"", 1.0, None, None, task="denoise", modell_kanaele=3)

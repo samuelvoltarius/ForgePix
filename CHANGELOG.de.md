@@ -8,6 +8,57 @@ Alle nennenswerten Änderungen an ForgePix. Format orientiert an
 
 ## [Unreleased]
 
+### Ein einziger falscher Kopfeintrag riet dazu, den Ordner zu zerlegen
+
+Die Vorpruefung meldet, wenn in einem Ordner mehrere Himmelsausschnitte stecken — ein sinnvoller
+Rat, denn beim Stapeln fallen die Aufnahmen des zweiten Ziels als „nicht ausrichtbar" heraus,
+ohne dass jemand erfaehrt, dass es sie gab. Nur war die Spanne als *Abstand zum Mittelwert x 2*
+gerechnet, und ein einziger Ausreisser zieht den Mittelwert weg UND setzt das Maximum.
+
+An NGC 7023 gemessen: **215 Aufnahmen, davon eine einzige mit DEC +28,81 statt +68,18** (eine
+Fehlmeldung der Montierung waehrend der Aufnahme). Die Vorpruefung meldete daraufhin
+„Ausrichtungen bis **78,4 Grad** auseinander" und riet KRITISCH dazu, den Ordner nach Objekten
+zu trennen. Die anderen 214 Aufnahmen lagen innerhalb von 0,12 Grad. Es gab nichts zu trennen.
+
+Jetzt werden die Richtungen zu Feldern gruppiert (die Funktion dafuer gab es schon) und die
+Spanne ueber die BEHALTENEN Aufnahmen bestimmt: **0,43 Grad** statt 78,4 — unter der Schwelle,
+keine Warnung. Der Ausreisser verschwindet nicht, er bekommt seinen eigenen Hinweis, weil ein
+kaputter Kopf eine andere Nachricht ist als ein zweites Ziel und einen anderen Rat braucht:
+nichts zu tun, die Ausrichtung arbeitet an den Sternen, nicht am Kopfeintrag.
+
+Die Ausreisser-Regel fordert **beides**: weniger als drei Aufnahmen UND unter 5 % der Serie.
+Eine reine Verhaeltnisschwelle taugt nicht — bei 50 Aufnahmen waeren 2 % genau eine, und der
+kaputte Kopf kaeme durch. Eine reine Stueckzahlschwelle taugt auch nicht — bei drei Aufnahmen
+insgesamt ist eine davon ein Drittel der Daten. Beide Faelle stehen als Test.
+
+Die Gegenprobe, die zaehlt: am Ordner `whirl` mit wirklich fuenf Zielen bleibt die Spanne bei
+**24,3 Grad** und die kritische Warnung kommt weiter.
+
+### Dreikanalige KI-Modelle — und das erste ist trainiert
+
+Die eigenen Modelle waren bisher einkanalig: jeder Farbkanal einzeln durch dasselbe Netz. Das
+war eine bewusste Entscheidung (ein dreikanaliges Netz kann die Kanaele mitteln und so Farbe
+zerstoeren), aber sie war nicht mehr die einzige moegliche. `core/ai_restore.py` kennt jetzt
+beide Vertraege: der Ausweis sagt `channels: 1` oder `3`, und danach richtet sich, ob je Kanal
+oder einmal mit allen dreien gerechnet wird. Die harte Formpruefung der ONNX-Datei bleibt — sie
+nimmt die erwartete Kanalzahl nur nicht mehr fest aus dem Code, sondern aus eben diesem Ausweis.
+
+Das erste Farbmodell ist trainiert: NAFNet width 128, dreikanalig, 4 000 Schritte auf **24 000
+Kacheln aus eigenen Naechten** (Seestar S30, ASI294MC Pro, ASI533MC Pro).
+
+Und die Zahl, auf die es ankommt, ist nicht die schoene: am synthetischen Pruefstand erreicht
+es Faktor **69**, an ECHTEN Leave-one-out-Paaren **2,32** (Median 2,71; 7,3 % der Kacheln
+werden schlechter). Diese Luecke ist bekannt und teuer — ein frueheres Modell meldete 73,4
+synthetisch und tat an echten Aufnahmen nichts (1,05). Darum traegt der Modellausweis die
+Messung an echten Paaren jetzt selbst, unter `echte_paare`.
+
+An einer echten Einzelaufnahme (M51, ASI294MC Pro, 120 s): Untergrundrauschen **0,001003 auf
+0,000161**, Gesamtfluss 1,00036, Sternbreite unveraendert (16 Pixel ueber halber Hoehe). Auf
+einem FERTIGEN Stapel aus 203 Aufnahmen dagegen: Faktor **1,02** — dort ist nichts mehr zu
+tun, das Stapeln hat die Arbeit schon gemacht. Das Modell gehoert also dorthin, wo wenige
+Aufnahmen vorliegen, nicht hinter einen tiefen Stapel. Es bleibt `experimental` und laeuft nur
+mit `--ki-experimentell`.
+
 ### 90 % der „Rauschpaare" waren gar kein Rauschen
 
 Die echten Trainingspaare entstehen leave-one-out: `rauschig` ist EINE registrierte Aufnahme,
