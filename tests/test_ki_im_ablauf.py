@@ -35,6 +35,8 @@ import shutil
 import sys
 import tempfile
 import unittest
+import unittest.mock
+import types
 
 import numpy as np
 
@@ -152,3 +154,47 @@ class TestAnwendung(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class ModellauswahlIstEindeutig(unittest.TestCase):
+    """Zwei Modelle fuer dieselbe Aufgabe duerfen nicht per Verzeichnisreihenfolge entschieden
+    werden.
+
+    Seit es Farbmodelle gibt, kann fuer `denoise` ein einkanaliges UND ein dreikanaliges Modell
+    im Ordner liegen. Vorher gewann, was der Scan zuerst lieferte — derselbe Aufruf haette je
+    nach Dateisystem ein anderes Bild ergeben, ohne dass es jemand erfaehrt.
+    """
+
+    def _args(self, **kw):
+        return types.SimpleNamespace(ki_aus=False, ki_experimentell=True,
+                                     ki_modellordner=None, **kw)
+
+    def _modelle(self, *eintraege):
+        return [dict(dict(task="denoise", available=True, release_approved=False,
+                          status="experimental", channels=1), **e) for e in eintraege]
+
+    def test_freigegeben_schlaegt_experimentell_schlaegt_kanalzahl(self):
+        import focus_cull_stack as f
+        import ai_restore
+        faelle = [
+            # (Eintraege, erwartete Kennung)
+            (self._modelle(dict(id="a-mono", channels=1), dict(id="b-farbe", channels=3)),
+             "b-farbe"),
+            # Umgekehrte Reihenfolge im Scan darf nichts aendern.
+            (self._modelle(dict(id="b-farbe", channels=3), dict(id="a-mono", channels=1)),
+             "b-farbe"),
+            # Freigegeben gewinnt gegen mehr Kanaele.
+            (self._modelle(dict(id="a-mono", channels=1, release_approved=True),
+                           dict(id="b-farbe", channels=3)),
+             "a-mono"),
+            # Gleichstand: alphabetisch, damit es ueberhaupt eine Antwort gibt.
+            (self._modelle(dict(id="zwei", channels=3), dict(id="eins", channels=3)),
+             "zwei"),
+        ]
+        for eintraege, erwartet in faelle:
+            with self.subTest(erwartet=erwartet):
+                args = self._args()
+                with unittest.mock.patch.object(ai_restore, "list_models",
+                                                lambda _d=None, e=eintraege: e):
+                    self.assertEqual(f._ki_modelle(args, log=lambda *a: None)["denoise"],
+                                     erwartet)

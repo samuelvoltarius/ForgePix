@@ -2881,11 +2881,28 @@ def _ki_modelle(args, log=print):
                 continue
             if not eintrag.get("release_approved") and not experimentell:
                 continue
-            # Bei mehreren Modellen fuer dieselbe Aufgabe hat das freigegebene Vorrang.
+            # Bei mehreren Modellen fuer dieselbe Aufgabe: erst das freigegebene, dann das
+            # mit mehr Kanaelen, dann alphabetisch. Ohne feste Reihenfolge entschied die
+            # Reihenfolge des Verzeichnisscans — mit einem Mono- UND einem Farbmodell fuer
+            # `denoise` haette derselbe Aufruf je nach Dateisystem ein anderes Ergebnis
+            # geliefert, ohne dass es jemand erfaehrt.
+            rang = (bool(eintrag.get("release_approved")),
+                    int(eintrag.get("channels") or 1),
+                    eintrag["id"])
             bisher = auswahl.get(aufgabe)
-            if bisher is None or (eintrag.get("release_approved") and not bisher[1]):
-                auswahl[aufgabe] = (eintrag["id"], bool(eintrag.get("release_approved")))
-        auswahl = {k: v[0] for k, v in auswahl.items()}
+            if bisher is None or rang > bisher[0]:
+                auswahl[aufgabe] = (rang, eintrag["id"], [] if bisher is None else bisher[2])
+            if bisher is not None:
+                # Die unterlegene Kennung mitfuehren, damit im Protokoll steht, wogegen
+                # entschieden wurde.
+                sieger = auswahl[aufgabe]
+                verloren = bisher[1] if sieger[1] == eintrag["id"] else eintrag["id"]
+                auswahl[aufgabe] = (sieger[0], sieger[1], sieger[2] + [verloren])
+        for aufgabe, (_r, kennung, andere) in auswahl.items():
+            if andere:
+                log("  Mehrere KI-Modelle fuer %s: %s gewaehlt (statt %s)"
+                    % (aufgabe, kennung, ", ".join(sorted(andere))))
+        auswahl = {k: v[1] for k, v in auswahl.items()}
     except Exception as e:
         log("  (eigene KI-Modelle nicht verfuegbar: %s)" % e)
         auswahl = {}

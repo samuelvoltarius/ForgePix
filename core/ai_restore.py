@@ -123,6 +123,10 @@ def list_models(model_dir=None):
         entry = {"id": raw.get("id", path.parent.name), "task": raw.get("task"),
                  "status": raw.get("status", "experimental"),
                  "release_approved": raw.get("release_approved") is True,
+                 # Die Kanalzahl gehoert in die Liste: wer zwei Modelle fuer dieselbe Aufgabe
+                 # hat (mono und farbig), muss auswaehlen koennen, statt zu nehmen, was der
+                 # Verzeichnisscan zufaellig zuerst liefert.
+                 "channels": raw.get("channels"),
                  "manifest_path": str(path.resolve()), "available": False, "reason": ""}
         try:
             _manifest(path)
