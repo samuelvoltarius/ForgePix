@@ -2026,14 +2026,29 @@ def _load_astro_calibration(input_dir, args, paths):
             _dp = (list_images(_dspec) or [None])[0] if os.path.isdir(_dspec) else _dspec
             _dt = _belichtung(_dp)
         _lt = _belichtung(_lp)
-        if _lt and _dt and abs(_lt - _dt) > max(0.05 * _dt, 0.5):
+        # Umgerechnet werden muss aus ZWEI Gruenden — Belichtungszeit ODER Temperatur. Bisher
+        # loeste nur die Belichtungszeit aus. Bei gleichen Zeiten und abweichender Temperatur —
+        # dem haeufigsten Fall einer Dark-Bibliothek — wurde `dark_skalieren` nie aufgerufen,
+        # obwohl die Funktion den Temperaturteil kann und ihre Beschreibung ihn nennt. Der
+        # Schalter war fuer seinen eigenen Zweck unerreichbar.
+        _ltemp, _dtemp = _ccd_temp(_lp), _ccd_temp(_dp)
+        _zeit_passt_nicht = bool(_lt and _dt and abs(_lt - _dt) > max(0.05 * _dt, 0.5))
+        _temp_passt_nicht = bool(_ltemp is not None and _dtemp is not None
+                                 and abs(_ltemp - _dtemp) >= 0.5)
+        if _zeit_passt_nicht or _temp_passt_nicht:
             if getattr(args, "dark_skalieren", False):
-                dark = astro.dark_skalieren(dark, _lt, _dt, bias=bias,
-                                            ziel_temp=_ccd_temp(_lp), dark_temp=_ccd_temp(_dp))
-            else:
+                dark = astro.dark_skalieren(dark, _lt or _dt, _dt or _lt, bias=bias,
+                                            ziel_temp=_ltemp, dark_temp=_dtemp)
+            elif _zeit_passt_nicht:
                 print("  Achtung: Lights %.0f s, Darks %.0f s — das Dark passt nicht. "
                       "Mit --dark-skalieren umrechnen (bei IMX294/ASI294MC Pro besser NICHT)."
                       % (_lt, _dt), file=sys.stderr)
+            else:
+                print("  Achtung: Lights %.1f °C, Darks %.1f °C — der Dunkelstrom verdoppelt "
+                      "sich je etwa 6 Grad, das Dark zieht also zu %s ab. Mit "
+                      "--dark-skalieren umrechnen (bei IMX294/ASI294MC Pro besser NICHT)."
+                      % (_ltemp, _dtemp, "viel" if _dtemp > _ltemp else "wenig"),
+                      file=sys.stderr)
 
     return dark, flat, bias
 

@@ -65,11 +65,30 @@ def _compare(reference, candidate, fields, unknown, tolerances=None):
                 "Bitte eine zusammengehörige Serie und passende Kalibrierbilder wählen.")
 
 
+# Wie weit die Sensortemperatur eines Darks von den Lights abweichen darf.
+#
+# OHNE `--dark-skalieren` sind 2 K die Grenze: der Dunkelstrom verdoppelt sich je etwa 6 Grad,
+# 2 K sind also schon 26 % Unterschied, die unkorrigiert abgezogen wuerden.
+#
+# MIT `--dark-skalieren` ist genau diese Abweichung das, was korrigiert wird — sie zu
+# verbieten hiess, den Schalter fuer seinen eigenen Zweck zu sperren. Die Grenze bleibt aber
+# endlich: das Modell 2^(dT/6) beschreibt den mittleren Dunkelstrom, nicht das Verhalten
+# einzelner heisser Pixel, und die werden bei groesseren Spruengen nicht mehr vom selben
+# Faktor getroffen. 10 K ist als Modellgrenze gesetzt, NICHT gemessen — wer sie ausreizt,
+# sollte das Ergebnis ansehen.
+TEMPERATUR_TOLERANZ_K = 2.0
+TEMPERATUR_TOLERANZ_SKALIERT_K = 10.0
+
+
 def validate(lights, masters, *, scale_dark=False):
     """Reject known mismatches, return a report of checks and missing metadata.
 
     masters maps dark/flat/bias to lists. Dark exposure scaling remains an explicit
     pipeline option; source darks must still share their own exposure and temperature.
+
+    `scale_dark` weitet die Temperaturtoleranz fuer das Dark gegen die Lights — die Abweichung
+    wird dann ja umgerechnet. Die Darks UNTEREINANDER muessen weiter zusammenpassen: ein
+    Master aus Aufnahmen verschiedener Temperatur ist schon vor jeder Skalierung falsch.
     """
     unknown = set()
     light_meta = [m for p in lights if (m := read_metadata(p)) is not None]
@@ -87,12 +106,15 @@ def validate(lights, masters, *, scale_dark=False):
                     fields += ("temperature",)
                     if not scale_dark:
                         fields += ("exposure",)
+                toleranz = {"exposure": .5,
+                            "temperature": (TEMPERATUR_TOLERANZ_SKALIERT_K if scale_dark
+                                            else TEMPERATUR_TOLERANZ_K)}
                 for light in light_meta:
-                    _compare(light, item, fields, unknown, {"temperature": 2.0, "exposure": .5})
+                    _compare(light, item, fields, unknown, toleranz)
             if len(group) > 1:
                 _compare(group[0], item, _SENSOR + ("exposure",)
                          + (("filter",) if kind == "flat" else ("temperature",)),
-                         unknown, {"temperature": 2.0})
+                         unknown, {"temperature": TEMPERATUR_TOLERANZ_K})
     return {"fits_lights_checked": len(light_meta),
             "fits_calibration_checked": {k: len(v) for k, v in groups.items()},
             "missing_metadata": sorted(unknown), "known_mismatches": 0,
