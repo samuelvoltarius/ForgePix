@@ -22,6 +22,22 @@ richtig zu machen: die Summe wird einmal gebildet, und je Aufnahme gilt
 Die Rauschminderung des sauberen Bildes ist sqrt(N-1) — bei 60 Aufnahmen rund 7,7-fach. Das
 ist keine perfekte Wahrheit, aber eine ECHTE, und der Rest ist bekannt und messbar.
 
+EIN SCHRITT FEHLTE, und er war der wichtigste: der HIMMELSPEGEL. Er schwankt von Aufnahme zu
+Aufnahme (Hoehe ueber dem Horizont, Mond, Duns), und das Mittel der uebrigen mittelt darueber
+hinweg. Eine Aufnahme und ihr Leave-one-out-Mittel unterscheiden sich darum nicht nur um
+Rauschen, sondern um einen Sockel. An der ersten Fassung dieser Bank gemessen: **80 % des
+Unterschieds zwischen rauschig und sauber war reiner Helligkeitsversatz** (5..95 % der
+Kacheln: −0,40 bis +0,33 der Kachelskala), nur 20 % war Rauschen.
+
+Ein Entrauscher kann diesen Sockel nicht erraten — er ist keine Bildeigenschaft, sondern
+Zufall der Nacht. Er zu trainieren heisst, dem Modell beizubringen, die Helligkeit zu
+wuerfeln. Und jede Messung an solchen Paaren misst zu 80 % den Sockel: derselbe Entrauscher
+kam damit auf Faktor 1,03, ohne Sockel auf 1,35 (Median 1,90).
+
+`pegel_angleichen` setzt den Sockel des SAUBEREN Bildes je Kachel und je Kanal auf den des
+rauschigen. Angeglichen wird die Wahrheit, nicht der Eingang: der Eingang ist die echte
+Messung und bleibt unangetastet.
+
     python3 training/prepare_paare_echt.py --quellen "F:/astro-nas/astrofotos" "D:/astro" \\
         --output datasets/echte-paare-v1
 """
@@ -35,6 +51,24 @@ from concurrent.futures import ProcessPoolExecutor
 
 import numpy as np
 import cv2
+
+
+def pegel_angleichen(rauschig, sauber):
+    """Den Himmelspegel des sauberen Bildes auf den des rauschigen setzen, je Kanal.
+
+    Der Median ist der richtige Schaetzer: Sterne und Nebel heben den MITTELWERT an und
+    zwar in beiden Bildern unterschiedlich stark, den Median aber nicht. Die Unsicherheit
+    des Medians ist bei 256x256 Pixeln vernachlaessigbar gegen den Sockel, den er entfernt.
+
+    Angepasst wird nur der Sockel, nicht die Verstaerkung. Eine Durchsichtsaenderung (Wolken)
+    waere multiplikativ — sie liesse sich aus einer Kachel, die fast nur Himmel enthaelt,
+    aber nicht verlaesslich schaetzen. Das bleibt als bekannte Grenze stehen.
+    """
+    r = np.asarray(rauschig, np.float32)
+    s = np.asarray(sauber, np.float32)
+    achsen = (0, 1) if r.ndim == 3 else None
+    versatz = np.median(r, axis=achsen) - np.median(s, axis=achsen)
+    return s + versatz
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "core"))
 
@@ -177,9 +211,10 @@ def bauen(quellen, ziel, min_subs=30, je_serie=60, kacheln=8, frames=20, groesse
         for i in auswahl:
             sauber_bild = (summe - bilder[i]) / float(n - 1)
             for (y, x) in plaetze:
-                banken["rauschig"].append(bilder[i][y:y+groesse, x:x+groesse].copy())
-                banken["sauber"].append(
-                    sauber_bild[y:y+groesse, x:x+groesse].astype(np.float32))
+                _r = bilder[i][y:y+groesse, x:x+groesse].copy()
+                _s = sauber_bild[y:y+groesse, x:x+groesse].astype(np.float32)
+                banken["rauschig"].append(_r)
+                banken["sauber"].append(pegel_angleichen(_r, _s))
         aufzeichnung.append(dict(serie=name, kamera=kamera, aufnahmen=n,
                                  genutzte_frames=int(len(auswahl)), kacheln=len(plaetze),
                                  rauschminderung=float(np.sqrt(n - 1))))
@@ -197,8 +232,11 @@ def bauen(quellen, ziel, min_subs=30, je_serie=60, kacheln=8, frames=20, groesse
                     serien=aufzeichnung, seed=4711,
                     verfahren=("rauschig = eine registrierte Aufnahme; sauber = Mittel der "
                                "UEBRIGEN derselben Serie (leave-one-out)"),
+                    pegelangleich="Median je Kachel und Kanal, auf das rauschige Bild",
                     grenzen=("Das saubere Bild hat Restrauschen (sqrt(N-1) geringer) und "
-                             "teilt mit dem rauschigen das feste Muster des Sensors."))
+                             "teilt mit dem rauschigen das feste Muster des Sensors. Der "
+                             "Himmelspegel ist angeglichen, eine Durchsichtsaenderung "
+                             "(multiplikativ) dagegen nicht."))
     with open(os.path.join(ziel, "manifest.json"), "w", encoding="utf-8") as fh:
         json.dump(manifest, fh, indent=2, ensure_ascii=False)
     print()

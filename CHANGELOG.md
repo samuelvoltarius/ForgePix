@@ -8,6 +8,30 @@ All notable changes to ForgePix. Format based on
 
 ## [Unreleased]
 
+### 90 % of the "noise pairs" was not noise
+
+The real training pairs are built leave-one-out: `rauschig` is ONE registered frame, `sauber`
+the mean of the remaining frames of the same series. One step was missing, and it was the
+important one — the **sky level**. It varies from frame to frame (altitude, moon, haze), and
+the mean of the others averages across that variation. Measured over the whole bank of 5,760
+pairs: **90.1 % of the difference between noisy and clean was pure brightness offset**, mean
+squared error 5.84e-05 against 5.81e-06 after levelling. Per tile, 5 to 95 % of the offsets
+lay between −0.40 and +0.33 of the tile scale.
+
+That has two consequences, both expensive:
+
+* **Training on it would have taught the model to guess the brightness.** The offset is not a
+  property of the image but an accident of the night — it is not predictable, and a model that
+  tries anyway becomes arbitrary.
+* **Any measurement on such pairs measures the offset 90 % of the time.** The same colour model
+  scored **1.03 with** and **1.35 without** the offset on identical pairs (median 1.90).
+
+`pegel_angleichen()` sets the pedestal of the CLEAN tile to that of the noisy one, per tile and
+per channel, using the median — stars pull the mean around and appear at different brightness
+in the two images. It is the truth that gets adjusted, not the input: the input is the real
+measurement and stays untouched. The known limit that remains: a transparency change (clouds)
+would be multiplicative and cannot be estimated reliably from a single tile.
+
 ### Colour calibration instead of white balance — and `--astro-pcc auto` tried no catalogue at all
 
 `--astro-pcc` was called "photometric colour calibration", but in its default `auto` it did

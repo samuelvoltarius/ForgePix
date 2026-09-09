@@ -8,6 +8,31 @@ Alle nennenswerten Änderungen an ForgePix. Format orientiert an
 
 ## [Unreleased]
 
+### 90 % der „Rauschpaare" waren gar kein Rauschen
+
+Die echten Trainingspaare entstehen leave-one-out: `rauschig` ist EINE registrierte Aufnahme,
+`sauber` das Mittel der uebrigen derselben Serie. Ein Schritt fehlte, und es war der
+wichtigste — der **Himmelspegel**. Er schwankt von Aufnahme zu Aufnahme (Hoehe ueber dem
+Horizont, Mond, Dunst), und das Mittel der uebrigen mittelt darueber hinweg. Ueber die ganze
+Bank von 5 760 Paaren gemessen: **90,1 % des Unterschieds zwischen rauschig und sauber war
+reiner Helligkeitsversatz**, mittlerer quadratischer Fehler 5,84e-05 gegen 5,81e-06 nach dem
+Angleich. Je Kachel lagen 5 bis 95 % der Versaetze zwischen −0,40 und +0,33 der Kachelskala.
+
+Das hat zwei Folgen, und beide sind teuer:
+
+* **Ein Training darauf haette dem Modell beigebracht, die Helligkeit zu wuerfeln.** Der
+  Sockel ist keine Bildeigenschaft, sondern Zufall der Nacht — er ist nicht vorhersagbar, und
+  ein Modell, das es trotzdem versucht, wird beliebig.
+* **Jede Messung an solchen Paaren misst zu 90 % den Sockel.** Dasselbe Farbmodell kam an
+  denselben Paaren auf Faktor **1,03 mit** und **1,35 ohne** den Versatz (Median 1,90).
+
+`pegel_angleichen()` setzt den Sockel des SAUBEREN Bildes je Kachel und Kanal auf den des
+rauschigen — ueber den Median, weil Sterne den Mittelwert verziehen und in beiden Bildern
+verschieden hell dastehen. Angeglichen wird die Wahrheit, nicht der Eingang: der Eingang ist
+die echte Messung und bleibt unangetastet. Als bekannte Grenze bleibt stehen, dass eine
+Durchsichtsaenderung (Wolken) multiplikativ waere und aus einer einzelnen Kachel nicht
+verlaesslich zu schaetzen ist.
+
 ### Farbkalibrierung statt Weissabgleich — und `--astro-pcc auto` probierte gar keinen Katalog
 
 `--astro-pcc` hiess "photometrischer Farbabgleich", tat aber in der Vorgabe `auto` etwas
