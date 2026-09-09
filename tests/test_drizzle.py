@@ -320,3 +320,43 @@ class NativeDrizzlePipeline(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RohesCfaErkennen(unittest.TestCase):
+    """`ist_rohes_cfa` entscheidet VOR dem Lauf, ob Kosmetik und echtes Drizzle zusammenpassen.
+
+    Ohne diese Vorpruefung brach der Lauf erst in `drizzle_stack` ab — also nach der
+    Registrierung, nach Minuten Arbeit. Und das Regelwerk empfiehlt
+    `--astro-drizzle 2 --astro-drizzle-true`, ohne die Kosmetik zurueckzunehmen: wer den Rat
+    anklickte, lief zuverlaessig in diesen Abbruch.
+    """
+
+    def _fits(self, ordner, name, **karten):
+        pfad = Path(ordner) / name
+        kopf = fits.Header()
+        for schluessel, wert in karten.items():
+            kopf[schluessel] = wert
+        fits.writeto(pfad, np.zeros((8, 8), np.uint16), kopf, overwrite=True)
+        return str(pfad)
+
+    def test_bayer_muster_ja_mono_und_fremdformat_nein(self):
+        with tempfile.TemporaryDirectory() as ordner:
+            self.assertTrue(astro.ist_rohes_cfa(self._fits(ordner, "cfa.fits", BAYERPAT="RGGB")))
+            # Kleinschreibung und Leerzeichen kommen in echten Headern vor.
+            self.assertTrue(astro.ist_rohes_cfa(self._fits(ordner, "klein.fits", BAYERPAT=" grbg ")))
+            self.assertFalse(astro.ist_rohes_cfa(self._fits(ordner, "mono.fits", EXPTIME=60.0)))
+            # Ein unbekanntes Muster ist KEIN rohes CFA im Sinne dieser Frage: dafuer bricht
+            # das Drizzle ohnehin an anderer Stelle ab, und stillschweigend die Kosmetik
+            # abzuschalten waere hier die falsche Antwort.
+            self.assertFalse(astro.ist_rohes_cfa(self._fits(ordner, "wirr.fits", BAYERPAT="XYZW")))
+            tif = Path(ordner) / "bild.tif"
+            tifffile.imwrite(str(tif), np.zeros((8, 8), np.float32))
+            self.assertFalse(astro.ist_rohes_cfa(str(tif)))
+
+    def test_fehlende_und_kaputte_datei_werfen_nicht(self):
+        # Eine Vorpruefung darf den Lauf nicht selbst zum Absturz bringen.
+        with tempfile.TemporaryDirectory() as ordner:
+            kaputt = Path(ordner) / "halb.fits"
+            kaputt.write_bytes(b"SIMPLE  =                    T" + b" " * 50)
+            self.assertFalse(astro.ist_rohes_cfa(str(kaputt)))
+            self.assertFalse(astro.ist_rohes_cfa(str(Path(ordner) / "gibtsnicht.fits")))

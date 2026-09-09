@@ -390,6 +390,29 @@ def lokal_pcc(bgr, hints=None, siril_path=None, katalog_pfad=None, log=log_print
         # `_fit_channel_gains` erwartet eine Tabelle mit den Gaia-Spaltennamen
         cat = {"ra": treffer["ra"], "dec": treffer["dec"],
                "phot_g_mean_mag": treffer["g_mag"], "bp_rp": treffer["bp_rp"]}
+        # ECHTE Farbkalibrierung: die Kanalverhaeltnisse aus den bekannten Katalogfarben
+        # ableiten, statt die Sterne im Mittel neutral zu machen. Der Unterschied ist
+        # grundsaetzlich — ein Weissabgleich haengt davon ab, welche Sterne zufaellig im Feld
+        # stehen, und daempft ihre Farbunterschiede; an M51 gemessen fiel die Farbspreizung
+        # der Sterne dabei von 27 auf 5. Siehe core/pcc_echt.py.
+        try:
+            import pcc_echt
+            _x, _y = wcs.world_to_pixel_values(np.asarray(treffer["ra"]),
+                                               np.asarray(treffer["dec"]))
+            _bprp = np.asarray(treffer["bp_rp"], float)
+            _h, _w = bgr.shape[:2]
+            _drin = ((_x > 20) & (_x < _w - 20) & (_y > 20) & (_y < _h - 20)
+                     & np.isfinite(_bprp))
+            out, _ber = pcc_echt.farbkalibrieren(
+                bgr, list(zip(_x[_drin], _y[_drin])), _bprp[_drin], log=log)
+            log("  Photometrische Farbkalibrierung gegen Gaia BP-RP: %d Sterne, "
+                "Nullpunkt bei BP-RP=%.2f, Streuung %.3f/%.3f (offline)"
+                % (_ber["sterne"], _ber["bezugsfarbe"], _ber["streuung_b"],
+                   _ber["streuung_r"]))
+            return out
+        except Exception as _e:
+            log("  (Farbkalibrierung gegen Katalogfarben nicht moeglich: %s) "
+                "-> Weissabgleich auf Katalogsternen" % _e)
         scale = _fit_channel_gains(bgr, cat, wcs, log)
         out = bgr.astype(np.float32) * scale.reshape(1, 1, 3)
         log("  Lokale Gaia-Positionen / Weißabgleich: Kanal-Skalierung BGR=%s aus %d Katalogsternen (offline)"
@@ -453,12 +476,29 @@ def run_pcc(linear_bgr, hints=None, prefer="auto", oscsensor=None, narrowband=Fa
         if prefer == "gaia":
             return gaia_pcc(source, hints=hints, siril_path=siril_path,
                             astrometry_key=astrometry_key, log=log)
+        if prefer in ("auto", "lite"):
+            # "auto" hat bisher GAR KEINEN Katalog probiert und ist direkt auf den nativen
+            # Weissabgleich durchgefallen. Damit tat der Schalter genau das, wovon der Rat
+            # abraet: raten statt messen. Und es kostet sichtbar — an M51 gemessen fiel die
+            # Farbspreizung der Sterne im fertigen Bild von 27 auf 5, weil der native Abgleich
+            # die Sterne neutralisiert und damit ihre Farbunterschiede mitloescht (BGR-Faktoren
+            # 1,67 / 1,00 / 1,18 bei 286 Referenzsternen).
+            #
+            # Liegt ein lokaler Gaia-Katalog vor, wird jetzt ZUERST der genommen. Er braucht
+            # kein Netz und keinen fremden Solver — der eigene steht in core/astrometry.py.
+            import gaia_lokal as _gl
+            if os.path.exists(_gl.standard_pfad()):
+                return lokal_pcc(source, hints=hints, siril_path=siril_path, log=log)
+            log("  Kein lokaler Gaia-Katalog — ohne ihn bleibt nur der native "
+                "Stern-Weissabgleich, und der kostet Sternfarbe.")
     except Exception as error:
         log("  Externer Farbabgleich '%s' fehlgeschlagen (%s)." % (prefer, error))
         if narrowband:
             log("  Schmalbandfarben bleiben unverändert; kein Breitband-Ersatz.")
             return source.copy()
-        log("  Ersatz: nativer Stern-Weißabgleich, keine Katalog-Farbkalibrierung.")
+        log("  Ersatz: nativer Stern-Weißabgleich, keine Katalog-Farbkalibrierung. "
+            "Er neutralisiert die Sterne und daempft dabei ihre Farbunterschiede — an M51 "
+            "gemessen die Farbspreizung von 27 auf 5.")
     return balance(source, log=log)
 
 

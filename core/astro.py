@@ -168,6 +168,23 @@ def _master(paths, raw=False):
     return np.median(np.stack(fs), axis=0)
 
 
+def ist_rohes_cfa(path):
+    """True, wenn die Datei rohe Sensorsamples mit bekanntem Bayer-Muster enthaelt.
+
+    Das echte Drizzle rechnet auf genau diesen Samples weiter. Wer VOR dem Lauf wissen will,
+    ob Hotpixel- und Banding-Korrektur damit vertraeglich sind, fragt hier: ein Header-Lesen
+    statt einer Ausnahme nach zwanzig Minuten Registrierung.
+    """
+    if os.path.splitext(path)[1].lower() not in (".fit", ".fits", ".fts"):
+        return False
+    try:
+        fits = require_astropy("CFA-Pruefung")
+        header = fits.getheader(path)
+    except Exception:
+        return False
+    return str(header.get("BAYERPAT", "")).strip().upper() in _BAYER2CV
+
+
 def read_calibrated(path, dark=None, flat=None):
     """FITS-Sensordaten zuerst kalibrieren, danach debayern (keine interpolierten Masters)."""
     is_fits = os.path.splitext(path)[1].lower() in (".fit", ".fits", ".fts")
@@ -2334,9 +2351,15 @@ _MAX_STERNFLAECHE_ANTEIL = 0.003
 
 # Wie hell eine Quelle ueber dem LOKALEN Untergrund sein muss, damit sie als ringgefaehrdeter
 # Stern gilt und nicht als Knoten in einem Spiralarm. In Vielfachen des Rauschens des
-# hochpassgefilterten Bildes. An M51 gemessen: die drei Quellen, die in der Galaxie sichtbar
-# ringten, liegen bei 2229, 2418 und 4187; der schwache Knoten, der nicht ringte, bei 91.
-_MIN_SPITZE_SIGMA = 2000.0
+# hochpassgefilterten Bildes.
+#
+# Ein erster Wert von 2000 war aus DREI Beispielen abgeleitet und zu hoch: im fertigen Bild
+# ringte auch ein Stern bei 744 Sigma noch sichtbar. Bei 200 deckt die Maske 11,6 % des
+# Galaxienfensters ab (ohne Schwelle waeren es 28,5 %, und dann wird die Galaxie gar nicht
+# mehr geschaerft — an v11 gemessen fiel ihre Feinstruktur auf 0,001515, unter die 0,001655
+# ganz ohne Dekonvolution). 11,6 % liegt unter den 17,7 %, die der reine Himmelspegel-Weg
+# ohnehin abdeckt, kostet dort also nichts zusaetzlich.
+_MIN_SPITZE_SIGMA = 200.0
 
 
 def deconvolve(f, psf=None, iterations=15, star_protect=0.85, regularize=0.0,

@@ -2204,12 +2204,26 @@ def run_astro(input_dir, work_dir, args):
     align_mode = getattr(args, "astro_align", "rotate")
     drizzle = getattr(args, "astro_drizzle", 1)
     cosmetic = getattr(args, "astro_cosmetic", False)
+    drizzle_true = getattr(args, "astro_drizzle_true", False)
+    _kosmetik_wegen_drizzle_aus = False
+    if drizzle_true and (cosmetic or float(getattr(args, "astro_banding", 0.0) or 0.0))             and astro.ist_rohes_cfa(astro._ref_path(paths, _bestref)):
+        # Echtes CFA-Drizzle rechnet auf den SENSORSAMPLES; Hotpixel- und Banding-Korrektur
+        # verschieben genau diese Werte und wuerden den Flusserhalt brechen. astro.py bricht
+        # darum ab — bisher aber erst NACH der Registrierung, also nach Minuten Arbeit. Und
+        # das Regelwerk empfiehlt Drizzle, ohne die Kosmetik zurueckzunehmen: wer den Rat
+        # anklickt, lief bisher in genau diesen Abbruch. Also hier entscheiden und es sagen.
+        print("  Echtes Drizzle auf rohen Sensordaten: Hot-Pixel- und Banding-Korrektur "
+              "werden abgeschaltet — sie wuerden die Samples verschieben, auf denen Drizzle "
+              "rechnet. Ein rohes Master-Dark entfernt warme Pixel hier ohnehin sauberer.")
+        cosmetic = False
+        args.astro_cosmetic = False
+        args.astro_banding = 0.0
+        _kosmetik_wegen_drizzle_aus = True
     extras = [f"Ausrichtung={align_mode}"]
     if cosmetic:
         extras.append("Hot-Pixel-Korrektur")
     if drizzle > 1:
         extras.append(f"Drizzle {drizzle}×")
-    drizzle_true = getattr(args, "astro_drizzle_true", False)
     drizzle_info = None
     stack_info = None
     import observation_metadata
@@ -2391,6 +2405,10 @@ def run_astro(input_dir, work_dir, args):
     if drizzle_info is not None:
         report["drizzle"] = drizzle_info["report"]
         report["warnings"].append("Drizzle uses an area-weighted mean without sigma/cosmic-ray rejection.")
+        if _kosmetik_wegen_drizzle_aus:
+            report["warnings"].append(
+                "Cosmetic hot-pixel and banding correction were disabled: true CFA drizzle "
+                "operates on the raw sensor samples.")
         if not drizzle_info["coverage"].all():
             report["warnings"].append("Uncovered channel samples remain zero placeholders; use coverage and drizzle weights.")
     if stack_info is not None:

@@ -8,6 +8,58 @@ All notable changes to ForgePix. Format based on
 
 ## [Unreleased]
 
+### Colour calibration instead of white balance — and `--astro-pcc auto` tried no catalogue at all
+
+`--astro-pcc` was called "photometric colour calibration", but in its default `auto` it did
+something else: it fell through to the native star white balance without a single catalogue
+attempt. That balance neutralises the AVERAGE STAR of the image and therefore pulls every star
+towards the middle. Measured on M51, the colour spread of the stars fell **from 27 to 5** (BGR
+factors 1.67 / 1.00 / 1.18 from 286 reference stars). The switch did exactly what our own
+advice warns against: guessing instead of measuring.
+
+`auto` now takes the **local Gaia catalogue** first when one is present — no network, no
+foreign solver. And the calibration is a real one: `core/pcc_echt.py` measures each star's flux
+in B, G and R (aperture minus a local ring background), plots `log(B/G)` and `log(R/G)` against
+the KNOWN catalogue colour Gaia BP-RP, fits a robust line (Theil-Sen) and sets the zero point
+at **BP-RP = 0.82** — the colour of the Sun. A sun-like star comes out white, everything else
+keeps its colour RELATIVE to that; which stars happen to be in the field hardly matters. On
+M51: **216 usable stars**, colour range BP-RP −0.32 to 2.64, factors B = 1.603 and R = 1.225,
+scatter about the line 0.022 / 0.009.
+
+Honestly: without a stored camera sensitivity curve this is an EMPIRICAL calibration — it makes
+the colours consistent with each other and sets the zero point, it does not give absolute
+colour temperatures. The G2V white point is a convention and is therefore named in the report.
+If fewer than 20 stars survive the rejection (saturated, negative flux, mismatched), the
+calibration aborts rather than guessing from too few.
+
+### The star threshold was guessed from three examples
+
+`_MIN_SPITZE_SIGMA` decides how bright above the LOCAL background a source must be to count as
+a ring-prone star rather than a knot in a spiral arm. The value 2000 came from exactly three
+observed examples — in the delivered image a star at **744 sigma** still ringed visibly. It is
+now **200**. The mask then covers 11.6 % of the galaxy window; with no threshold at all it
+would be 28.5 %, and then the galaxy is not sharpened at all (measured on v11 its fine
+structure fell to 0.001515 — below the 0.001655 with no deconvolution whatsoever). 11.6 % is
+less than the 17.7 % the sky-level path covers anyway, so it costs nothing there.
+
+**The lesson that outweighs the number:** a threshold from three examples is a guess. Setting a
+boundary requires knowing the distribution on BOTH sides — and then looking at the image to see
+whether it holds.
+
+### True drizzle aborted after registration instead of deciding beforehand
+
+True CFA drizzle works on the raw sensor samples; hot-pixel and banding correction shift
+exactly those values and would break flux conservation. `drizzle_stack` therefore raised — but
+only AFTER registration, that is after minutes of work. And for undersampled material the rule
+engine recommends `--astro-drizzle 2 --astro-drizzle-true` without withdrawing the cosmetics:
+anyone following the clickable advice ran reliably into that abort. Seen on M51: sub grading
+and preparation run all the way through, and only then does it abort.
+
+`astro.ist_rohes_cfa()` now reads the Bayer entry from the header before the run and the
+pipeline withdraws hot-pixel and banding correction itself, with one line saying why. The
+exception in `drizzle_stack` stays as the last line of defence — it is the library's contract.
+The withdrawal appears as a warning in the report.
+
 ### Four classical tools without AI — and masks for EVERY step
 
 The PixInsight comparison listed them as gaps. All four are purely computational, each checked

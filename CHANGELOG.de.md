@@ -8,6 +8,60 @@ Alle nennenswerten Änderungen an ForgePix. Format orientiert an
 
 ## [Unreleased]
 
+### Farbkalibrierung statt Weissabgleich — und `--astro-pcc auto` probierte gar keinen Katalog
+
+`--astro-pcc` hiess "photometrischer Farbabgleich", tat aber in der Vorgabe `auto` etwas
+anderes: es fiel ohne einen einzigen Katalogversuch auf den nativen Stern-Weissabgleich durch.
+Der macht den DURCHSCHNITTSSTERN des Bildes neutral — und zieht damit alle Sterne zur Mitte.
+An M51 gemessen fiel die Farbspreizung der Sterne dadurch **von 27 auf 5** (BGR-Faktoren
+1,67 / 1,00 / 1,18 aus 286 Referenzsternen). Der Schalter tat also genau das, wovon der eigene
+Rat abraet: raten statt messen.
+
+Jetzt nimmt `auto` zuerst den **lokalen Gaia-Katalog**, wenn einer da ist — ohne Netz, ohne
+fremden Solver. Und die Kalibrierung ist eine echte: `core/pcc_echt.py` misst je Stern die
+Fluesse in B, G und R (Blende minus lokalem Ring-Untergrund), traegt `log(B/G)` und `log(R/G)`
+gegen die BEKANNTE Katalogfarbe Gaia BP-RP auf, legt robust (Theil-Sen) eine Gerade hindurch
+und setzt den Nullpunkt auf **BP-RP = 0,82** — die Farbe der Sonne. Ein sonnenaehnlicher Stern
+wird damit weiss, alles andere behaelt seine Farbe RELATIV dazu; welche Sterne zufaellig im
+Feld stehen, ist fast egal. An M51: **216 brauchbare Sterne**, Farbspanne BP-RP −0,32 bis 2,64,
+Faktoren B = 1,603 und R = 1,225, Streuung um die Gerade 0,022 / 0,009.
+
+Ehrlich dazu: ohne hinterlegte Kamera-Empfindlichkeitskurve ist das eine EMPIRISCHE
+Kalibrierung — sie macht die Farben untereinander stimmig und setzt den Nullpunkt, sie liefert
+keine absoluten Farbtemperaturen. Der G2V-Weisspunkt ist eine Konvention und steht darum im
+Bericht. Bleiben nach dem Aussortieren (gesaettigt, negativer Fluss, Fehlzuordnung) weniger als
+20 Sterne uebrig, bricht die Kalibrierung ab, statt mit zu wenigen zu raten.
+
+### Die Sternschwelle war aus drei Beispielen geraten
+
+`_MIN_SPITZE_SIGMA` entscheidet, ab welcher Helligkeit ueber dem LOKALEN Untergrund eine Quelle
+als ringgefaehrdeter Stern gilt und nicht als Knoten in einem Spiralarm. Der Wert 2000 stammte
+aus genau drei beobachteten Beispielen — im fertigen Bild ringte ein Stern bei **744 Sigma**
+weiter sichtbar. Neu ist **200**. Damit deckt die Maske 11,6 % des Galaxienfensters ab; ganz
+ohne Schwelle waeren es 28,5 %, und dann wird die Galaxie gar nicht mehr geschaerft (an v11
+gemessen fiel ihre Feinstruktur auf 0,001515 — unter die 0,001655 ganz ohne Dekonvolution).
+11,6 % liegt unter den 17,7 %, die der Himmelspegel-Weg ohnehin abdeckt, kostet dort also
+nichts.
+
+**Die Lehre, die mehr wiegt als die Zahl:** eine Schwelle aus drei Beispielen ist geraten. Wer
+eine Grenze setzt, muss die Verteilung auf BEIDEN Seiten kennen — und danach im Bild nachsehen,
+ob sie haelt.
+
+### Echtes Drizzle brach nach der Registrierung ab, statt vorher zu entscheiden
+
+Echtes CFA-Drizzle rechnet auf den rohen Sensorsamples; Hotpixel- und Banding-Korrektur
+verschieben genau diese Werte und wuerden den Flusserhalt brechen. `drizzle_stack` warf darum
+eine Ausnahme — aber erst NACH der Registrierung, also nach Minuten Arbeit. Und das Regelwerk
+empfiehlt bei unterabgetastetem Material `--astro-drizzle 2 --astro-drizzle-true`, ohne die
+Kosmetik zurueckzunehmen: wer den anklickbaren Rat befolgte, lief zuverlaessig in diesen
+Abbruch — an M51 erlebt: Sub-Bewertung und Vorbereitung laufen komplett durch, der
+Abbruch kommt erst danach.
+
+Jetzt liest `astro.ist_rohes_cfa()` vor dem Lauf den Bayer-Eintrag aus dem Header und der
+Ablauf nimmt Hotpixel- und Banding-Korrektur selbst zurueck, mit einer Zeile, die sagt warum.
+Die Ausnahme in `drizzle_stack` bleibt als letzte Absicherung stehen — sie ist der Vertrag der
+Bibliothek. Im Bericht steht die Ruecknahme als Warnung.
+
 ### Vier klassische Werkzeuge ohne KI — und Masken fuer JEDEN Schritt
 
 Der PixInsight-Vergleich nannte sie als Luecken. Alle vier sind rein rechnerisch, jedes gegen
