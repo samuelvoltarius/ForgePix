@@ -8,6 +8,39 @@ All notable changes to ForgePix. Format based on
 
 ## [Unreleased]
 
+### Drizzle: a message that contradicted itself, and two hours for an abort
+
+**"Only 100.00 % fully colour-covered."** That is what the M51 log said. 0.9999998 of the
+pixels were covered; the warning fires on ANY gap but rounds to two decimals. It now states
+the number: *"N of M pixels without full colour coverage"*.
+
+**Drizzle without cropping, plus post-processing.** `--no-autocrop` leaves the coverage gaps in
+place, and `_astro_write` then refuses background correction, deconvolution, star correction
+and denoising — by design, since those steps are not defined on gaps. But the refusal only came
+**after** the drizzle: on M51 after 203 of 203 steps, about two hours, with not a single file
+written. There is now a warning **beforehand**. Deliberately not an abort: a gap-free series
+would tolerate the combination. The warning does say that both measured runs had gaps.
+
+### The grid pattern in the drizzle result: two causes ruled out
+
+True drizzle on M51 shows a column pattern with a 2-pixel period (Fourier power 38x above the
+median; the normal stack from the same data: 0.8x). On 34 quiet sky tiles, per colour channel:
+
+| channel | even minus odd columns | rows | weights, columns |
+|---|---|---|---|
+| B | +0.62 % | +0.06 % | +0.01 % |
+| G | +0.80 % | +0.10 % | +0.01 % |
+| R | +0.56 % | +0.05 % | +0.01 % |
+
+* **Not the normalisation:** the weights are practically flat per channel, while the pattern in
+  the image is stable and just as strong where the weights are flat.
+* **Not the Bayer phase:** all three channels show it at similar strength.
+* **Probably not a sensor fixed pattern either:** the normal stack from the same raw data, also
+  without dark and flat, does not show it.
+
+What remains is that it arises inside the drizzle path itself without appearing in the weight
+map. The cause has **not been found yet**.
+
 ### Four to seven tests failed at random — and the "load" explanation was a guess
 
 Every full run of the test suite had four to seven red tests, different ones each time, all

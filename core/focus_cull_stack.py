@@ -2234,6 +2234,17 @@ def run_astro(input_dir, work_dir, args):
         args.astro_cosmetic = False
         args.astro_banding = 0.0
         _kosmetik_wegen_drizzle_aus = True
+    _gesperrt = drizzle_ohne_zuschnitt_gesperrt(args) if drizzle_true else []
+    if _gesperrt:
+        # Ohne Zuschnitt bleiben Abdeckungsluecken im Drizzle-Ergebnis, und `_astro_write`
+        # verweigert dann genau diese Schritte — aber erst NACH dem Drizzle. An M51 gemessen:
+        # 203 von 203 Drizzle-Schritten, rund zwei Stunden, dann der Abbruch, und keine einzige
+        # Datei geschrieben. Nur eine WARNUNG, kein Abbruch: eine lueckenlose Serie vertruege
+        # die Kombination. Beide gemessenen Laeufe hatten aber Luecken (0,9999998 belegt).
+        print("  WARNUNG: echtes Drizzle ohne Zuschnitt, dazu %s. Bleibt auch nur ein Pixel "
+              "ohne Beitrag, bricht der Lauf NACH dem Drizzle ab — bei beiden gemessenen "
+              "Laeufen war das so. Entweder den Zuschnitt anlassen oder diese Schritte weglassen."
+              % ", ".join(_gesperrt), file=sys.stderr)
     extras = [f"Ausrichtung={align_mode}"]
     if cosmetic:
         extras.append("Hot-Pixel-Korrektur")
@@ -2754,6 +2765,24 @@ def _naechte_melden(frames, behalten, paths, log=print):
         for nacht, v in schwach:
             log("  Aus der Nacht %s bleibt weniger als die Haelfte uebrig (%d von %d)."
                 % (nacht, v[1], v[0]))
+
+
+def drizzle_ohne_zuschnitt_gesperrt(args):
+    """Welche angeforderten Schritte ein Drizzle-Lauf OHNE Zuschnitt gleich verweigern wird.
+
+    `_astro_write` lehnt Hintergrundkorrektur, Dekonvolution, Sternkorrektur und Entrauschen
+    ab, sobald die Abdeckung Luecken hat — und ohne Zuschnitt bleiben die Luecken stehen. Die
+    Ablehnung kommt aber erst NACH dem Drizzle; an M51 nach rund zwei Stunden, ohne eine
+    einzige geschriebene Datei. Diese Liste erlaubt, VORHER zu warnen. Leer heisst: nichts zu
+    befuerchten (Zuschnitt an, oder keiner der vier Schritte angefordert).
+    """
+    if getattr(args, "autocrop", True):
+        return []
+    return [name for name, an in (
+        ("Hintergrundkorrektur", getattr(args, "bg_extract", False)),
+        ("Dekonvolution", getattr(args, "astro_deconv", False)),
+        ("Sternkorrektur", getattr(args, "astro_synthstar", False)),
+        ("Entrauschen", float(getattr(args, "astro_denoise", 0.0) or 0.0) > 0)) if an]
 
 
 def _zuschnitt_auf_beitraege(result, stack_info, args, drizzle_info=None):

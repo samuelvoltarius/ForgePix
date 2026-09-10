@@ -8,6 +8,41 @@ Alle nennenswerten Änderungen an ForgePix. Format orientiert an
 
 ## [Unreleased]
 
+### Drizzle: eine Meldung, die sich selbst widersprach, und zwei Stunden fuer einen Abbruch
+
+**„Nur 100.00 % vollstaendig farbig belegt."** So stand es an M51 im Protokoll. Belegt waren
+0,9999998 der Pixel; die Warnung feuert bei JEDER Luecke, rundet aber auf zwei Stellen. Jetzt
+nennt sie die Zahl: *„N von M Pixeln ohne vollstaendige Farbbelegung"*.
+
+**Drizzle ohne Zuschnitt mit Nachbearbeitung.** `--no-autocrop` laesst die Abdeckungsluecken
+stehen, und `_astro_write` verweigert dann Hintergrundkorrektur, Dekonvolution,
+Sternkorrektur und Entrauschen — so gewollt, denn auf Luecken sind diese Schritte nicht
+definiert. Nur kam die Ablehnung erst **nach** dem Drizzle: an M51 nach 203 von 203
+Schritten, rund zwei Stunden, ohne eine einzige geschriebene Datei. Jetzt steht **vorher**
+eine Warnung. Bewusst kein Abbruch: eine lueckenlose Serie vertruege die Kombination. Die
+Warnung sagt aber, dass beide gemessenen Laeufe Luecken hatten.
+
+### Das Gittermuster im Drizzle-Ergebnis: zwei Ursachen ausgeschlossen
+
+Das echte Drizzle an M51 zeigt ein Spaltenmuster mit 2 Pixel Periode (Fourier-Leistung
+38-fach ueber dem Median; der normale Stapel aus denselben Daten: 0,8-fach). An 34 ruhigen
+Himmelskacheln, je Farbkanal:
+
+| Kanal | Spalten gerade minus ungerade | Zeilen | Gewichte, Spalten |
+|---|---|---|---|
+| B | +0,62 % | +0,06 % | +0,01 % |
+| G | +0,80 % | +0,10 % | +0,01 % |
+| R | +0,56 % | +0,05 % | +0,01 % |
+
+* **Nicht die Normierung:** die Gewichte sind je Kanal praktisch flach, das Muster im Bild
+  bleibt stabil und ist dort, wo die Gewichte flach sind, genauso stark.
+* **Nicht die Bayer-Phase:** alle drei Kanaele zeigen es in aehnlicher Staerke.
+* **Wahrscheinlich auch kein Festmuster des Sensors:** der normale Stapel aus denselben
+  Rohdaten, ebenfalls ohne Dark und Flat, zeigt es nicht.
+
+Uebrig bleibt, dass es im Drizzle-Pfad selbst entsteht, ohne in der Gewichtskarte zu
+erscheinen. Die Ursache ist **noch nicht gefunden**.
+
 ### Vier bis sieben Tests fielen zufaellig um — und die Erklaerung „Last" war geraten
 
 Bei jedem Vollauf der Testsuite waren vier bis sieben Tests rot, jedes Mal andere, einzeln

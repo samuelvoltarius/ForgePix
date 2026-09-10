@@ -168,6 +168,21 @@ def _master(paths, raw=False):
     return np.median(np.stack(fs), axis=0)
 
 
+def abdeckung_meldung(coverage):
+    """Wieviel fehlt an der Farbbelegung — als ZAHL, nicht als gerundeter Anteil.
+
+    Die alte Meldung lautete „Nur %.2f %% vollstaendig farbig belegt". An M51 stand dort
+    „Nur 100.00 %": 0,9999998 der Pixel waren belegt, die Warnung feuert aber bei JEDER Luecke,
+    und auf zwei Stellen gerundet sind das 100,00. Eine Meldung, die sich selbst widerspricht,
+    liest niemand zu Ende. Jetzt steht da, wie viele Pixel fehlen.
+    """
+    c = np.asarray(coverage, bool)
+    fehlt = int(c.size - np.count_nonzero(c))
+    anteil = 100.0 * fehlt / max(c.size, 1)
+    return ("%d von %d Pixeln ohne vollständige Farbbelegung (%.2g %%)."
+            % (fehlt, c.size, anteil)).replace(",", ".")
+
+
 def ist_rohes_cfa(path):
     """True, wenn die Datei rohe Sensorsamples mit bekanntem Bayer-Muster enthaelt.
 
@@ -1307,8 +1322,9 @@ def drizzle_stack(paths, scale=2, pixfrac=0.7, dark=None, flat=None, cosmetic=Fa
                               "No exposure normalization", "Coverage does not prove recovered detail or independent noise"]}
     report["warnings"] = []
     if not coverage.all():
-        warning = ("Nur %.2f %% vollständig farbig belegt. Abdeckungslücken bleiben markiert; "
-                   "für CFA mehr verschiedene Ditherpositionen oder den normalen Stack verwenden." % (100 * coverage.mean()))
+        warning = abdeckung_meldung(coverage) + (
+            " Abdeckungslücken bleiben markiert; für CFA mehr verschiedene Ditherpositionen "
+            "oder den normalen Stack verwenden.")
         report["warnings"].append(warning)
         log("    Drizzle: " + warning)
     if return_info:
