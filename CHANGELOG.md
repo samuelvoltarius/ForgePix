@@ -8,6 +8,44 @@ All notable changes to ForgePix. Format based on
 
 ## [Unreleased]
 
+### Drizzle cropped away two thirds of the field — and M51 with it
+
+After true drizzle 2x the crop kept **30.4 % of the field** on M51, and the galaxy lay outside.
+The geometry of the 203 registrations, recomputed from drizzle's own log, allowed **93.3 %**;
+the meridian flip (35 of 203 frames rotated by 180 degrees) made no difference.
+
+The cause is the **reference value** of the crop rule: the threshold was 80 % of the
+99th percentile. For the smooth contribution count of the normal stack, that is the true
+maximum. For drizzle weights it is not — on M51 their 99th percentile was 12.82 and the median
+11.63, 10 % above. 80 % of that is 88 % of the typical value, and whole regions with slightly
+less weight fell below it.
+
+Proven on the **uncropped** weight map (a dedicated run without cropping), with the crop
+procedure step by step — it reproduced the delivered crop exactly (top 36, left 90,
+6480x2196). Then one knob at a time:
+
+| changed | kept |
+|---|---|
+| nothing | 30.4 % |
+| **median instead of 99th percentile as reference** | **91.6 %** |
+| median filter 5 instead of 3 | 38.8 % |
+| cell fraction instead of hard erosion (99 / 95 / 90 %) | 30.4 / 37.2 / 37.4 % |
+
+Two guesses along the way were wrong and are listed because they are tempting: the weights did
+not vary "by a factor of 2" (uncropped: 0.92 / 1.00 / 1.07 of the median at the 5th / 50th /
+95th percentile), and scattered outliers inflated into holes by the erosion were not it either
+(only 2.9 % of inner cells contain one; no filter variant recovers more than 39 %).
+
+Now drizzle weights use the **median** as reference; the normal stack keeps the 99th percentile
+(verified there: 92 % on v20). With the changed function on the uncropped map: **7938x5400 =
+91.6 %**, thinnest point 80 % of the centre, 1.12x noise — the same quality criterion as the
+normal stack.
+
+Also: the line *"thinnest point now X % of the centre"* was measured on the 3x3 median right up
+to the edge of the rectangle. At a corner where two border strips meet, the outside pixels form
+the majority — a test map reported "20 %" although nothing inside the rectangle was below 85 %.
+It is now measured without the 1-pixel rim.
+
 ### Drizzle: a message that contradicted itself, and two hours for an abort
 
 **"Only 100.00 % fully colour-covered."** That is what the M51 log said. 0.9999998 of the
@@ -39,7 +77,22 @@ median; the normal stack from the same data: 0.8x). On 34 quiet sky tiles, per c
   without dark and flat, does not show it.
 
 What remains is that it arises inside the drizzle path itself without appearing in the weight
-map. The cause has **not been found yet**.
+map.
+
+**The lever is the drop size.** The same 12 frames, directly through `astro.drizzle_stack`, only
+`pixfrac` changed:
+
+| even minus odd columns | pixfrac 0.7 | pixfrac 1.0 |
+|---|---|---|
+| image B / G / R | +0.35 / +0.44 / +0.29 % | **+0.15 / +0.05 / +0.15 %** |
+| weights | +7.1 % | **0.00 %** |
+| runtime | 503 s | 750 s |
+
+At pixfrac 1.0 the drops tile the grid without gaps, the weights become exactly flat, and the
+pattern shrinks to about a third. **It does not vanish entirely** (0.05 to 0.15 %), and how the
+geometry gets through despite a clean division is not explained yet. **No new default derived
+from it:** one experiment on 12 frames of one object, and pixfrac 1.0 costs exactly the
+sharpness drizzle is used for.
 
 ### Four to seven tests failed at random — and the "load" explanation was a guess
 

@@ -8,6 +8,46 @@ Alle nennenswerten Änderungen an ForgePix. Format orientiert an
 
 ## [Unreleased]
 
+### Drizzle schnitt zwei Drittel des Feldes weg — und M51 mit
+
+Nach echtem Drizzle 2x behielt der Zuschnitt an M51 **30,4 % des Feldes**, und die Galaxie lag
+ausserhalb. Die Geometrie der 203 Registrierungen, aus dem eigenen Drizzle-Protokoll
+nachgerechnet, erlaubte **93,3 %**; der Meridianflip (35 von 203 Aufnahmen um 180 Grad
+gedreht) aenderte daran nichts.
+
+Die Ursache ist der **Bezugswert** der Zuschnittregel: die Schwelle war 80 % des
+99. Perzentils. Bei der glatten Beitragszahl des normalen Stapels ist das der echte
+Hoechstwert. Bei den Drizzle-Gewichten nicht — an M51 lag ihr 99. Perzentil bei 12,82, der
+Median bei 11,63, also 10 % darueber. 80 % davon sind 88 % des Typischen, und ganze Bereiche
+mit leicht weniger Gewicht fielen darunter.
+
+Nachgewiesen an der **ungeschnittenen** Gewichtskarte (eigener Lauf ohne Zuschnitt), mit dem
+Zuschnitt-Verfahren Schritt fuer Schritt — es fand exakt den gelieferten Zuschnitt wieder
+(oben 36, links 90, 6480x2196). Danach jeweils ein Stellrad geaendert:
+
+| geaendert | behalten |
+|---|---|
+| nichts | 30,4 % |
+| **Bezug Median statt 99. Perzentil** | **91,6 %** |
+| Median-Filter 5 statt 3 | 38,8 % |
+| Zellanteil statt harter Erosion (99 / 95 / 90 %) | 30,4 / 37,2 / 37,4 % |
+
+Zwei Vermutungen auf dem Weg dorthin waren falsch und stehen hier, weil sie naheliegen: die
+Gewichte schwankten nicht „um Faktor 2" (ungeschnitten 0,92 / 1,00 / 1,07 des Medians im 5. /
+50. / 95. Perzentil), und verstreute Ausreisser, die die Erosion zu Loechern aufblaeht, waren
+es auch nicht (nur 2,9 % der inneren Zellen enthalten einen; keine Filtervariante rettet mehr
+als 39 %).
+
+Neu: bei Drizzle-Gewichten ist der **Median** der Bezug, beim normalen Stapel bleibt es beim
+99. Perzentil (dort belegt: 92 % an v20). Mit der geaenderten Funktion an der ungeschnittenen
+Karte: **7938x5400 = 91,6 %**, duennste Stelle 80 % der Mitte, 1,12-faches Rauschen — dasselbe
+Guetekriterium wie beim normalen Stapel.
+
+Nebenbei: die Zeile *„Duennste Stelle jetzt X % der Mitte"* mass auf dem 3x3-Median bis exakt
+an den Rand des Rechtecks. An einer Ecke, an der zwei Randstreifen zusammenstossen, stellen die
+Aussenpixel die Mehrheit — eine Testkarte meldete „20 %", obwohl im Rechteck nichts unter 85 %
+lag. Jetzt ohne den 1-Pixel-Rand gemessen.
+
 ### Drizzle: eine Meldung, die sich selbst widersprach, und zwei Stunden fuer einen Abbruch
 
 **„Nur 100.00 % vollstaendig farbig belegt."** So stand es an M51 im Protokoll. Belegt waren
@@ -41,7 +81,22 @@ Himmelskacheln, je Farbkanal:
   Rohdaten, ebenfalls ohne Dark und Flat, zeigt es nicht.
 
 Uebrig bleibt, dass es im Drizzle-Pfad selbst entsteht, ohne in der Gewichtskarte zu
-erscheinen. Die Ursache ist **noch nicht gefunden**.
+erscheinen.
+
+**Der Hebel ist die Tropfengroesse.** Dieselben 12 Aufnahmen, direkt ueber
+`astro.drizzle_stack`, nur `pixfrac` geaendert:
+
+| Spalten gerade minus ungerade | pixfrac 0,7 | pixfrac 1,0 |
+|---|---|---|
+| Bild B / G / R | +0,35 / +0,44 / +0,29 % | **+0,15 / +0,05 / +0,15 %** |
+| Gewichte | +7,1 % | **0,00 %** |
+| Rechenzeit | 503 s | 750 s |
+
+Bei pixfrac 1,0 kacheln die Tropfen das Raster lueckenlos, die Gewichte werden exakt flach, und
+das Muster schrumpft auf etwa ein Drittel. **Ganz weg ist es nicht** (0,05 bis 0,15 %), und wie
+die Geometrie trotz sauberer Division durchschlaegt, ist noch nicht erklaert. **Keine neue
+Vorgabe daraus:** ein Versuch an 12 Aufnahmen eines Objekts, und pixfrac 1,0 kostet genau die
+Schaerfe, fuer die man Drizzle nimmt.
 
 ### Vier bis sieben Tests fielen zufaellig um — und die Erklaerung „Last" war geraten
 

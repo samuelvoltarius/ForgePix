@@ -2815,6 +2815,7 @@ def _zuschnitt_auf_beitraege(result, stack_info, args, drizzle_info=None):
     # Beide Wege liefern dasselbe: wieviel Beitrag steht hinter jedem Pixel. Beim Drizzle
     # heisst es `weights` und hat einen Wert je Kanal — dort zaehlt der schwaechste.
     _anzahl = None
+    _aus_drizzle = False
     if stack_info is not None:
         _anzahl = stack_info.get("beitraege")
     if _anzahl is None and drizzle_info is not None:
@@ -2822,6 +2823,7 @@ def _zuschnitt_auf_beitraege(result, stack_info, args, drizzle_info=None):
         if _w is not None:
             _w = np.asarray(_w, np.float32)
             _anzahl = _w.min(axis=2) if _w.ndim == 3 else _w
+            _aus_drizzle = True
     if _anzahl is None:
         if stack_info is not None or drizzle_info is not None:
             print("  Zuschnitt nicht moeglich: das Stapelverfahren liefert keine "
@@ -2843,7 +2845,19 @@ def _zuschnitt_auf_beitraege(result, stack_info, args, drizzle_info=None):
     _glatt = cv2.medianBlur(_voll, 3)
     # Bezug ist das 99. Perzentil, nicht das Maximum: ein einzelnes Ausreisserpixel darf die
     # Schwelle nicht fuer das ganze Bild verschieben.
-    _grenze = _ANTEIL * float(np.percentile(_glatt, 99.0))
+    #
+    # NICHT beim Drizzle. Die Beitragszahl des normalen Stapels ist glatt, ihr 99. Perzentil
+    # ist der echte Hoechstwert. Die Drizzle-Gewichte sind es nicht: an M51 lag ihr
+    # 99. Perzentil bei 12,82, der Median bei 11,63 — 10 % darueber. 80 % davon sind 88 % des
+    # typischen Werts, und ganze Bereiche mit leicht weniger Gewicht fielen darunter. Behalten
+    # wurden 30,4 % des Feldes, M51 lag ausserhalb, obwohl die Geometrie der 203 Aufnahmen
+    # 93,3 % erlaubt. Mit dem Median als Bezug, sonst unveraendert: 91,6 %. Median-Filter oder
+    # weichere Erosion halfen dagegen nicht (hoechstens 38,8 %) — es war der Bezug, nicht das
+    # Rauschen.
+    if _aus_drizzle and (_glatt > 0).any():
+        _grenze = _ANTEIL * float(np.median(_glatt[_glatt > 0]))
+    else:
+        _grenze = _ANTEIL * float(np.percentile(_glatt, 99.0))
     # Auf einer verkleinerten Maske suchen — bei 1920x1080 waeren es sonst zwei Millionen
     # Schleifendurchlaeufe. `erode` macht eine Zelle nur dann gut, wenn ihre ganze Umgebung gut
     # ist; verkleinert wird also konservativ.
@@ -2867,7 +2881,13 @@ def _zuschnitt_auf_beitraege(result, stack_info, args, drizzle_info=None):
         return result, stack_info, drizzle_info
 
     _mitte = float(np.median(_glatt[_hoch // 3:2 * _hoch // 3, _breit // 3:2 * _breit // 3]))
-    _duenn = float(_glatt[y0:y1, x0:x1].min())
+    # Ohne den 1-Pixel-Rand messen: dort greift der 3x3-Median noch ueber das behaltene
+    # Rechteck hinaus. An einer Ecke, an der zwei Randstreifen zusammenstossen, stellen die
+    # Aussenpixel 5 von 9 Werten und gewinnen den Median. An einer Testkarte meldete die
+    # Zeile dadurch "20 % der Mitte", obwohl im behaltenen Bereich kein Pixel unter 85 % lag.
+    _innen = (_glatt[y0 + 1:y1 - 1, x0 + 1:x1 - 1] if (y1 - y0 > 2 and x1 - x0 > 2)
+              else _glatt[y0:y1, x0:x1])
+    _duenn = float(_innen.min())
     _faktor = (_mitte / max(_duenn, 1e-9)) ** 0.5 if _mitte > 0 else float("nan")
     result = result[y0:y1, x0:x1]
     if stack_info is not None:
