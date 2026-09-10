@@ -2,6 +2,7 @@
 import os
 import argparse
 import subprocess
+import prozesshilfe
 import sys
 import tempfile
 import hashlib
@@ -43,12 +44,12 @@ def main():
             frame[:, i * 40:(i + 1) * 40] = base[:, i * 40:(i + 1) * 40]
             cv2.imencode(".png", frame)[1].tofile(str(source / ("f%d.png" % i)))
         env = dict(os.environ, QT_QPA_PLATFORM="offscreen")
-        gui = subprocess.run(command + ["--smoke-gui"], env=env,
+        gui = prozesshilfe.lauf(command + ["--smoke-gui"], env=env,
                              capture_output=True, timeout=30, cwd=root)
         if gui.returncode:
             raise RuntimeError("Packaged GUI failed: " + gui.stderr.decode(errors="replace"))
         print("GUI smoke test passed: Astro workspace opened and closed")
-        result = subprocess.run(command + ["--cli", "--input", str(source), "--work", str(work)],
+        result = prozesshilfe.lauf(command + ["--cli", "--input", str(source), "--work", str(work)],
                                 env=env, capture_output=True, timeout=180, cwd=root)
         if result.returncode:
             raise RuntimeError("Packaged CLI failed: " + result.stderr.decode(errors="replace"))
@@ -75,7 +76,7 @@ def main():
                 "GAIN": 131, "EGAIN": .88}))
             raw_hashes[path] = hashlib.sha256(path.read_bytes()).hexdigest()
         drizzle_work = Path(d) / "drizzle-work"
-        reconstructed = subprocess.run(command + ["--cli", "--input", str(raw_directory),
+        reconstructed = prozesshilfe.lauf(command + ["--cli", "--input", str(raw_directory),
             "--work", str(drizzle_work), "--astro", "--astro-drizzle", "2", "--astro-drizzle-true",
             "--no-register", "--no-astro-stretch", "--fits-out"],
             env=env, capture_output=True, timeout=180, cwd=root)
@@ -108,7 +109,7 @@ def main():
                 raise RuntimeError("Drizzle changed its raw source FITS")
         print("Native CFA Drizzle smoke passed: signed/HDR FITS and explicit missing-color coverage")
         normal_work = Path(d) / "normal-astro-work"
-        normal = subprocess.run(command + ["--cli", "--input", str(raw_directory),
+        normal = prozesshilfe.lauf(command + ["--cli", "--input", str(raw_directory),
             "--work", str(normal_work), "--astro", "--no-register", "--no-astro-qc",
             "--astro-method", "sigma", "--no-astro-stretch", "--fits-out"],
             env=env, capture_output=True, timeout=180, cwd=root)
@@ -136,7 +137,7 @@ def main():
         original = hashlib.sha256(scientific.read_bytes()).hexdigest()
         for task in ("denoise", "background", "deblur", "starless"):
             destination = Path(d)/("ai-"+task)
-            restored = subprocess.run(command + ["--ai-restore", "--input", str(scientific),
+            restored = prozesshilfe.lauf(command + ["--ai-restore", "--input", str(scientific),
                 "--model", "forgepix-"+task+"-mono-v2", "--output-root", str(destination),
                 "--experimental", "--device", args.device], env=env, capture_output=True, timeout=120, cwd=root)
             if restored.returncode:
@@ -165,7 +166,7 @@ def main():
         recipe = Path(d) / "Repeat.fprecipe"
         recipe.write_text(json.dumps(dict(format="ForgePixRecipe", schema_version=1,
                                           name="Package acceptance", steps=steps)), encoding="utf-8")
-        repeated = subprocess.run(command + ["--recipe", "--file", str(recipe), "--input", str(scientific),
+        repeated = prozesshilfe.lauf(command + ["--recipe", "--file", str(recipe), "--input", str(scientific),
             "--output-root", str(Path(d)), "--experimental"], env=env, capture_output=True, timeout=120, cwd=root)
         if repeated.returncode:
             raise RuntimeError("Packaged recipe failed: " + repeated.stderr.decode(errors="replace"))
@@ -192,7 +193,7 @@ def main():
             field += (.16 - index * .001) * np.exp(-((xx - px)**2 + (yy - py)**2) / 4.5)
         solve_input = Path(d) / "astrometry.fits"
         fits.writeto(solve_input, field, fits.Header({"FPLINEAR": True, "BUNIT": "electron"}))
-        solved = subprocess.run(command + ["--solve", "--input", str(solve_input), "--catalogue", str(catalogue_path),
+        solved = prozesshilfe.lauf(command + ["--solve", "--input", str(solve_input), "--catalogue", str(catalogue_path),
             "--ra", str(hints["ra"]), "--dec", str(hints["dec"]), "--scale", str(hints["pixelscale_arcsec"]),
             "--output-root", str(Path(d))], env=env, capture_output=True, timeout=90, cwd=root)
         if solved.returncode:
@@ -219,7 +220,7 @@ def main():
         photometric_path = Path(d) / "photometric.npz"
         photometric.save(photometric_path)
         original_solved = hashlib.sha256(solved_paths[0].read_bytes()).hexdigest()
-        diagnosed = subprocess.run(command + ["--photometry", "--input", str(solved_paths[0]),
+        diagnosed = prozesshilfe.lauf(command + ["--photometry", "--input", str(solved_paths[0]),
             "--catalogue", str(photometric_path), "--epoch", "2025.5", "--output-root", str(Path(d))],
             env=env, capture_output=True, timeout=90, cwd=root)
         if diagnosed.returncode:

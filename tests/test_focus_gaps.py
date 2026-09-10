@@ -364,6 +364,7 @@ class TestZweiteVerschmelzung(unittest.TestCase):
         """Echter Pipeline-Lauf: --alt-merge muss altmerge_<verfahren>.tif ablegen, und zwar
         mit dem KOMPLEMENTAEREN Verfahren zum gewaehlten."""
         import subprocess
+        import prozesshilfe
         import glob
         root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         d = tempfile.mkdtemp(prefix="fp_alt_")
@@ -372,7 +373,7 @@ class TestZweiteVerschmelzung(unittest.TestCase):
             for i, f in enumerate(self._serie()):
                 cv2.imencode(".jpg", f)[1].tofile(os.path.join(ein, "f_%02d.jpg" % i))
             wd = os.path.join(d, "work")
-            r = subprocess.run([sys.executable, "-u", os.path.join(root, "core", "focus_cull_stack.py"),
+            r = prozesshilfe.lauf([sys.executable, "-u", os.path.join(root, "core", "focus_cull_stack.py"),
                                 "--input", ein, "--work", wd, "--alt-merge"],
                                capture_output=True, cwd=root, timeout=600)
             self.assertEqual(r.returncode, 0, r.stderr.decode("utf-8", "replace")[-500:])
@@ -395,6 +396,7 @@ class TestZweiteVerschmelzung(unittest.TestCase):
         keinen Unterschied (flach 59.6, Baum-Merge 58.7, Slabs zu 3/4/6: 59.0/58.9/59.1 bei
         Sollwert 60.0). Der Nutzen liegt darin, die Gruppen einzeln übermalen zu können."""
         import subprocess
+        import prozesshilfe
         import glob
         root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         d = tempfile.mkdtemp(prefix="fp_slab_")
@@ -403,7 +405,7 @@ class TestZweiteVerschmelzung(unittest.TestCase):
             for i, f in enumerate(self._serie(n=6)):
                 cv2.imencode(".jpg", f)[1].tofile(os.path.join(ein, "f_%02d.jpg" % i))
             wd = os.path.join(d, "work")
-            r = subprocess.run([sys.executable, "-u", os.path.join(root, "core", "focus_cull_stack.py"),
+            r = prozesshilfe.lauf([sys.executable, "-u", os.path.join(root, "core", "focus_cull_stack.py"),
                                 "--input", ein, "--work", wd, "--slabs", "3"],
                                capture_output=True, cwd=root, timeout=600)
             self.assertEqual(r.returncode, 0, r.stderr.decode("utf-8", "replace")[-500:])
@@ -421,6 +423,7 @@ class TestZweiteVerschmelzung(unittest.TestCase):
     def test_f8_slabs_aus_bei_null_oder_eins(self):
         """0 und 1 sind sinnlose Gruppengroessen und duerfen nichts ausloesen."""
         import subprocess
+        import prozesshilfe
         import glob
         root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         d = tempfile.mkdtemp(prefix="fp_slab0_")
@@ -430,7 +433,7 @@ class TestZweiteVerschmelzung(unittest.TestCase):
                 cv2.imencode(".jpg", f)[1].tofile(os.path.join(ein, "f_%02d.jpg" % i))
             for wert in ("0", "1"):
                 wd = os.path.join(d, "work" + wert)
-                r = subprocess.run([sys.executable, "-u", os.path.join(root, "core", "focus_cull_stack.py"),
+                r = prozesshilfe.lauf([sys.executable, "-u", os.path.join(root, "core", "focus_cull_stack.py"),
                                     "--input", ein, "--work", wd, "--slabs", wert],
                                    capture_output=True, cwd=root, timeout=600)
                 self.assertEqual(r.returncode, 0)
@@ -442,6 +445,7 @@ class TestZweiteVerschmelzung(unittest.TestCase):
     def test_f8_ohne_schalter_keine_zweite_datei(self):
         """Gegenprobe: ohne --alt-merge darf der zweite Durchgang nicht laufen (er kostet Zeit)."""
         import subprocess
+        import prozesshilfe
         import glob
         root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         d = tempfile.mkdtemp(prefix="fp_alt2_")
@@ -450,7 +454,7 @@ class TestZweiteVerschmelzung(unittest.TestCase):
             for i, f in enumerate(self._serie()):
                 cv2.imencode(".jpg", f)[1].tofile(os.path.join(ein, "f_%02d.jpg" % i))
             wd = os.path.join(d, "work")
-            r = subprocess.run([sys.executable, "-u", os.path.join(root, "core", "focus_cull_stack.py"),
+            r = prozesshilfe.lauf([sys.executable, "-u", os.path.join(root, "core", "focus_cull_stack.py"),
                                 "--input", ein, "--work", wd],
                                capture_output=True, cwd=root, timeout=600)
             self.assertEqual(r.returncode, 0)

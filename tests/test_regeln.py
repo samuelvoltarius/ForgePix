@@ -129,9 +129,10 @@ class TestSchalterExistieren(unittest.TestCase):
         import inspect
         import re
         import subprocess
+        import prozesshilfe
         import sys
         wurzel = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
-        hilfe = subprocess.run(
+        hilfe = prozesshilfe.lauf(
             [sys.executable, "-X", "utf8", os.path.join(wurzel, "core", "focus_cull_stack.py"),
              "--help"],
             capture_output=True, text=True, encoding="utf-8", timeout=300).stdout

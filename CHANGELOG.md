@@ -8,6 +8,41 @@ All notable changes to ForgePix. Format based on
 
 ## [Unreleased]
 
+### Four to seven tests failed at random — and the "load" explanation was a guess
+
+Every full run of the test suite had four to seven red tests, different ones each time, all
+green when re-run individually. The error:
+
+    OSError: [WinError 6] The handle is invalid
+    subprocess.py:1430, while CREATING the process
+
+The obvious and wrong explanation was "under load the machine runs out of process handles". It
+even made it into a commit message. The counter-test refuted it: the same call runs any number
+of times outside pytest, under full load too.
+
+The cause is `capture_output=True` **without** `stdin=`:
+
+* `capture_output=True` redirects stdout and stderr into pipes, **but not stdin** — the child
+  inherits that from the parent.
+* pytest replaces `sys.stdin` with an object that has no real handle. If capturing switches to
+  that mode during a run, the parent has no handle left to pass on, and Windows refuses to
+  duplicate it.
+
+That also explains the apparent randomness: **it depends on what ran before.** Two tests in one
+file, one with and one without `stdin=`, show it immediately — the one without fails reliably
+under pytest, the one with runs.
+
+17 call sites across five test files now go through `tests/prozesshilfe.py`, which sets
+`stdin=subprocess.DEVNULL` unless the caller says otherwise (`input=` is left alone —
+`subprocess.run` rejects both together). **No retrying:** a process that runs and comes back
+with an error code is a finding about the program and must get through. The first draft had a
+retry — nothing supported it, and it is gone again.
+
+Afterwards: **1117 tests green, two full runs in a row, with a stacking job running.**
+
+One test pins the cause down and skips itself once the naked call goes through again — at that
+point the file may be removed.
+
 ### Drizzle 2x measured on real data — and it costs more than it gives
 
 For undersampled material the rule engine has been recommending

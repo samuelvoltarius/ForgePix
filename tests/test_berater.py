@@ -78,8 +78,9 @@ class TestPruefung(unittest.TestCase):
         aber `--bg-extract`. Ein Katalog, der Schalter anbietet, die es nicht gibt, laesst das
         Modell etwas vorschlagen, das anschliessend an argparse scheitert."""
         import subprocess
+        import prozesshilfe
         wurzel = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
-        hilfe = subprocess.run(
+        hilfe = prozesshilfe.lauf(
             [sys.executable, "-X", "utf8", os.path.join(wurzel, "core", "focus_cull_stack.py"),
              "--help"],
             capture_output=True, text=True, encoding="utf-8", timeout=300).stdout

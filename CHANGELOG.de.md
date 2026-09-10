@@ -8,6 +8,42 @@ Alle nennenswerten Änderungen an ForgePix. Format orientiert an
 
 ## [Unreleased]
 
+### Vier bis sieben Tests fielen zufaellig um — und die Erklaerung „Last" war geraten
+
+Bei jedem Vollauf der Testsuite waren vier bis sieben Tests rot, jedes Mal andere, einzeln
+nachgefahren alle gruen. Der Fehler:
+
+    OSError: [WinError 6] Das Handle ist ungueltig
+    subprocess.py:1430, beim ANLEGEN des Prozesses
+
+Naheliegend und falsch war die Erklaerung „unter Last gehen dem Rechner die Prozess-Handles
+aus". Sie stand sogar in einem Commit-Text. Die Gegenprobe hat sie widerlegt: derselbe Aufruf
+laeuft ausserhalb von pytest beliebig oft durch, auch unter voller Last.
+
+Die Ursache ist `capture_output=True` **ohne** `stdin=`:
+
+* `capture_output=True` leitet stdout und stderr in Rohre um, **stdin aber nicht** — das erbt
+  der Kindprozess vom Elternprozess.
+* pytest ersetzt `sys.stdin` durch ein Objekt ohne echtes Handle. Wird waehrend eines Laufs auf
+  diese Art der Abfangung umgeschaltet, hat der Elternprozess kein Handle mehr zu vererben, und
+  Windows lehnt das Duplizieren ab.
+
+Daraus folgt auch die scheinbare Zufaelligkeit: **es haengt davon ab, was vorher lief.** Zwei
+Tests in einer Datei, einer mit und einer ohne `stdin=`, zeigen es auf Anhieb — der ohne faellt
+unter pytest zuverlaessig um, der mit laeuft.
+
+17 Aufrufstellen in fuenf Testdateien laufen jetzt ueber `tests/prozesshilfe.py`, das
+`stdin=subprocess.DEVNULL` setzt, wenn der Aufrufer nichts anderes sagt (`input=` bleibt
+unangetastet — `subprocess.run` lehnt beides zusammen ab). **Kein Wiederholen:** ein Prozess,
+der laeuft und mit einem Fehlercode zurueckkommt, ist ein Befund am Programm und muss
+durchschlagen. Der erste Entwurf hatte eine Wiederholung — sie war durch nichts belegt und ist
+wieder raus.
+
+Danach: **1117 Tests gruen, zwei Vollaeufe hintereinander, bei laufender Stapelverarbeitung.**
+
+Ein Test haelt die Ursache fest und meldet sich ab (`skip`), sobald der nackte Aufruf wieder
+durchlaeuft — dann darf die Datei weg.
+
 ### Drizzle 2x an echten Daten gemessen — und es kostet mehr, als es bringt
 
 Das Regelwerk empfiehlt bei unterabgetastetem Material seit zwanzig Laeufen

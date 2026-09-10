@@ -135,6 +135,7 @@ class LiveRegressions(unittest.TestCase):
 
     def test_crop_without_scipy(self):
         import subprocess
+        import prozesshilfe
         code = """
 import sys
 sys.path.insert(0, 'core')
@@ -145,6 +146,6 @@ img = np.zeros((20,20,3), np.uint8)
 img[3:17,3:17] = 100
 assert mosaic._autocrop(img).shape == (14,14,3)
 """
-        result = subprocess.run([sys.executable, "-c", code],
+        result = prozesshilfe.lauf([sys.executable, "-c", code],
                                 cwd=Path(__file__).resolve().parents[1], capture_output=True, timeout=30)
         self.assertEqual(result.returncode, 0, result.stderr.decode(errors="replace"))
