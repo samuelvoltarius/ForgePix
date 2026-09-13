@@ -11,6 +11,7 @@ ExifRead>=3.0           # EXIF lesen ohne exiftool (Brennweite/Blende/ISO/Belich
 piexif>=1.1             # EXIF auf JPEG-Ausgaben übernehmen ohne exiftool (eingebaut, mitgeliefert)
 astropy>=5.3            # optional: FITS lesen/schreiben (Astro). Ohne astropy laufen JPG/TIFF/RAW normal.
 scipy>=1.10             # Mosaik-Optimierung und Feinregistrierung
+Pillow>=10.0            # animiertes GIF fuer --blink; EXIF-Lesen im HDR-Modus
 # Windows x64: eigener lokaler GPU-Pfad ohne separate CUDA/cuDNN-Installation.
 # Die Pakete teilen den Importnamen onnxruntime und dürfen nicht parallel installiert werden.
 onnxruntime-directml==1.24.4; sys_platform == "win32" and platform_machine == "AMD64"

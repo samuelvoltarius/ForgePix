@@ -22,7 +22,11 @@ from ui.astrometry_dialog import header_hints
 class StackObservationExport(unittest.TestCase):
     def test_actual_contributors_reference_time_coverage_and_project_roundtrip(self):
         with tempfile.TemporaryDirectory() as folder:
-            root = Path(folder)
+            # Kanonisieren wie in test_project_store (5677d8b): der Beobachtungsbericht schreibt
+            # den AUFGELOESTEN Pfad, und das ist fuer "welche Datei war die Referenz" richtig.
+            # Ohne das scheitert der Vergleich, sobald TEMP ein Alias ist — auf der CI unter macOS
+            # (/var -> /private/var) und Windows (RUNNER~1 -> runneradmin), auf Ubuntu nicht.
+            root = Path(folder).resolve()
             inputs = root / "inputs"
             inputs.mkdir()
             original = {}

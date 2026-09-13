@@ -8,6 +8,25 @@ Alle nennenswerten Änderungen an ForgePix. Format orientiert an
 
 ## [Unreleased]
 
+### `--blink` stuerzte in jeder Kern-Installation ab — und die CI war seit Tagen rot
+
+Die Tests auf GitHub liefen seit dem 6. September auf allen drei Systemen rot, lokal waren sie
+gruen. Zwei Ursachen, beide nur ausserhalb des Entwicklungsrechners sichtbar:
+
+* **Pillow fehlte in `requirements-core.txt`.** `klassiker.blink` schreibt das Daumenkino als
+  animiertes GIF mit Pillow. Auf dem Entwicklungsrechner war Pillow zufaellig installiert, in der
+  CI nicht — und der Release-Build installiert genau diese Kern-Abhaengigkeiten. Das
+  ausgelieferte Programm waere bei `--blink` mit `ModuleNotFoundError: No module named 'PIL'`
+  abgestuerzt. Lokal nachgestellt, indem der Import gesperrt wurde: dieselben zwei Fehler wie in
+  der CI. Pillow steht jetzt in den Kern-Abhaengigkeiten.
+* **Ein Pfadvergleich im Test, nicht im Programm.** Der Beobachtungsbericht schreibt den
+  aufgeloesten Pfad der Referenzaufnahme, und das ist richtig. Der Test verglich mit dem
+  unaufgeloesten. Unter macOS ist das Temp-Verzeichnis ein Alias (`/var` → `/private/var`),
+  unter Windows ein Kurzname (`RUNNER~1` → `runneradmin`), unter Ubuntu keines von beiden —
+  daher rot auf zwei Systemen und gruen auf dem dritten. Lokal nachgestellt mit einem
+  Temp-Verzeichnis als Verzeichnis-Verknuepfung: exakt dieselbe Abweichung. Der Test
+  kanonisiert jetzt seinen Wurzelpfad, wie `test_project_store` es seit `5677d8b` tut.
+
 ### Drizzle schnitt zwei Drittel des Feldes weg — und M51 mit
 
 Nach echtem Drizzle 2x behielt der Zuschnitt an M51 **30,4 % des Feldes**, und die Galaxie lag

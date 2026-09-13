@@ -8,6 +8,24 @@ All notable changes to ForgePix. Format based on
 
 ## [Unreleased]
 
+### `--blink` crashed in every core install — and CI had been red for days
+
+The GitHub tests had been red on all three systems since 6 September while they were green
+locally. Two causes, both visible only away from the development machine:
+
+* **Pillow was missing from `requirements-core.txt`.** `klassiker.blink` writes the flip-book as
+  an animated GIF with Pillow. Pillow happened to be installed on the development machine but not
+  in CI — and the release build installs exactly those core dependencies. The shipped program
+  would have crashed on `--blink` with `ModuleNotFoundError: No module named 'PIL'`. Reproduced
+  locally by blocking the import: the same two errors as in CI. Pillow is now a core dependency.
+* **A path comparison in the test, not in the program.** The observation report writes the
+  resolved path of the reference frame, which is correct. The test compared it with the
+  unresolved one. On macOS the temp directory is an alias (`/var` → `/private/var`), on Windows
+  a short name (`RUNNER~1` → `runneradmin`), on Ubuntu neither — hence red on two systems and
+  green on the third. Reproduced locally with the temp directory as a directory junction: exactly
+  the same mismatch. The test now canonicalises its root path, as `test_project_store` has done
+  since `5677d8b`.
+
 ### Drizzle cropped away two thirds of the field — and M51 with it
 
 After true drizzle 2x the crop kept **30.4 % of the field** on M51, and the galaxy lay outside.
