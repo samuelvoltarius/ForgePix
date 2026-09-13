@@ -8,6 +8,8 @@ Alle nennenswerten Änderungen an ForgePix. Format orientiert an
 
 ## [Unreleased]
 
+## [1.28.0] – 2026-09-13
+
 ### `--blink` stuerzte in jeder Kern-Installation ab — und die CI war seit Tagen rot
 
 Die Tests auf GitHub liefen seit dem 6. September auf allen drei Systemen rot, lokal waren sie

@@ -8,6 +8,8 @@ All notable changes to ForgePix. Format based on
 
 ## [Unreleased]
 
+## [1.28.0] – 2026-09-13
+
 ### `--blink` crashed in every core install — and CI had been red for days
 
 The GitHub tests had been red on all three systems since 6 September while they were green
