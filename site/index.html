@@ -3,11 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ForgePix — Automatic focus stacking for macro photos</title>
-<meta name="description" content="ForgePix (Beta) — automatic focus stacking and computational photography for macro, astro and long-exposure series. Runs locally on your own computer, AI optional. Free &amp; open source for Windows, Mac &amp; Linux.">
+<title>ForgePix — Stacking for macro, astro and long exposure</title>
+<meta name="description" content="ForgePix (Beta) — focus stacking for macro photos and a full astro workflow: calibration, alignment, stacking, star-colour calibration, plate solving and photometry. Runs locally on your own computer. Free &amp; open source for Windows, Mac &amp; Linux.">
 <meta name="theme-color" content="#121316">
-<meta property="og:title" content="ForgePix — Automatic focus stacking, free &amp; open source">
-<meta property="og:description" content="A free app that turns a series of photos into one razor-sharp image — automatically. Close-ups, night sky, silky water.">
+<meta property="og:title" content="ForgePix — Stacking for macro, astro and long exposure, free &amp; open source">
+<meta property="og:description" content="A free app that turns a series of photos into one clean image — automatically. Close-ups, deep-sky astro with calibration and photometry, silky water.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://forgepix.app">
 <meta property="og:image" content="https://forgepix.app/assets/shots/p4_result.jpg">
@@ -175,6 +175,9 @@
     .meta{gap:10px;flex-direction:column}
     .foot-right{margin-left:0}
   }
+  /* Handy: Marke, BETA, Sprachumschalter und GitHub-Knopf passten nicht nebeneinander — der
+     Umschalter lag 14 px ueber dem BETA-Abzeichen. GitHub ist im Hero und im Footer verlinkt. */
+  @media(max-width:420px){ nav.links .btn{display:none} }
 </style>
 </head>
 <body>
@@ -186,6 +189,7 @@
       <a href="#what" data-i18n="nav_what">What it does</a>
       <a href="#how" data-i18n="nav_how">How it works</a>
       <a href="#tools" data-i18n="nav_tools">Tools</a>
+      <a href="#astro" data-i18n="nav_astro">Astro</a>
       <a href="#results" data-i18n="nav_results">Results</a>
       <a href="#download" data-i18n="nav_download">Download</a>
       <span class="lang">
@@ -206,10 +210,10 @@
       <p class="lead" data-i18n="hero_lead">ForgePix turns a focus series into a clean, sharp <b>macro photo</b> — automatically, on your own computer, with no account.</p>
       <p class="sub" data-i18n="hero_sub">Drop your photos in and press one button: it removes the bad shots, lines the rest up and builds one sharp image. Free and open source.</p>
       <div class="cta">
-        <a class="btn primary" data-release-link href="https://github.com/samuelvoltarius/ForgePix/releases/latest" target="_blank" rel="noopener">⬇ <span data-i18n="hero_dl">Download free</span> · <span data-version>latest</span></a>
+        <a class="btn primary" data-release-link href="https://github.com/samuelvoltarius/ForgePix/releases" target="_blank" rel="noopener">⬇ <span data-i18n="hero_dl">Download free</span> · <span data-version>latest</span></a>
         <a class="btn" href="https://github.com/samuelvoltarius/ForgePix" target="_blank" rel="noopener" data-i18n="hero_github">See on GitHub</a>
       </div>
-      <p class="also" data-i18n="hero_also">Also includes tools for <b>astro stacking</b>, <b>Moon mosaics</b> and <b>long‑exposure</b> effects.</p>
+      <p class="also" data-i18n="hero_also">Also includes a full <b>astro workflow</b> — calibration, star colours, plate solving, photometry — plus <b>Moon mosaics</b> and <b>long‑exposure</b> effects.</p>
       <div class="meta">
         <span><b>✓</b> <span data-i18n="meta1">Windows · Mac · Linux</span></span>
         <span><b>✓</b> <span data-i18n="meta2">No account, no internet needed</span></span>
@@ -257,10 +261,27 @@
     <p class="section-lead" data-i18n="tools_lead">Choose when you open the app — switch any time.</p>
     <div class="mods">
       <div class="mod"><div class="ico">🔬</div><div><h3 data-i18n="m1t">Close‑ups</h3><p data-i18n="m1p">Razor‑sharp photos of small things — products, coins, food, jewellery, insects. ForgePix combines your shots so the whole subject is in focus.</p></div></div>
-      <div class="mod"><div class="ico">🌌</div><div><h3 data-i18n="m2t">Night sky</h3><p data-i18n="m2p">Combine many star photos into one clean, bright night‑sky image with less noise. It even drops the photos spoiled by clouds or a passing satellite.</p></div></div>
+      <div class="mod"><div class="ico">🌌</div><div><h3 data-i18n="m2t">Night sky</h3><p data-i18n="m2p">Combine many star photos into one clean night‑sky image with less noise. Darks and flats are applied, photos spoiled by clouds or a passing satellite are dropped, and you get a report on what to improve next time.</p></div></div>
       <div class="mod"><div class="ico">🌗</div><div><h3 data-i18n="m3t">Moon &amp; panoramas</h3><p data-i18n="m3p">Stitch several shots of the Moon or Sun into one big, detailed picture — or combine frames for extra clarity.</p></div></div>
       <div class="mod"><div class="ico">📷</div><div><h3 data-i18n="m4t">Long exposure</h3><p data-i18n="m4p">Silky water, soft clouds or light trails — made from a normal burst of photos. No tripod tricks, no special filter needed.</p></div></div>
     </div>
+  </div>
+</section>
+
+<section id="astro">
+  <div class="wrap">
+    <p class="eyebrow" data-i18n="astro_eyebrow">For astrophotographers</p>
+    <h2 data-i18n="astro_h2">The astro toolkit</h2>
+    <p class="section-lead" data-i18n="astro_lead">From raw FITS files to a measured, calibrated result — on your own computer, without Siril or PixInsight installed.</p>
+    <div class="why">
+      <div class="item"><div class="ic">🧪</div><h3 data-i18n="a1t">Calibration done right</h3><p data-i18n="a1p">Darks, flats and bias frames. A master dark taken at a different temperature or exposure time is rescaled to match, and a superbias removes read noise from the bias.</p></div>
+      <div class="item"><div class="ic">🧭</div><h3 data-i18n="a2t">Knows where it points</h3><p data-i18n="a2p">Plate solving runs on your computer — no internet, no external solver — for image fields from about one arcminute to five degrees across.</p></div>
+      <div class="item"><div class="ic">🎨</div><h3 data-i18n="a3t">Star colours from real stars</h3><p data-i18n="a3p">Colours are calibrated against the known colours of catalogue stars (Gaia), instead of simply making the average star white. The catalogue for your sky region is downloaded once, then it works offline.</p></div>
+      <div class="item"><div class="ic">📋</div><h3 data-i18n="a4t">Checks before it stacks</h3><p data-i18n="a4p">Spots mixed cameras, gains, exposure times or sky fields in one folder before hours of work. After stacking you get a measurement report with concrete advice.</p></div>
+      <div class="item"><div class="ic">📈</div><h3 data-i18n="a5t">Measures, not just pretty</h3><p data-i18n="a5p">Aperture photometry for variable stars: light curves and a report file in AAVSO format.</p></div>
+      <div class="item"><div class="ic">☄️</div><h3 data-i18n="a6t">Live, comets and more</h3><p data-i18n="a6p">Live stacking while you capture, comet stacking with Larson–Sekanina for jets, drizzle for clearly undersampled images, and PixelMath with star and background masks.</p></div>
+    </div>
+    <p data-i18n="astro_note" style="margin:22px 0 0;color:var(--muted);font-size:14px">Beta: much of this is new. Every step reports what it measured — if a result looks off, please tell us on GitHub.</p>
   </div>
 </section>
 
@@ -327,7 +348,7 @@
     <div class="ai-card">
       <h3 data-i18n="ai_h3">Runs on its own</h3>
       <p data-i18n="ai_p1">ForgePix works <b>completely offline</b>. No account, no sign‑up, no internet, no AI needed — your photos never leave your computer.</p>
-      <p data-i18n="ai_p2">If you like, you can connect an AI later — but only for <b>tips and checks</b>. It never touches your photos.</p>
+      <p data-i18n="ai_p2">ForgePix comes with four small AI models of its own — for noise, background, deblurring and star removal. They run <b>locally</b>, are still <b>experimental</b> and are <b>switched off</b> unless you turn them on. Everything else is classic, measurable image processing.</p>
       <div class="quote" data-i18n="ai_quote">“The app explains <b>why</b> it made each choice.”</div>
     </div>
   </div>
@@ -340,9 +361,9 @@
     <p class="section-lead"><span data-i18n="dl_lead">Always the latest version, straight from GitHub.</span>
       <span class="verline"><span data-i18n="dl_latest">Latest:</span> <b data-version>checking…</b></span></p>
     <div class="dl">
-      <div class="card"><div class="os">🍎</div><h4>Mac</h4><p data-i18n="dl_mac">Download the ZIP, unzip, open <code>ForgePix.app</code>.</p><a class="btn primary" data-os="mac" href="https://github.com/samuelvoltarius/ForgePix/releases/latest" target="_blank" rel="noopener" data-i18n="dl_btn">Download</a></div>
-      <div class="card"><div class="os">🐧</div><h4>Linux</h4><p data-i18n="dl_linux">Download the TAR.GZ, extract, run <code>ForgePix</code>.</p><a class="btn primary" data-os="linux" href="https://github.com/samuelvoltarius/ForgePix/releases/latest" target="_blank" rel="noopener" data-i18n="dl_btn">Download</a></div>
-      <div class="card"><div class="os">🪟</div><h4>Windows</h4><p data-i18n="dl_win">Download the ZIP, unzip, run <code>ForgePix.exe</code>.</p><a class="btn primary" data-os="win" href="https://github.com/samuelvoltarius/ForgePix/releases/latest" target="_blank" rel="noopener" data-i18n="dl_btn">Download</a></div>
+      <div class="card"><div class="os">🍎</div><h4>Mac</h4><p data-i18n="dl_mac">Download the ZIP, unzip, open <code>ForgePix.app</code>.</p><a class="btn primary" data-os="mac" href="https://github.com/samuelvoltarius/ForgePix/releases" target="_blank" rel="noopener" data-i18n="dl_btn">Download</a></div>
+      <div class="card"><div class="os">🐧</div><h4>Linux</h4><p data-i18n="dl_linux">Download the TAR.GZ, extract, run <code>ForgePix</code>.</p><a class="btn primary" data-os="linux" href="https://github.com/samuelvoltarius/ForgePix/releases" target="_blank" rel="noopener" data-i18n="dl_btn">Download</a></div>
+      <div class="card"><div class="os">🪟</div><h4>Windows</h4><p data-i18n="dl_win">Download the ZIP, unzip, run <code>ForgePix.exe</code>.</p><a class="btn primary" data-os="win" href="https://github.com/samuelvoltarius/ForgePix/releases" target="_blank" rel="noopener" data-i18n="dl_btn">Download</a></div>
     </div>
     <div class="codeblock" id="source"><span class="c" data-i18n="code_comment"># prefer the command line? install from source:</span><br>
       git clone https://github.com/samuelvoltarius/ForgePix.git &amp;&amp; cd ForgePix<br>
@@ -369,8 +390,8 @@
       <a href="https://github.com/samuelvoltarius/ForgePix" target="_blank" rel="noopener">GitHub</a>
       <a href="https://github.com/samuelvoltarius/ForgePix/issues" target="_blank" rel="noopener" data-i18n="foot_issues">Report a bug</a>
       <a href="https://github.com/samuelvoltarius/ForgePix/discussions" target="_blank" rel="noopener" data-i18n="foot_discuss2">Discussions</a>
-      <a data-release-link href="https://github.com/samuelvoltarius/ForgePix/releases/latest" target="_blank" rel="noopener" data-i18n="foot_releases">Releases</a>
-      <a href="https://github.com/samuelvoltarius/ForgePix/blob/main/docs/GUIDE.en.md" target="_blank" rel="noopener" data-i18n="foot_help">Help</a>
+      <a data-release-link href="https://github.com/samuelvoltarius/ForgePix/releases" target="_blank" rel="noopener" data-i18n="foot_releases">Releases</a>
+      <a href="https://github.com/samuelvoltarius/ForgePix/blob/master/docs/GUIDE.en.md" target="_blank" rel="noopener" data-i18n="foot_help">Help</a>
       <a href="/impressum">Impressum</a>
       <a href="/datenschutz">Datenschutz</a>
     </div>
@@ -382,12 +403,12 @@
 var I18N = {
  en:{}, /* English is the default text already in the HTML */
  de:{
-  nav_what:"Was es macht", nav_how:"So funktioniert's", nav_tools:"Werkzeuge", nav_results:"Ergebnisse", nav_download:"Download",
+  nav_what:"Was es macht", nav_how:"So funktioniert's", nav_tools:"Werkzeuge", nav_astro:"Astro", nav_results:"Ergebnisse", nav_download:"Download",
   hero_pill:"Kostenlos &amp; Open Source",
   hero_h1:"Viele Fotos rein.<br>Ein <span class=\"g\">scharfes Ergebnis</span> raus.",
   hero_lead:"ForgePix macht aus einer Fokusreihe automatisch ein sauberes, scharfes <b>Makro‑Foto</b> — von allein, auf deinem eigenen Computer, ohne Konto.",
   hero_sub:"Fotos reinziehen, einen Knopf drücken: schlechte Aufnahmen raus, der Rest ausgerichtet, ein scharfes Bild fertig. Kostenlos und Open Source.",
-  hero_also:"Mit dabei: Werkzeuge für <b>Astro‑Stacking</b>, <b>Mond‑Mosaike</b> und <b>Langzeit</b>‑Effekte.",
+  hero_also:"Mit dabei: ein vollständiger <b>Astro‑Ablauf</b> — Kalibrierung, Sternfarben, Positionsbestimmung, Photometrie — sowie <b>Mond‑Mosaike</b> und <b>Langzeit</b>‑Effekte.",
   hero_dl:"Gratis laden", hero_github:"Auf GitHub ansehen",
   meta1:"Windows · Mac · Linux", meta2:"Kein Konto, kein Internet nötig", meta3:"Open Source (MIT)",
   what_eyebrow:"Was ForgePix für dich macht", what_h2:"Es übernimmt die schwierigen Teile automatisch",
@@ -407,9 +428,18 @@ var I18N = {
   tools_eyebrow:"Vier Werkzeuge in einer App", tools_h2:"Wähl, was du machen willst",
   tools_lead:"Wähl beim Öffnen der App — jederzeit umschaltbar.",
   m1t:"Nahaufnahmen", m1p:"Gestochen scharfe Fotos kleiner Dinge — Produkte, Münzen, Essen, Schmuck, Insekten. ForgePix kombiniert deine Aufnahmen, sodass das ganze Motiv scharf ist.",
-  m2t:"Sternenhimmel", m2p:"Kombiniere viele Sternfotos zu einem sauberen, hellen Nachthimmel mit weniger Rauschen. Fotos mit Wolken oder einem Satelliten werden sogar aussortiert.",
+  m2t:"Sternenhimmel", m2p:"Kombiniere viele Sternfotos zu einem sauberen Nachthimmel mit weniger Rauschen. Darks und Flats werden verrechnet, Fotos mit Wolken oder Satelliten aussortiert, und ein Bericht sagt dir, was du beim nächsten Mal besser machen kannst.",
   m3t:"Mond &amp; Panoramen", m3p:"Setze mehrere Aufnahmen von Mond oder Sonne zu einem großen, detailreichen Bild zusammen — oder kombiniere für mehr Klarheit.",
   m4t:"Langzeitbelichtung", m4p:"Seidiges Wasser, weiche Wolken oder Lichtspuren — aus einer normalen Fotoserie. Keine Stativ‑Tricks, kein Spezialfilter nötig.",
+  astro_eyebrow:"Für Astrofotografen", astro_h2:"Der Astro‑Werkzeugkasten",
+  astro_lead:"Von rohen FITS‑Dateien zu einem gemessenen, kalibrierten Ergebnis — auf deinem eigenen Computer, ohne dass Siril oder PixInsight installiert sein müssen.",
+  a1t:"Kalibrierung, wie sie sein soll", a1p:"Darks, Flats und Bias. Ein Master‑Dark mit anderer Temperatur oder Belichtungszeit wird passend umgerechnet, und ein Superbias nimmt dem Bias das Ausleserauschen.",
+  a2t:"Weiß, wohin es zeigt", a2p:"Die Positionsbestimmung am Himmel läuft auf deinem Rechner — ohne Internet, ohne externes Programm — für Bildfelder von etwa einer Bogenminute bis fünf Grad.",
+  a3t:"Sternfarben von echten Sternen", a3p:"Die Farben werden an den bekannten Farben von Katalogsternen (Gaia) ausgerichtet, statt einfach den Durchschnittsstern weiß zu machen. Der Katalog für deine Himmelsgegend wird einmal geladen, danach geht es offline.",
+  a4t:"Prüft, bevor es stapelt", a4p:"Erkennt gemischte Kameras, Verstärkungen, Belichtungszeiten oder Himmelsfelder in einem Ordner — bevor Stunden verrechnet sind. Nach dem Stapeln gibt es einen Messbericht mit konkreten Tipps.",
+  a5t:"Misst, statt nur schön zu machen", a5p:"Blendenphotometrie für veränderliche Sterne: Lichtkurven und eine Meldedatei im AAVSO‑Format.",
+  a6t:"Live, Kometen und mehr", a6p:"Live‑Stacking während der Aufnahme, Kometen‑Stacking mit Larson‑Sekanina für Strahlen, Drizzle für deutlich unterabgetastete Bilder und PixelMath mit Stern‑ und Hintergrundmasken.",
+  astro_note:"Beta: vieles davon ist neu. Jeder Schritt meldet, was er gemessen hat — wenn ein Ergebnis komisch aussieht, sag es uns bitte auf GitHub.",
   in_eyebrow:"Ein Blick hinein", in_h2:"Für alle gemacht, nicht nur für Profis",
   in_lead:"Klare Knöpfe, ein Hilfe‑„?“ bei jeder Option, ein einfacher Anfänger‑Modus und ein eingebauter Foto‑Editor.",
   g1:"Startbildschirm — wähl ein Modul.", g2:"Makro — ein scharfes Ergebnis.",
@@ -432,7 +462,7 @@ var I18N = {
   li8:"<b>Deutsch &amp; Englisch</b>, und alles geht auch per Tastatur.",
   ai_h3:"Läuft von allein",
   ai_p1:"ForgePix läuft <b>komplett offline</b>. Kein Konto, keine Anmeldung, kein Internet, keine KI nötig — deine Fotos verlassen nie deinen Computer.",
-  ai_p2:"Wenn du willst, kannst du später eine KI verbinden — aber nur für <b>Tipps und Prüfungen</b>. Sie fasst deine Fotos nie an.",
+  ai_p2:"ForgePix bringt vier eigene kleine KI‑Modelle mit — für Rauschen, Hintergrund, Schärfe und Sternentfernung. Sie laufen <b>lokal</b>, sind noch <b>experimentell</b> und bleiben <b>aus</b>, bis du sie einschaltest. Alles andere ist klassische, messbare Bildverarbeitung.",
   ai_quote:"„Die App erklärt, <b>warum</b> sie sich so entschieden hat.“",
   dl_eyebrow:"Hol es dir", dl_h2:"Download — kostenlos, kein Konto",
   dl_lead:"Immer die neueste Version, direkt von GitHub.", dl_latest:"Neueste:", dl_downloads:"Downloads", dl_views:"Aufrufe",
@@ -471,8 +501,10 @@ var I18N = {
 
   /* ---- Latest version from GitHub (auto) ---- */
   try{
-    fetch("https://api.github.com/repos/samuelvoltarius/ForgePix/releases/latest", {headers:{"Accept":"application/vnd.github+json"}})
+    /* Neueste Version INKLUSIVE Beta: /releases/latest ueberspringt Vorabversionen. */
+    fetch("https://api.github.com/repos/samuelvoltarius/ForgePix/releases?per_page=10", {headers:{"Accept":"application/vnd.github+json"}})
       .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(list){ return (list||[]).filter(function(x){ return !x.draft; })[0] || null; })
       .then(function(d){
         if(!d || !d.tag_name) return;
         document.querySelectorAll("[data-version]").forEach(function(el){ el.textContent = d.tag_name; });
