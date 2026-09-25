@@ -103,20 +103,20 @@
   .mod h3{margin:0 0 7px;font-size:18.5px}
   .mod p{margin:0;color:var(--muted);font-size:14.5px}
 
-  .gal{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+  .gal{display:grid;grid-template-columns:repeat(2,1fr);gap:18px}
   .gal figure{margin:0;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--card)}
-  .gal img{width:100%;aspect-ratio:16/10;object-fit:cover}
+  .gal img{width:100%;aspect-ratio:3/2;object-fit:cover;object-position:top}
   .gal figcaption{padding:10px 14px;font-size:13px;color:var(--muted)}
   .results{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
   .results figure{margin:0;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#0b0c10}
   .results img{width:100%;aspect-ratio:4/3;object-fit:cover}
   .results figcaption{padding:11px 15px;font-size:13.5px;color:var(--soft)}
   .ba-h{text-align:center;font-size:18px;font-weight:700;margin:48px 0 0}
-  .ba{display:grid;grid-template-columns:1fr auto 1fr;gap:14px;align-items:center;max-width:780px;margin:22px auto 0}
+  .ba{display:grid;grid-template-columns:1fr auto 1fr;gap:14px;align-items:stretch;max-width:780px;margin:22px auto 0}
   .ba figure{margin:0;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#0b0c10}
   .ba img{width:100%;aspect-ratio:1/1;object-fit:cover}
   .ba figcaption{padding:9px 13px;font-size:12.5px;color:var(--muted)}
-  .ba .arrow{font-size:22px;color:var(--green);font-weight:800}
+  .ba .arrow{font-size:22px;color:var(--green);font-weight:800;align-self:center}
 
   .hl{display:grid;grid-template-columns:1.1fr .9fr;gap:40px;align-items:start}
   .hl ul{list-style:none;padding:0;margin:0}
@@ -152,6 +152,12 @@
   .helpbar a{color:var(--green);font-weight:600;font-size:15px}
   .helpbar a:hover{text-decoration:underline}
 
+  .zoomable{cursor:zoom-in}
+  dialog.lb{border:0;padding:0;background:transparent;max-width:96vw;max-height:94vh}
+  dialog.lb::backdrop{background:rgba(5,6,8,.88)}
+  dialog.lb:focus,dialog.lb:focus-visible{outline:none}
+  dialog.lb img{max-width:96vw;max-height:88vh;width:auto;height:auto;border-radius:10px;cursor:zoom-out}
+  dialog.lb p{margin:8px 2px 0;color:var(--soft);font-size:14px;text-align:center}
   footer{padding:44px 0;color:var(--muted);font-size:14px;border-top:1px solid var(--line)}
   .foot-inner{display:flex;gap:18px;flex-wrap:wrap;align-items:center}
   .foot-inner .brand{font-size:16px}
@@ -289,15 +295,12 @@
   <div class="wrap">
     <p class="eyebrow" data-i18n="in_eyebrow">A look inside</p>
     <h2 data-i18n="in_h2">Made for everyone, not just experts</h2>
-    <p class="section-lead" data-i18n="in_lead">Clear buttons, a help “?” on every option, a simple Beginner mode, and a photo editor built right in.</p>
+    <p class="section-lead" data-i18n="in_lead">Clear buttons, a help “?” on every option, a simple Beginner mode, and a photo editor built right in. Click any picture to see it full size.</p>
     <div class="gal">
       <figure><img src="assets/shots/01_start.png" alt=""><figcaption data-i18n="g1">Start screen — pick a module.</figcaption></figure>
       <figure><img src="assets/shots/02_makro.png" alt=""><figcaption data-i18n="g2">Macro — one sharp result.</figcaption></figure>
       <figure><img src="assets/shots/03_astro.png" alt=""><figcaption data-i18n="g3">Astro — deep‑sky stacking.</figcaption></figure>
-      <figure><img src="assets/shots/05_hybrid.png" alt=""><figcaption data-i18n="g4">Hybrid — Moon, Sun &amp; panoramas.</figcaption></figure>
-      <figure><img src="assets/shots/06_longexp.png" alt=""><figcaption data-i18n="g5">Long exposure — virtual exposure time.</figcaption></figure>
       <figure><img src="assets/shots/07_editor.png" alt=""><figcaption data-i18n="g7">Built‑in editor — exposure, colour, curve, crop.</figcaption></figure>
-      <figure><img src="assets/shots/05_focusmap.png" alt=""><figcaption data-i18n="g6">Focus map — which photo is sharp where.</figcaption></figure>
     </div>
   </div>
 </section>
@@ -398,6 +401,8 @@
   </div>
 </footer>
 
+<dialog class="lb" id="lb"><img alt=""><p></p></dialog>
+
 <script>
 /* ---- Translations (DE/EN) ---- */
 var I18N = {
@@ -441,7 +446,7 @@ var I18N = {
   a6t:"Live, Kometen und mehr", a6p:"Live‑Stacking während der Aufnahme, Kometen‑Stacking mit Larson‑Sekanina für Strahlen, Drizzle für deutlich unterabgetastete Bilder und PixelMath mit Stern‑ und Hintergrundmasken.",
   astro_note:"Beta: vieles davon ist neu. Jeder Schritt meldet, was er gemessen hat — wenn ein Ergebnis komisch aussieht, sag es uns bitte auf GitHub.",
   in_eyebrow:"Ein Blick hinein", in_h2:"Für alle gemacht, nicht nur für Profis",
-  in_lead:"Klare Knöpfe, ein Hilfe‑„?“ bei jeder Option, ein einfacher Anfänger‑Modus und ein eingebauter Foto‑Editor.",
+  in_lead:"Klare Knöpfe, ein Hilfe‑„?“ bei jeder Option, ein einfacher Anfänger‑Modus und ein eingebauter Foto‑Editor. Ein Klick auf ein Bild zeigt es in voller Größe.",
   g1:"Startbildschirm — wähl ein Modul.", g2:"Makro — ein scharfes Ergebnis.",
   g3:"Astro — Deep‑Sky‑Stacking.", g4:"Hybrid — Mond, Sonne &amp; Panoramen.",
   g5:"Langzeit — virtuelle Belichtungszeit.", g6:"Fokus‑Karte — welches Foto wo scharf ist.",
@@ -499,6 +504,22 @@ var I18N = {
     b.addEventListener("click", function(){ setLang(b.getAttribute("data-lang-btn")); });
   });
 
+  /* ---- Bilder per Klick vergroessern ---- */
+  var lb = document.getElementById("lb");
+  if(lb && lb.showModal){
+    document.querySelectorAll(".gal img, .results img, .ba img, .hero-shot img, .step .ph img").forEach(function(im){
+      im.classList.add("zoomable");
+      im.addEventListener("click", function(){
+        var cap = im.closest("figure") ? im.closest("figure").querySelector("figcaption") : null;
+        lb.querySelector("img").src = im.currentSrc || im.src;
+        lb.querySelector("img").alt = im.alt || "";
+        lb.querySelector("p").textContent = cap ? cap.textContent : "";
+        lb.showModal();
+      });
+    });
+    lb.addEventListener("click", function(){ lb.close(); });
+  }
+
   /* ---- Latest version from GitHub (auto) ---- */
   try{
     /* Neueste Version INKLUSIVE Beta: /releases/latest ueberspringt Vorabversionen. */
@@ -509,7 +530,12 @@ var I18N = {
         if(!d || !d.tag_name) return;
         document.querySelectorAll("[data-version]").forEach(function(el){ el.textContent = d.tag_name; });
         var notes=document.querySelector("[data-release-notes]");
-        if(notes) notes.textContent = (d.body && d.body.trim()) ? d.body.trim() : (d.name || d.tag_name);
+        if(notes){
+          var roh = (d.body && d.body.trim()) ? d.body.trim() : (d.name || d.tag_name);
+          var esc = roh.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+          notes.innerHTML = esc.replace(/\*\*([^*\n]+)\*\*/g, "<b>$1</b>")
+                               .replace(/^[-*] /gm, "• ");
+        }
         if(d.html_url) document.querySelectorAll("[data-release-link]").forEach(function(a){ a.href = d.html_url; });
         /* Wire each OS button straight to the matching release file (keeps site = repo). */
         (d.assets||[]).forEach(function(a){
