@@ -8,6 +8,32 @@ All notable changes to ForgePix. Format based on
 
 ## [Unreleased]
 
+### Nothing alignable: a clear message instead of a crash — and instead of "Done" with a single frame
+
+Four star-less FITS lights with `--astro`: the log said "registriert 0/4 (Pass 1)", entered
+PHASE:stack and then died with `ValueError: max() iterable argument is empty` — the list of
+exposure times was empty, and `all([])` is True. On real data this happens with clouds or the
+wrong folder.
+
+Re-measured on the same four frames, two siblings turned up:
+
+* **True drizzle** (`--astro-drizzle-true`) did not crash but reported **"Done"** — with a
+  "stack" of 1 out of 4 frames. The reference always aligns to itself, so a single used frame
+  means nothing matched. The rule engine even gave advice on that single frame.
+* **Hybrid focus+astro** (`--hybrid-fa`) died with `RuntimeError: keine Frames zum Stacken`.
+
+All three paths now abort as soon as fewer than two frames remain after registration — before
+PHASE:stack, with exit code 1 and a message saying how many of how many were aligned and what
+the likely cause is. The reference's stars are counted with the registration's own star finder
+(it gives up below 8); depending on the result the message says "too few stars" (clouds, focus,
+wrong folder), "alignment is set to shift" or "the frames do not match the reference"
+(different target, camera, binning). In the hybrid path the message names the position and
+suggests `--no-register` for shots that are already registered — with it, the same series was
+measured to run through.
+
+Counter-check: with the old `focus_cull_stack.py` all four new tests
+(`test_zu_wenig_ausgerichtet`) fail, each with the original error.
+
 ## [1.28.0] – 2026-09-13
 
 ### `--blink` crashed in every core install — and CI had been red for days

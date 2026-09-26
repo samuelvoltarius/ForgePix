@@ -8,6 +8,33 @@ Alle nennenswerten Änderungen an ForgePix. Format orientiert an
 
 ## [Unreleased]
 
+### Nichts ausrichtbar: klare Meldung statt Absturz — und statt „Fertig“ mit einem Einzelbild
+
+Vier sternlose FITS-Lights mit `--astro`: das Protokoll meldete „registriert 0/4 (Pass 1)“,
+ging in PHASE:stack und starb dann an `ValueError: max() iterable argument is empty` — die
+Liste der Belichtungszeiten war leer, und `all([])` ist True. An echten Daten passiert das bei
+Wolken oder im falschen Ordner.
+
+Nachgemessen an denselben vier Aufnahmen kamen zwei Geschwister dazu:
+
+* **Echtes Drizzle** (`--astro-drizzle-true`) stuerzte nicht ab, sondern meldete **„Fertig“** —
+  mit einem „Stapel“ aus 1 von 4 Aufnahmen. Die Referenz richtet sich immer an sich selbst aus;
+  eine einzige verwendete Aufnahme heisst also: nichts passte. Das Regelwerk gab zu diesem
+  Einzelbild sogar noch Rat.
+* **Hybrid Fokus+Astro** (`--hybrid-fa`) starb an `RuntimeError: keine Frames zum Stacken`.
+
+Jetzt bricht der Lauf in allen drei Wegen ab, sobald nach der Registrierung weniger als zwei
+Aufnahmen uebrig sind — vor PHASE:stack, mit Exit-Code 1 und einer Meldung, die sagt, wie viele
+von wie vielen ausgerichtet wurden und woran es vermutlich liegt. Die Sterne der Referenz
+werden dafuer mit dem Sternsucher der Registrierung gezaehlt (unter 8 gibt sie auf); je nach
+Befund heisst es „zu wenig Sterne“ (Wolken, Fokus, falscher Ordner), „Ausrichtung steht auf
+shift“ oder „die Aufnahmen passen nicht zur Referenz“ (anderes Ziel, Kamera, Binning). Im
+Hybrid-Weg nennt die Meldung die Position und `--no-register` fuer deckungsgleiche Shots —
+damit laeuft dieselbe Serie nachgemessen durch.
+
+Gegenprobe: mit dem alten `focus_cull_stack.py` fallen alle vier neuen Tests
+(`test_zu_wenig_ausgerichtet`), jeweils mit dem urspruenglichen Fehler.
+
 ## [1.28.0] – 2026-09-13
 
 ### `--blink` stuerzte in jeder Kern-Installation ab — und die CI war seit Tagen rot

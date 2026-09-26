@@ -2053,6 +2053,53 @@ def _load_astro_calibration(input_dir, args, paths):
     return dark, flat, bias
 
 
+def _zu_wenig_ausgerichtet(n_ausgerichtet, paths, ref_path, align_mode, dark=None, flat=None,
+                           frames=None):
+    """Meldung, wenn nach der Registrierung weniger als zwei Aufnahmen uebrig sind.
+
+    Vorher lief der Lauf weiter: im normalen Zweig bis zu einem `ValueError: max() iterable
+    argument is empty` (die Liste der Belichtungszeiten war leer, `all([])` ist True), im
+    Drizzle-Zweig sogar bis „Fertig“ — mit einem „Stapel“ aus der Referenz allein, weil die
+    Referenz sich immer an sich selbst ausrichtet. Eine ausgerichtete Aufnahme heisst also:
+    NICHTS passte zur Referenz.
+
+    Die Sternzahl der Referenz wird mit demselben Sternsucher gezaehlt, mit dem die
+    Registrierung arbeitet — nicht mit dem der Sub-Bewertung. Unter 8 Sternen gibt die
+    Registrierung auf (`_estimate_star_transform`), das ist also die belastbare Zahl."""
+    import astro
+    zeilen = ["Nur %d von %d Aufnahmen liessen sich ausrichten — zum Stapeln braucht es "
+              "mindestens 2." % (n_ausgerichtet, len(paths))]
+    ref_name = os.path.basename(ref_path)
+    try:
+        n_sterne = len(astro._star_centroids(astro._gray(
+            astro.read_calibrated(ref_path, dark, flat))))
+    except Exception as e:
+        n_sterne = None
+        zeilen.append("  Sterne im Referenzbild %s nicht zaehlbar: %s" % (ref_name, e))
+    if frames:
+        benutzt = set(paths)
+        ohne = sum(1 for f in frames if f.get("path") in benutzt and f.get("stars") == 0)
+        if ohne:
+            zeilen.append("  Die Sub-Bewertung fand in %d von %d Aufnahmen gar keine Sterne."
+                          % (ohne, len(paths)))
+    if n_sterne is not None and n_sterne < 8:
+        zeilen.append("  Im Referenzbild %s wurden nur %d Sterne gefunden; die Ausrichtung "
+                      "braucht mindestens 8. Vermutlich: Wolken, Dunst oder Tau, falscher "
+                      "Fokus, zu kurz belichtet — oder gar keine Himmelsaufnahmen (falscher "
+                      "Ordner)." % (ref_name, n_sterne))
+    elif align_mode == "shift":
+        zeilen.append("  Die Ausrichtung steht auf „shift“ (nur Verschiebung). Dreht sich das "
+                      "Feld — azimutale Montierung wie beim Seestar, oder ein Meridianumschlag —, "
+                      "passt nichts zusammen. Mit --astro-align rotate erneut versuchen.")
+    else:
+        zeilen.append("  Das Referenzbild %s hat %s Sterne, die uebrigen Aufnahmen passen aber "
+                      "nicht dazu. Vermutlich: ein anderes Ziel, eine andere Kamera, Brennweite "
+                      "oder ein anderes Binning im selben Ordner, oder Wolken nur in den "
+                      "uebrigen Aufnahmen."
+                      % (ref_name, "?" if n_sterne is None else n_sterne))
+    return "\n".join(zeilen)
+
+
 def run_astro(input_dir, work_dir, args):
     """Astro-Stacking: Kalibrierung -> Registrierung -> Rejection-Stacking -> Stretch."""
     import astro
@@ -2131,6 +2178,7 @@ def run_astro(input_dir, work_dir, args):
 
     # Sub-Qualität bewerten + schlechte aussortieren (FWHM/Sterne/Guiding/Wolken/Spuren)
     _bestref = None          # ohne Sub-Bewertung (--no-astro-qc) bleibt es beim mittleren Sub
+    _frames = None
     if not getattr(args, "no_astro_qc", False):
         import astro_quality
         phase("grade")
@@ -2299,6 +2347,13 @@ def run_astro(input_dir, work_dir, args):
                                          args, "astro_banding_vertical", False),
                                      align_mode=align_mode, do_register=not args.no_register,
                                      return_info=True)
+        # Die Referenz richtet sich immer an sich selbst aus. Eine einzige verwendete Aufnahme
+        # heisst: nichts passte — und ohne diese Pruefung meldete der Lauf trotzdem „Fertig“.
+        _n_drizzle = len(drizzle_info["report"]["source_files"])
+        if _n_drizzle < 2:
+            raise ForgePixFehler(_zu_wenig_ausgerichtet(
+                _n_drizzle, paths, astro._ref_path(paths, _bestref), align_mode,
+                dark=dark, flat=flat, frames=_frames))
     else:
         aligned = astro.register_and_cache(paths, reg_dir, dark, flat,
                                            do_register=not args.no_register,
@@ -2309,6 +2364,12 @@ def run_astro(input_dir, work_dir, args):
                                            banding=getattr(args, "astro_banding", 0.0),
                                            banding_vertikal=getattr(
                                                args, "astro_banding_vertical", False))
+        # Vor PHASE:stack pruefen: mit leerem `aligned` starb der Lauf weiter unten an
+        # `max([])` (Belichtungszeiten), mit einer einzigen Aufnahme ist es nur die Referenz.
+        if len(aligned) < 2:
+            raise ForgePixFehler(_zu_wenig_ausgerichtet(
+                len(aligned), paths, astro._ref_path(paths, _bestref), align_mode,
+                dark=dark, flat=flat, frames=_frames))
         phase("stack")
         # Kometen-Stacking: auf den KERN statt auf die Sterne. Der Kern wird selbst gefunden,
         # niemand muss ihn anklicken. Findet sich keiner, wird ganz normal weitergestapelt —
@@ -3527,6 +3588,16 @@ def run_hybrid_focus_astro(input_dir, work_dir, args):
             aligned = astro.register_and_cache(ims, reg_dir,
                                                do_register=not args.no_register,
                                                log=lambda *a: None)
+            # Leer: `astro.stack` stirbt mit RuntimeError. Eine einzige: nur die Referenz,
+            # die Position waere still gar nicht entrauscht.
+            if len(aligned) < 2:
+                raise ForgePixFehler(
+                    "Hybrid Fokus+Astro: an Position %d (%s) liessen sich nur %d von %d Shots "
+                    "ausrichten — mindestens 2 noetig. Die Ausrichtung sucht Sterne; ohne "
+                    "genug Sterne im Bild (Makro, Mond, Sonne) passt hier nichts zusammen. "
+                    "Stehen die Shots je Position ohnehin deckungsgleich (Stativ), hilft "
+                    "--no-register."
+                    % (gi + 1, name, len(aligned), len(ims)))
             den = astro.stack(aligned, method=method, kappa=args.astro_kappa,
                               normalize=False, log=lambda *a: None)
             shutil.rmtree(reg_dir, ignore_errors=True)
