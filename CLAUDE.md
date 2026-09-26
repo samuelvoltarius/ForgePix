@@ -81,7 +81,7 @@ Daraus folgt die Arbeitsweise:
 python -m unittest discover -s tests -q
 ```
 
-Die Suite ist die Abnahme (Stand: 969 Tests). Sie muss vor jedem Commit grün sein.
+Die Suite ist die Abnahme (Stand 26.09.2026: 1139 Tests). Sie muss vor jedem Commit grün sein.
 Nach einem Lauf **die Zusammenfassungszeile lesen**, nicht nur nach „FAILED" suchen — siehe oben,
 warum.
 

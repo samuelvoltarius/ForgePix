@@ -125,6 +125,18 @@ class TestSterne(unittest.TestCase):
                            "verzogene Sterne muessen eine hoehere Rundheit ergeben (%.2f/%.2f)"
                            % (verzogen, rund))
 
+    def test_ohne_sterne_keine_platzhalter_als_sternform(self):
+        """`analyze_frame` meldet ohne Sterne FWHM 99,0 und Exzentrizitaet 9,0 — Platzhalter
+        fuer „nicht gemessen“. Der Bericht reichte sie als Messung weiter, und das Regelwerk
+        empfahl an einem sternlosen Bild `--astro-synthstar` („Achsenverhaeltnis 9.00“).
+        Nicht gemessen muss None sein, und dann darf kein Sternform-Rat entstehen."""
+        import regeln
+        b = messbericht.erstellen(_szene(sterne=0, nebel=False))
+        self.assertIsNone(b["sterne"]["fwhm_px"])
+        self.assertIsNone(b["sterne"]["rundheit"])
+        self.assertNotIn("--astro-synthstar",
+                         [r.einstellung for r in regeln.pruefen(b)])
+
 
 class TestHimmelUndSignal(unittest.TestCase):
 

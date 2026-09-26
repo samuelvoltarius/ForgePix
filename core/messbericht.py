@@ -152,6 +152,14 @@ def _sterne(bild, pfad=None):
         try:
             import astro_quality
             r = astro_quality.analyze_frame(messpfad)
+            if not r.get("stars"):
+                # Ohne Sterne liefert `analyze_frame` die Platzhalter FWHM 99,0 und Exz. 9,0.
+                # Als Messung weitergereicht empfahl das Regelwerk an einem sternlosen Bild
+                # `--astro-synthstar` („Achsenverhaeltnis 9.00“) — Sternformen neu setzen, wo
+                # es gar keine Sterne gibt. Nicht gemessen heisst None.
+                return {"anzahl": anzahl if anzahl is not None else 0,
+                        "fwhm_px": None, "rundheit": None, "spur": bool(r.get("trail")),
+                        "quelle": "keine Sterne fuer die Formmessung gefunden"}
             return {"anzahl": anzahl if anzahl is not None else r.get("stars"),
                     "fwhm_px": _zahl(r.get("fwhm")), "rundheit": _zahl(r.get("ecc")),
                     "spur": bool(r.get("trail")), "quelle": quelle}

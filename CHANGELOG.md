@@ -8,6 +8,20 @@ All notable changes to ForgePix. Format based on
 
 ## [Unreleased]
 
+### Star-less image: no more star-shape advice from placeholders
+
+`astro_quality.analyze_frame` reports FWHM 99.0 and eccentricity 9.0 when it finds no stars —
+placeholders for "not measured". The measurement report passed them on to the rule engine as
+measurements. Reproduced on a star-less noise image: report "FWHM 99.0, roundness 9.0", rule
+engine "stars clearly elongated, axis ratio 9.00" and the recommendation `--astro-synthstar` —
+re-drawing star shapes where there are no stars. With header data for the image scale the same
+FWHM 99 would also have entered the sampling verdict as "oversampled". Spotted on the
+single-frame drizzle result from the entry below.
+
+The report now sets shape and FWHM to `None` when the shape measurement finds no stars, and says
+so in `quelle`. The placeholders stay at the source: sub grading deliberately reads them as "no
+stars". Counter-check: without the change the new test fails with `99.0 is not None`.
+
 ### Nothing alignable: a clear message instead of a crash — and instead of "Done" with a single frame
 
 Four star-less FITS lights with `--astro`: the log said "registriert 0/4 (Pass 1)", entered

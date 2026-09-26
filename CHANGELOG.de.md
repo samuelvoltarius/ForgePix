@@ -8,6 +8,21 @@ Alle nennenswerten Änderungen an ForgePix. Format orientiert an
 
 ## [Unreleased]
 
+### Sternloses Bild: kein Sternform-Rat mehr aus Platzhaltern
+
+`astro_quality.analyze_frame` meldet ohne Sterne FWHM 99,0 und Exzentrizitaet 9,0 — Platzhalter
+fuer „nicht gemessen“. Der Messbericht reichte sie als Messwerte an das Regelwerk weiter.
+Nachgestellt an einem sternlosen Rauschbild: Bericht „FWHM 99.0, Rundheit 9.0“, Regelwerk
+„Sterne deutlich verzogen, Achsenverhaeltnis 9.00“ und die Empfehlung `--astro-synthstar` —
+Sternformen neu setzen, wo es keine Sterne gibt. Mit Kopfdaten zur Bildskala waere dieselbe
+FWHM 99 auch noch als „ueberabgetastet“ ins Abtasturteil gegangen. Aufgefallen am
+Drizzle-Einzelbild aus dem Eintrag unten.
+
+Der Bericht setzt Form und FWHM jetzt auf `None`, wenn die Formmessung keine Sterne findet, und
+nennt das in `quelle`. Die Platzhalter an der Quelle bleiben: die Sub-Bewertung wertet sie
+gezielt als „keine Sterne“ aus. Gegenprobe: ohne die Aenderung faellt der neue Test mit
+`99.0 is not None`.
+
 ### Nichts ausrichtbar: klare Meldung statt Absturz — und statt „Fertig“ mit einem Einzelbild
 
 Vier sternlose FITS-Lights mit `--astro`: das Protokoll meldete „registriert 0/4 (Pass 1)“,
