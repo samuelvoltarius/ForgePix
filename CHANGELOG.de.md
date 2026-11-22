@@ -8,6 +8,28 @@ Alle nennenswerten Änderungen an ForgePix. Format orientiert an
 
 ## [Unreleased]
 
+### Arbeitsplatz im PixInsight-Stil
+
+Neues Fenster „Bearbeitung → Arbeitsplatz …“ (Strg+Umschalt+W): ein Bild offen, 39 Werkzeuge
+darauf — die Siril-, PixInsight- und RC-Astro-artigen Rechnungen von ForgePix an einer Stelle,
+durchsuchbar auch mit deren Namen, jedes mit Vorbild. Jede Maske (Sterne, Hintergrund, Nebel,
+Helligkeitsbereich) auf jedes Werkzeug, Rueckgaengig/Wiederholen, Verlauf als Rezept fuer andere
+Bilder, Verlauf als HISTORY im FITS, Bildschirm-Streckung nur fuer die Anzeige, Pixelwerte und
+Statistik. Neu dazu die kleinen PixInsight-Prozesse Invert, Rescale, Exponent, Saettigung,
+Unscharf maskieren, Faltung, Morphologie, Zuschneiden, Drehen, Spiegeln, Groesse aendern. Die
+eigenen KI-Modelle stehen dabei, nur nach ausdruecklicher Zusage. Gemessen an einem echten Stapel
+(8 Seestar-Aufnahmen IC 5146, 1884×1047): alle 39 Werkzeuge gelaufen, Rueckgaengig/Wiederholen
+und das Nachspielen eines Rezepts bitgleich. **Nicht** gleichwertig mit den Vorbildern
+nachgewiesen.
+
+### Masken veraenderten das Bild auch ausserhalb der Maske
+
+`masken.anwenden` beschnitt das Ergebnis still auf 0..1. Am echten linearen Stapel mit negativem
+Hintergrund aenderte Entrauschen durch eine Sternmaske dadurch **100 %** der Pixel ausserhalb der
+Maske (bis 0,019); jetzt 0 %. In der bisherigen Pipeline blieb das folgenlos — dort wird nur das
+schon gestreckte Bild (0..1) gemischt; getroffen haette es den Arbeitsplatz mit linearen Daten.
+Test in `test_prozesse` (faellt mit dem alten Code).
+
 ### INDI: Geräte unter Linux und macOS
 
 Im Aufnahme-Fenster ist neben ASCOM Alpaca jetzt INDI waehlbar — die Treiberwelt unter Linux

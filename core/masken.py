@@ -157,7 +157,11 @@ def anwenden(original, maske, bearbeitet):
         raise ValueError("Maske %s passt nicht zum Bild %s" % (m.shape[:2], a.shape[:2]))
     if a.ndim == 3 and m.ndim == 2:
         m = m[..., None]
-    return np.clip(a * (1.0 - m) + b * m, 0, 1)
+    # Kein Beschneiden auf 0..1: eine Mischung zweier Bilder bleibt ohnehin in deren
+    # Wertebereich. Das Beschneiden traf nur Werte, die schon vorher draussen lagen — bei
+    # linearen Stapeln mit negativem Hintergrund also JEDES Pixel ausserhalb der Maske
+    # (gemessen 22.11.2026 im Arbeitsplatz: 100 % geaendert, bis 0,019). Siehe test_prozesse.
+    return a * (1.0 - m) + b * m
 
 
 def anteil(maske):

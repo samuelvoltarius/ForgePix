@@ -13,6 +13,22 @@ Stand 22.11.2026. Je Fehler: was, wie es sich meldete, wie gemessen, Test.
   größte Abweichung **0,0**. Neuer Code: bis 0,006, mittel 4,6·10⁻⁵.
 * **Test:** `tests/test_superbias_wirkung.py` — fällt mit dem alten Code (2 von 3).
 
+## Masken veränderten das Bild auch außerhalb der Maske
+
+* **Was:** `masken.anwenden` beschnitt das Ergebnis auf 0..1. Eine Mischung zweier Bilder bleibt
+  ohnehin in deren Wertebereich — das Beschneiden traf nur Werte, die schon vorher draußen lagen.
+* **Wie es sich meldete:** gar nicht.
+* **Gemessen:** echter linearer Stapel (IC 5146, Hintergrund unter null): Entrauschen durch eine
+  Sternmaske änderte **100 %** der Pixel außerhalb der Maske, um bis zu 0,019. Danach: 0 %.
+* **Betroffen:** in der bisherigen Pipeline folgenlos — sie mischt nur das schon gestreckte
+  Bild (0..1); PixelMath nutzt die Funktion nicht. Getroffen hätte es den neuen Arbeitsplatz.
+* **Test:** `tests/test_prozesse.py` — fällt mit dem alten Code (2 Fehlschläge).
+
+## GHS im Arbeitsplatz scheiterte (heute eingebaut, heute gefunden)
+
+* Der GHS-Parameter heißt `b` — genau wie das Bild in der Hülle. Gefunden beim Lauf aller
+  Werkzeuge am echten Stapel. Jetzt ist der Bildparameter nur positional.
+
 ## Start-Skripte mit festem Python-Pfad
 
 * Siehe 03_EINRICHTUNG. **Test:** `tests/test_einrichten.py` — fällt mit dem alten `run.sh`.

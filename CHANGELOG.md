@@ -8,6 +8,26 @@ All notable changes to ForgePix. Format based on
 
 ## [Unreleased]
 
+### PixInsight-style workbench
+
+New window "Processing → Workbench …" (Ctrl+Shift+W): one image open, 39 tools on it — ForgePix's
+Siril-, PixInsight- and RC-Astro-like operations in one place, searchable by their names too, each
+naming its model. Any mask (stars, background, nebula, brightness range) on any tool, undo/redo,
+history as a recipe for other images, history as HISTORY in the FITS, screen stretch for display
+only, pixel values and statistics. New small PixInsight processes: Invert, Rescale, exponent,
+saturation, unsharp mask, convolution, morphology, crop, rotate, mirror, resize. The own AI models
+are included, only after explicit confirmation. Measured on a real stack (8 Seestar frames IC 5146,
+1884×1047): all 39 tools ran, undo/redo and replaying a recipe are bit-identical. Equivalence with
+the models is **not** established.
+
+### Masks changed the image outside the mask
+
+`masken.anwenden` silently clipped the result to 0..1. On a real linear stack with negative
+background, denoising through a star mask therefore changed **100 %** of the pixels outside the
+mask (up to 0.019); now 0 %. In the existing pipeline this had no effect — it only blends the
+already stretched image (0..1); it would have hit the workbench on linear data. Test in
+`test_prozesse` (fails with the old code).
+
 ### INDI: devices on Linux and macOS
 
 The capture window now offers INDI next to ASCOM Alpaca — the driver world on Linux and macOS

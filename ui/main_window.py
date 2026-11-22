@@ -1481,6 +1481,11 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, ProjectM
         processing_menu.addSeparator()
         processing_menu.addAction(pixelmath_action)
         processing_menu.addAction(channels_action)
+        processing_menu.addSeparator()
+        self.arbeitsplatz_action = QAction(tr("Arbeitsplatz: alle Werkzeuge mit Maske und Verlauf …"), self)
+        self.arbeitsplatz_action.setShortcut("Ctrl+Shift+W")
+        self.arbeitsplatz_action.triggered.connect(self.open_arbeitsplatz)
+        processing_menu.addAction(self.arbeitsplatz_action)
         catalogue_menu = self.menuBar().addMenu(tr("Sternkatalog"))
         catalogue_menu.addAction(self.catalogue_action)
         catalogue_menu.addAction(self.astrometry_action)
@@ -3221,6 +3226,17 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, ProjectM
         finally:
             self._ai_restore_dialog = None
             dialog.deleteLater()
+
+    def open_arbeitsplatz(self):
+        """PixInsight-artiger Arbeitsplatz, nicht modal; öffnet das aktuelle Ergebnis, wenn es
+        ein lineares FITS/TIFF gibt."""
+        from ui.arbeitsplatz import Arbeitsplatz
+        quelle = self._best_export_file(bits=32)
+        if quelle and os.path.splitext(quelle)[1].lower() not in (".fit", ".fits", ".fts", ".tif", ".tiff"):
+            quelle = None
+        fenster = Arbeitsplatz(self, pfad=quelle, uebernehmen=lambda out, vorher: self._adopt_result(out, vorher or out))
+        self._arbeitsplaetze = [f for f in getattr(self, "_arbeitsplaetze", []) if f.isVisible()] + [fenster]
+        fenster.show(); fenster.raise_()
 
     def open_aufnahme(self):
         """Aufnahme-Fenster, nicht modal: es läuft neben dem Live-Stapeln weiter."""
