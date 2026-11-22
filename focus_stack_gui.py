@@ -18,6 +18,19 @@ if not getattr(sys, "frozen", False):
     _root = os.path.dirname(os.path.abspath(__file__))
     sys.path.insert(0, _root)
     sys.path.insert(0, os.path.join(_root, "core"))   # Engine-Module liegen jetzt in core/
+    # Ohne diese Pakete endete der Start bisher in einem ImportError aus dem Innersten.
+    _fehlt = []
+    for _modul in ("PySide6", "cv2", "numpy"):
+        try:
+            __import__(_modul)
+        except ImportError:
+            _fehlt.append(_modul)
+    if _fehlt:
+        sys.stderr.write(
+            "ForgePix ist auf diesem Rechner noch nicht eingerichtet (es fehlt: %s).\n"
+            "Bitte mit run.bat (Windows) bzw. ./run.sh (macOS/Linux) starten — das richtet beim\n"
+            "ersten Mal alles ein — oder einmal ausführen:  python3 einrichten.py\n" % ", ".join(_fehlt))
+        sys.exit(1)
 
 from ui.main_window import MainWindow, THEME, main, APP_NAME, ICON, ICON_PNG  # noqa: F401
 from ui.components import (  # noqa: F401  (Rück-Export für bestehende Skripte/Tests)

@@ -215,7 +215,8 @@ class TestPhotometrie(unittest.TestCase):
         datei = os.path.join(self.d, "aavso.txt")
         self.assertTrue(photometrie.aavso_export(k, datei, "TESTSTERN",
                                                  beobachter="XYZ", log=_stille))
-        text = open(datei, encoding="utf-8").read()
+        with open(datei, encoding="utf-8") as fh:
+            text = fh.read()
         self.assertIn("#TYPE=EXTENDED", text)
         self.assertIn("#OBSCODE=XYZ", text)
         self.assertIn("INSTRUMENTELLE", text)

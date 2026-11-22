@@ -578,7 +578,7 @@ class TestI18n(unittest.TestCase):
         import json
         root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         keys = set()
-        for fn in ("ui/main_window.py", "ui/components.py"):
+        for fn in ("ui/main_window.py", "ui/components.py", "ui/aufnahme_dialog.py", "ui/werkzeuge_dialog.py"):
             with open(os.path.join(root, fn), encoding="utf-8") as fh:   # Quellen sind UTF-8;
                 tree = ast.parse(fh.read())                  # ohne encoding=: cp1252 unter Windows
             for node in ast.walk(tree):
@@ -609,7 +609,7 @@ class TestI18n(unittest.TestCase):
                 return True
             return (" " in s.strip()) and any(c.isalpha() for c in s)
 
-        for fn in ("ui/main_window.py", "ui/components.py"):
+        for fn in ("ui/main_window.py", "ui/components.py", "ui/aufnahme_dialog.py", "ui/werkzeuge_dialog.py"):
             with open(os.path.join(root, fn), encoding="utf-8") as fh:   # Quellen sind UTF-8;
                 tree = ast.parse(fh.read())                  # ohne encoding=: cp1252 unter Windows
             for node in ast.walk(tree):

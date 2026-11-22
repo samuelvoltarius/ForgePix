@@ -192,7 +192,7 @@ class TestSubprozessDekodierung(unittest.TestCase):
 
 
 class TestFremdtoolSuche(unittest.TestCase):
-    """W5 — die Sucher für Siril/GraXpert/StarNet kannten NUR macOS-Pfade.
+    r"""W5 — die Sucher für Siril/GraXpert/StarNet kannten NUR macOS-Pfade.
 
     Auf dem Testrechner war Siril 1.4.2 unter „C:\Program Files\Siril\bin" installiert und
     ForgePix fand es trotzdem nie: Windows-Installer tragen sich üblicherweise nicht in den

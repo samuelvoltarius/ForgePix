@@ -8,6 +8,47 @@ All notable changes to ForgePix. Format based on
 
 ## [Unreleased]
 
+### `--superbias` now has an effect
+
+The superbias model was built only after calibration and stored in a variable nobody read
+afterwards; the bias frames were also read debayered (H×W×3) while every other master is read
+raw (H×W). The log still said "Superbias: model from 3 frames". Measured on 8 real Seestar frames
+(IC 5146) with 3 bias frames: old code with vs. without superbias — largest difference **0.0**.
+The model is now read raw and applied before flat and dark: difference up to 0.006, mean
+4.6·10⁻⁵. Fewer than 3 readable bias frames is now an error instead of being skipped silently.
+Test `test_superbias_wirkung` (fails with the old code).
+
+### Setup and launch on Windows, macOS and Linux
+
+`run.sh` hard-coded `/Library/Frameworks/Python.framework/Versions/3.13/bin/python3`, so ForgePix
+did not start on Linux or on any other Mac; `run.bat` never installed a package. New:
+`einrichten.py` (standard library only) creates `.venv`, installs the packages (one by one on
+failure, naming the missing one), checks that the GUI really starts (Linux: prints the command
+for the Qt system libraries) and reports Siril/GraXpert/StarNet/ASTAP without installing them.
+`run.sh`, `run.bat` and `ForgePix.app` run it on first launch and whenever requirements.txt
+changes. Starting without PySide6/OpenCV/numpy now says what to do instead of ending in an
+ImportError. Checked on Windows; macOS and Linux only through the CI tests, not on a real machine.
+
+### Capture control: own devices (ASCOM Alpaca) and N.I.N.A.
+
+New "Capture" menu. Own devices via ASCOM Alpaca (network, all operating systems): network
+discovery, camera, filter wheel, focuser, mount, test exposure and a sequence (N × exposure ×
+type × filter) writing FITS with full headers into a folder ForgePix can live-stack. Checked
+against a simulated device built from the Alpaca description — **not** on real hardware. Plus a
+bridge to an existing N.I.N.A. via the "Advanced API" plugin: checked live against N.I.N.A.
+3.2.0.9001 / Advanced API 2.2.15.2 (version, devices, connect simulator camera, 1 s test exposure
+as 640×480 preview, disconnect). Measured: single exposures come back only as a stretched PNG,
+even with `raw_fits=true`; raw data only for images from a N.I.N.A. sequence.
+
+### Hidden tools in the new "Astro tools" menu
+
+Blink, superbias, Larson-Sekanina, Fourier stripe filter, light curve (photometry/AAVSO) and lucky
+imaging were command-line only; annotating a solved image (coordinate grid, Gaia stars, objects
+from CSV) was not reachable at all. Annotation now converts ForgePix's WCS (PC + CDELT) to CD form
+via astropy and makes CRPIX zero-based — checked against astropy to under 0.01 px. Blink ran on 12
+real Seestar frames, Larson and the stripe filter on a real frame of C/2024 E1. Values outside
+0..1 are reported before clipping.
+
 ### Star-less image: no more star-shape advice from placeholders
 
 `astro_quality.analyze_frame` reports FWHM 99.0 and eccentricity 9.0 when it finds no stars —

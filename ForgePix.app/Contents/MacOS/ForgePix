@@ -1,8 +1,6 @@
 #!/bin/zsh
-# Projekt-Wurzel = drei Ebenen über dieser Datei (…/ForgePix.app/Contents/MacOS/ → Projekt)
+# Projekt-Wurzel = drei Ebenen über dieser Datei (…/ForgePix.app/Contents/MacOS/ → Projekt).
+# Früher fest auf /Library/Frameworks/Python.framework/Versions/3.13 — das gibt es nur auf
+# einem bestimmten Mac. Jetzt übernimmt run.sh: Python suchen, beim ersten Start einrichten.
 DIR="$(cd "$(dirname "$0")/../../.." && pwd)"
-cd "$DIR"
-# Bevorzugt die Framework-Python (hat sicher PySide6), sonst system-python3
-PY="/Library/Frameworks/Python.framework/Versions/3.13/bin/python3"
-[ -x "$PY" ] || PY="$(command -v python3)"
-exec "$PY" focus_stack_gui.py
+exec /bin/bash "$DIR/run.sh" "$@"

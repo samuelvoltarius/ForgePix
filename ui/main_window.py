@@ -1484,6 +1484,23 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, ProjectM
         catalogue_menu = self.menuBar().addMenu(tr("Sternkatalog"))
         catalogue_menu.addAction(self.catalogue_action)
         catalogue_menu.addAction(self.astrometry_action)
+        # Gebaut, aber bis 22.11.2026 nur auf der Kommandozeile (Beschriften: gar nicht) erreichbar.
+        from ui import werkzeuge_dialog as _wz
+        werkzeug_menu = self.menuBar().addMenu(tr("Astro-Werkzeuge"))
+        for text, fn in ((tr("Daumenkino (Blink) …"), _wz.blink),
+                         (tr("Superbias aus Bias-Aufnahmen …"), _wz.superbias),
+                         (tr("Kometenstrukturen (Larson-Sekanina) …"), _wz.larson),
+                         (tr("Streifenmuster entfernen (Fourier) …"), _wz.streifen),
+                         (tr("Objekte und Koordinatengitter einzeichnen …"), _wz.beschriften),
+                         (tr("Lichtkurve messen (Photometrie, AAVSO) …"), _wz.lichtkurve),
+                         (tr("Sonne, Mond, Planeten aus Video (Lucky Imaging) …"), _wz.lucky)):
+            act = QAction(text, self)
+            act.triggered.connect(lambda _=False, f=fn: f(self))
+            werkzeug_menu.addAction(act)
+        aufnahme_menu = self.menuBar().addMenu(tr("Aufnahme"))
+        self.aufnahme_action = QAction(tr("Aufnahme steuern (Kamera, Filterrad, Montierung, N.I.N.A.) …"), self)
+        self.aufnahme_action.triggered.connect(self.open_aufnahme)
+        aufnahme_menu.addAction(self.aufnahme_action)
         self._restore_settings()
         self._set_step(0)
         self._set_task()
@@ -2206,6 +2223,14 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, ProjectM
             import uuid
             self._live_stop_file = os.path.join(tempfile.gettempdir(), "forgepix-stop-" + uuid.uuid4().hex)
             args += ["--stop-file", self._live_stop_file]
+        self._pipeline_starten(args, auto)
+
+    def _pipeline_starten(self, args, auto=False):
+        """Die Pipeline mit fertigen Argumenten starten (Automatik, Profi-Lauf und die
+        Werkzeuge Lucky Imaging / Lichtkurve teilen sich diesen Weg)."""
+        if self.proc and self.proc.state() != QProcess.NotRunning:
+            self._append("\n(Ein Lauf läuft bereits — bitte warten oder Stop.)\n")
+            return
         self.log.clear()
         # erst Pixmap leeren, DANN Text setzen — umgekehrt löscht setPixmap den Text sofort wieder
         self.preview.setPixmap(QPixmap()); self.preview.setText(tr("— läuft —"))
@@ -3196,6 +3221,18 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, ProjectM
         finally:
             self._ai_restore_dialog = None
             dialog.deleteLater()
+
+    def open_aufnahme(self):
+        """Aufnahme-Fenster, nicht modal: es läuft neben dem Live-Stapeln weiter."""
+        from ui.aufnahme_dialog import AufnahmeDialog
+        dialog = getattr(self, "_aufnahme_dialog", None)
+        if dialog is None:
+            def uebernehmen(ordner):
+                self.in_edit.setText(ordner)
+                self._append(tr("Aufnahmeordner als Eingabe übernommen: {path}").format(path=ordner) + "\n")
+            dialog = AufnahmeDialog(self, ordner_uebernehmen=uebernehmen)
+            self._aufnahme_dialog = dialog
+        dialog.show(); dialog.raise_(); dialog.activateWindow()
 
     def open_pixelmath(self):
         """Evaluate native image expressions on explicitly selected linear files."""

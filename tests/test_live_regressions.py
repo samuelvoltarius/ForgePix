@@ -118,7 +118,10 @@ class LiveRegressions(unittest.TestCase):
                 polls.append(1)
                 if len(polls) == 3:
                     handlers[signal.SIGINT](None, None)
-            args = SimpleNamespace(prefix="", astro_stretch=6.0, vlm_endpoint="", vlm_model="")
+            # Ohne no_auto_calib sucht die Kalibrier-Erkennung im ELTERNORDNER — hier also im
+            # ganzen Temp-Verzeichnis — und fand dort fremde Bias-Dateien (22.11.2026).
+            args = SimpleNamespace(prefix="", astro_stretch=6.0, vlm_endpoint="", vlm_model="",
+                                   no_auto_calib=True)
             with patch("livestack.LiveStack", return_value=state), \
                  patch("livestack.astro._read_float", side_effect=[OSError("file still being written"), base]), \
                  patch("livestack.neue_dateien", side_effect=scan), \

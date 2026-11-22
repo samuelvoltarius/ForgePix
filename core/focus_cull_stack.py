@@ -1999,6 +1999,25 @@ def _load_astro_calibration(input_dir, args, paths):
     dark = load_master("dark", "Dark")
     flat = load_master("flat", "Flat")
     bias = load_master("bias", "Bias")
+    if getattr(args, "superbias", None):
+        # Superbias gehoert HIERHER, vor die Verrechnung mit Flat und Dark. Frueher wurde es
+        # erst nach dieser Funktion gebaut und in eine Variable geschrieben, die danach keiner
+        # mehr las — die Option hatte keine Wirkung. Ausserdem wurden die Bias-Aufnahmen dort
+        # debayert gelesen (H x B x 3), alle anderen Master aber roh (H x B).
+        import klassiker
+        _pfade = []
+        for _e in args.superbias:
+            _pfade.extend(sorted(glob.glob(_e)) if any(c in _e for c in "*?[") else [_e])
+        _roh = [astro._read_float(p, debayer=False) for p in _pfade]
+        _roh = [b for b in _roh if b is not None]
+        if len(_roh) < 3:
+            raise ValueError("Superbias braucht mindestens 3 Bias-Aufnahmen, %d gelesen"
+                             % len(_roh))
+        if bias is not None:
+            print("  Superbias ersetzt den gefundenen Bias-Master")
+        bias, _sb = klassiker.superbias(_roh)
+        print("  Superbias: Modell aus %d Aufnahmen, Rauschen %.6f statt %.6f (Median)"
+              % (_sb["aufnahmen"], _sb["rauschen_modell"], _sb["rauschen_master"]))
     if bias is not None:
         # Bias verrechnen (astro.calibrate kennt nur Dark/Flat, wurde bisher still ignoriert):
         # - Flat VOR der Normierung bias-korrigieren, sonst verfälscht der Offset die
@@ -2235,27 +2254,10 @@ def run_astro(input_dir, work_dir, args):
                 print(f"  Siril fehlgeschlagen ({e}) — nutze eigene Engine", file=sys.stderr)
 
     dark, flat, bias = _load_astro_calibration(input_dir, args, paths)
-    # Superbias: aus den Einzel-Bias-Aufnahmen ein rauscharmes MODELL bauen statt nur zu
-    # mitteln. Ein Master aus N Aufnahmen traegt noch 1/sqrt(N) des Einzelrauschens in JEDE
-    # kalibrierte Aufnahme hinein; ein Bias besteht aber fast nur aus Struktur (Sockel,
-    # Spalten- und Zeilenmuster), und die laesst sich vom Rauschen trennen. Gegen eine bekannte
-    # Wahrheit gemessen: mittlerer Fehler 0,000431 beim schlichten Median aus 20 Aufnahmen,
-    # 0,000078 beim Modell — Faktor 5,5.
-    if getattr(args, "superbias", None):
-        try:
-            import klassiker
-            _pfade = []
-            for _e in args.superbias:
-                _pfade.extend(sorted(glob.glob(_e)) if any(c in _e for c in "*?[") else [_e])
-            _roh = [astro._read_float(p) for p in _pfade]
-            _roh = [b for b in _roh if b is not None]
-            if len(_roh) < 3:
-                raise ValueError("mindestens 3 Bias-Aufnahmen noetig, %d gelesen" % len(_roh))
-            bias, _sb = klassiker.superbias(_roh)
-            print("  Superbias: Modell aus %d Aufnahmen, Rauschen %.6f statt %.6f (Median)"
-                  % (_sb["aufnahmen"], _sb["rauschen_modell"], _sb["rauschen_master"]))
-        except Exception as e:
-            print(f"  (Superbias uebersprungen: {e}) -> Bias unveraendert", file=sys.stderr)
+    # Superbias wird in _load_astro_calibration gebaut, VOR der Verrechnung mit Flat und Dark.
+    # Ein Master aus N Aufnahmen traegt noch 1/sqrt(N) des Einzelrauschens in jede kalibrierte
+    # Aufnahme; das Modell behaelt nur die Struktur (gegen eine bekannte Wahrheit gemessen:
+    # Fehler 0,000431 beim Median aus 20 Aufnahmen, 0,000078 beim Modell — Faktor 5,5).
     if dark is None and flat is None and bias is None:
         print("  Keine Kalibrierungsbilder vorhanden: Stack ohne Dark-/Flat-Korrektur. "
               "Hotpixel und Vignettierung koennen im Ergebnis bleiben.")

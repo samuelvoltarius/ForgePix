@@ -12,3 +12,6 @@ assets/ForgePix.iconset/
 build/
 dist/
 *.spec
+
+# Eigene Umgebung von einrichten.py
+.venv/

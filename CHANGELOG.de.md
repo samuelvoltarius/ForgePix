@@ -8,6 +8,51 @@ Alle nennenswerten Änderungen an ForgePix. Format orientiert an
 
 ## [Unreleased]
 
+### `--superbias` wirkt jetzt
+
+Das Superbias-Modell wurde erst nach der Kalibrierung gebaut und in eine Variable geschrieben,
+die danach niemand mehr las; ausserdem wurden die Bias-Aufnahmen debayert gelesen (H×B×3), alle
+anderen Master roh (H×B). Das Protokoll meldete trotzdem „Superbias: Modell aus 3 Aufnahmen“.
+Gemessen an 8 echten Seestar-Aufnahmen (IC 5146) mit 3 Bias: alter Code mit gegen ohne Superbias
+— groesste Abweichung **0,0**. Jetzt wird das Modell roh gelesen und vor der Verrechnung mit Flat
+und Dark eingesetzt: Abweichung bis 0,006, mittel 4,6·10⁻⁵. Weniger als 3 lesbare
+Bias-Aufnahmen sind jetzt ein Fehler statt eines stillen Uebergehens. Test
+`test_superbias_wirkung` (faellt mit dem alten Code).
+
+### Einrichtung und Start auf Windows, macOS und Linux
+
+`run.sh` startete fest `/Library/Frameworks/Python.framework/Versions/3.13/bin/python3` — unter
+Linux und auf jedem anderen Mac startete ForgePix darum nicht; `run.bat` installierte nie ein
+Paket. Neu: `einrichten.py` (nur Standardbibliothek) legt `.venv` an, installiert die Pakete
+(bei Fehlschlag einzeln, mit Namen des fehlenden), prueft, dass die Oberflaeche wirklich startet
+(Linux: nennt den Befehl fuer die Qt-Systembibliotheken) und meldet Siril/GraXpert/StarNet/ASTAP,
+ohne sie zu installieren. `run.sh`, `run.bat` und `ForgePix.app` rufen es beim ersten Start und
+nach jeder Aenderung an requirements.txt selbst auf. Ein Start ohne PySide6/OpenCV/numpy sagt
+jetzt, was zu tun ist, statt mit einem ImportError zu enden. Geprueft unter Windows; macOS und
+Linux nur ueber die Tests in der CI, nicht an einem echten Rechner.
+
+### Aufnahme steuern: eigene Geraete (ASCOM Alpaca) und N.I.N.A.
+
+Neues Menue „Aufnahme“. Eigene Geraete ueber ASCOM Alpaca (Netzwerk, alle Betriebssysteme):
+Suche im Netz, Kamera, Filterrad, Fokussierer, Montierung, Testaufnahme und ein Ablaufplan
+(N × Belichtung × Typ × Filter), der FITS mit vollstaendigen Kopfdaten in einen Ordner schreibt,
+den ForgePix live stapeln kann. Geprueft gegen ein nachgebautes Geraet nach der
+Alpaca-Beschreibung — **nicht** an echter Hardware. Dazu eine Bruecke zu einem vorhandenen
+N.I.N.A. ueber das Plugin „Advanced API“: live geprueft gegen N.I.N.A. 3.2.0.9001 / Advanced API
+2.2.15.2 (Version, Geraete, Simulatorkamera verbinden, 1-s-Testaufnahme als 640×480-Vorschau,
+trennen). Gemessen: Einzelaufnahmen liefert N.I.N.A. dort nur als gestrecktes PNG, auch mit
+`raw_fits=true`; Rohdaten nur fuer Bilder aus einem N.I.N.A.-Ablaufplan.
+
+### Versteckte Werkzeuge im Menue „Astro-Werkzeuge“
+
+Blink, Superbias, Larson-Sekanina, Fourier-Streifenfilter, Lichtkurve (Photometrie/AAVSO) und
+Lucky Imaging gab es nur auf der Kommandozeile, das Beschriften eines geloesten Bildes
+(Koordinatengitter, Gaia-Sterne, Objekte aus CSV) gar nicht. Beim Beschriften wird das von
+ForgePix geschriebene WCS (PC + CDELT) jetzt ueber astropy in die CD-Form umgerechnet und CRPIX
+nullbasiert gemacht — gegen astropy geprueft auf unter 0,01 px. Blink an 12 echten
+Seestar-Aufnahmen, Larson und Streifenfilter an einer echten Aufnahme von C/2024 E1 gelaufen.
+Werte ausserhalb 0..1 werden vor dem Begrenzen gemeldet.
+
 ### Sternloses Bild: kein Sternform-Rat mehr aus Platzhaltern
 
 `astro_quality.analyze_frame` meldet ohne Sterne FWHM 99,0 und Exzentrizitaet 9,0 — Platzhalter
