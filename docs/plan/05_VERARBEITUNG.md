@@ -10,8 +10,16 @@ Kein Bildqualitätsvergleich gegen sie ist gerechnet.
 
 Ein Bild offen, jedes Werkzeug darauf, wie in PixInsight und Siril:
 
-* **39 Werkzeuge** in sechs Gruppen, durchsuchbar auch mit PixInsight-/Siril-/RC-Astro-Namen
-  (`core/prozesse.py`). Jedes nennt sein Vorbild — als Wegweiser, nicht als Gleichwertigkeit.
+* **45 Werkzeuge** (Stand 23.11.2026) in **neun nummerierten Gruppen in der Reihenfolge eines
+  üblichen Ablaufs** (1 Geometrie → 2 Hintergrund und Farbe → 3 Rauschen und Schärfe → 4 Strecken
+  → 5 Sterne → 6 Mehrere Bilder → 7 Komet → 8 Externe Programme → 9 Eigene KI), durchsuchbar auch
+  mit PixInsight-/Siril-/RC-Astro-Namen (`core/prozesse.py`). Jedes nennt sein Vorbild — als
+  Wegweiser, nicht als Gleichwertigkeit — und **wann es hingehört** (vor dem Strecken, danach,
+  oder egal). Nicht installierte Programme stehen grau mit Hinweis da.
+* **Am Ausschnitt probieren**: rechnet nur die Bildmitte und zeigt vorher | nachher, ohne etwas
+  zu übernehmen (wie die Previews in PixInsight).
+* **Kurven** mit ziehbarem Editor; **Werkzeuge über mehrere Bilder** (PixelMath mit A/B/C, LRGB,
+  Kontinuum abziehen mit geschätztem k, Kanal ersetzen) mit Dateifeld je zweitem Bild.
 * **Jede Maske auf jedes Werkzeug** (Sterne, Hintergrund, Nebel, Helligkeitsbereich; umkehren,
   weicher Rand; anzeigbar). Nur Werkzeuge, die die Bildgröße ändern, lehnen Masken ab.
 * **Rückgängig / Wiederholen** über alle Schritte; ältere Zwischenstände werden nachgerechnet
@@ -22,9 +30,11 @@ Ein Bild offen, jedes Werkzeug darauf, wie in PixInsight und Siril:
   Mauszeiger, Statistik je Kanal nach jedem Schritt.
 * Die eigenen KI-Modelle stehen dabei, **ausdrücklich experimentell** und nur nach Zusage.
 
-Gemessen am 22.11.2026: alle 39 Werkzeuge an einem echten Stapel (8 Seestar-Aufnahmen IC 5146,
-1884×1047) gelaufen; Rückgängig/Wiederholen und das Nachspielen eines Rezepts ergeben bitgleich
-dasselbe Bild. Zwei Fehler dabei gefunden und behoben (siehe 04_FEHLER).
+Gemessen am 22.11.2026: alle damals 37 Werkzeuge an einem echten Stapel (8 Seestar-Aufnahmen
+IC 5146, 1884×1047) gelaufen — in Changelog und Commit stand irrtümlich 39, berichtigt am
+23.11. Rückgängig/Wiederholen und das Nachspielen eines Rezepts ergeben bitgleich dasselbe Bild.
+Zwei Fehler dabei gefunden und behoben (siehe 04_FEHLER). Am 23.11. die acht neuen an einem
+frisch gerechneten Stapel derselben Aufnahmen: alle gelaufen, GraXpert echt in 6 s.
 
 ### Zuordnung
 
@@ -37,20 +47,26 @@ dasselbe Bild. Zwei Fehler dabei gefunden und behoben (siehe 04_FEHLER).
 | Sterne verkleinern · StarXTerminator/StarNet · Siril Synthstar/Unclip · MorphologicalTransformation | Sterne verkleinern, Sterne entfernen (klassisch), Sternformen erneuern, Sternkerne färben, Morphologie |
 | DynamicCrop, FastRotation, Resample, IntegerResample | Zuschneiden, Drehen, Spiegeln, Größe ändern, Binning |
 | LarsonSekanina | Kometenstrukturen |
+| PixelMath, LRGBCombination, ChannelCombination · SetiAstro Continuum Subtraction | PixelMath, Luminanz einsetzen, Kanal ersetzen, Kontinuum abziehen |
+| CurvesTransformation, MaskedStretch | Kurven, Strecken (MaskedStretch) |
+| GraXpert, Cosmic Clarity (die Programme selbst) | GraXpert, Cosmic Clarity: Schärfen |
 | RC-Astro NoiseX / BlurX / StarX, GraXpert-AI | KI: Entrauschen / Schärfen / Sterne / Hintergrund (eigene Modelle, experimentell, **nicht gleichwertig**) |
 
 ## Was noch fehlt (Reihenfolge-Vorschlag)
 
-1. [ ] Mehrere Bilder im Arbeitsplatz: PixelMath, ChannelCombination/LRGB, Kontinuum abziehen
-       (heute nur als eigene Dialoge außerhalb).
-2. [ ] Vorschau-Ausschnitt: Werkzeug erst auf einem Ausschnitt probieren (PixInsight Previews).
-3. [ ] Kurven-Werkzeug mit Punkten (CurvesTransformation) und STF von Hand.
-4. [ ] MaskedStretch, ACDNR, HDRMultiscaleTransform, GradientsHDR.
+1. [x] Mehrere Bilder im Arbeitsplatz: PixelMath, LRGB, Kanal ersetzen, Kontinuum (23.11.).
+       Offen: Ausrichten im Arbeitsplatz selbst (heute: vorher mit dem Kanäle-Dialog).
+2. [x] Am Ausschnitt probieren (23.11.). Offen: Ausschnitt selbst wählen statt Bildmitte.
+3. [x] Kurven mit Punkten und Editor (23.11.). Offen: STF von Hand, Kurve über Sättigung/Farbton.
+4. [x] MaskedStretch (23.11., nach Beschreibung nachgebaut, nicht gegen PixInsight verglichen).
+       Offen: ACDNR, HDRMultiscaleTransform, GradientsHDR.
 5. [ ] SPCC ohne Siril (Gaia-Spektren × Sensor-QE × Filterkurve).
 6. [ ] Himmelsmosaik (WCS-bewusst); Plate-Solve ohne Hinweis (Blindsuche).
-7. [ ] GraXpert, StarNet und Cosmic Clarity als Werkzeuge im Arbeitsplatz (heute im Werkzeug-Menü).
+7. [x] GraXpert und Cosmic Clarity im Arbeitsplatz (23.11.; Cosmic Clarity hier nicht installiert,
+       daher nicht echt geprüft). Offen: StarNet (nicht installiert).
 8. [ ] KI-Werkzeuge gegen GraXpert / Cosmic Clarity an denselben Daten messen.
 9. [ ] RC-Astro-Niveau: braucht neues Training mit echten Paaren — eigenes Vorhaben, Ergebnis offen.
+       Freie Ausgangsmodelle: siehe 06_KI (NAFNet MIT, auf eigenen Aufnahmen nachtrainieren).
 
 ## Makro / Fotobearbeitung
 

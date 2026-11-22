@@ -33,7 +33,10 @@ class Prozessstart(unittest.TestCase):
             subprocess.run([sys.executable, "-c", "print(1)"],
                            capture_output=True, text=True, encoding="utf-8")
         except OSError as fehler:
-            self.assertIn("6", str(getattr(fehler, "winerror", "") or fehler.errno or ""))
+            # Dieselbe Ursache meldet Windows je nach vorheriger Abfangart als WinError 6
+            # („ungültiges Handle“) oder 50 („nicht unterstützt“) — beides gesehen, 50 am
+            # 23.11.2026, nachdem ein Test GraXpert gestartet hatte.
+            self.assertIn(str(getattr(fehler, "winerror", "") or fehler.errno or ""), ("6", "50"))
             return
         self.skipTest("Der nackte Aufruf laeuft hier durch — die Ursache ist nicht aktiv.")
 

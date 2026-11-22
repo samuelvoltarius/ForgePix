@@ -108,6 +108,64 @@ class ArbeitsplatzUI(unittest.TestCase):
             ap.QMessageBox.information = alt
             f.close(); f.deleteLater()
 
+    def test_kurve_und_textfeld_sind_eins(self):
+        from ui.arbeitsplatz import Arbeitsplatz
+        f = Arbeitsplatz(None, pfad=self.pfad)
+        try:
+            self._waehlen(f, "kurven")
+            self.assertTrue(f.kurve.isVisibleTo(f))
+            f._kurve_geaendert([[0.0, 0.0], [0.5, 0.7], [1.0, 1.0]])
+            self.assertEqual(f.werte()["punkte"], "0.000,0.000; 0.500,0.700; 1.000,1.000")
+            f.anwenden(); self._warten(f)
+            self.assertEqual(self.warnungen, [])
+            self.assertEqual(f.arbeit.schritte[-1]["werte"]["punkte"], "0.000,0.000; 0.500,0.700; 1.000,1.000")
+        finally:
+            f.close(); f.deleteLater()
+
+    def test_probe_aendert_nichts(self):
+        from ui.arbeitsplatz import Arbeitsplatz
+        f = Arbeitsplatz(None, pfad=self.pfad)
+        try:
+            self._waehlen(f, "mtf")
+            f.probieren(kante=40); self._warten(f)
+            vorher, nachher = f._probe
+            self.assertEqual(vorher.shape, (40, 40, 3))
+            self.assertFalse(np.array_equal(vorher, nachher))
+            self.assertEqual(f.arbeit.stand, 0, "eine Probe darf nichts übernehmen")
+            f.anwenden(); self._warten(f)
+            self.assertIsNone(f._probe, "nach dem Anwenden zeigt die Fläche wieder das Bild")
+        finally:
+            f.close(); f.deleteLater()
+
+    def test_zweites_bild_ueber_das_feld(self):
+        from astropy.io import fits
+        from ui.arbeitsplatz import Arbeitsplatz
+        mono = os.path.join(self.d, "ha.fits")
+        fits.writeto(mono, np.full((96, 128), 0.5, np.float32))
+        f = Arbeitsplatz(None, pfad=self.pfad)
+        try:
+            self._waehlen(f, "kanal")
+            f._felder["quelle"].pfad.setText(mono)
+            f.anwenden(); self._warten(f)
+            self.assertEqual(self.warnungen, [])
+            np.testing.assert_array_equal(f.arbeit.bild[..., 2], 0.5)
+        finally:
+            f.close(); f.deleteLater()
+
+    def test_nicht_installiertes_programm(self):
+        import prozesse
+        from ui.arbeitsplatz import Arbeitsplatz
+        p = prozesse.NACH_ID["cosmic"]
+        alt, p.extern = p.extern, (lambda: None)
+        f = Arbeitsplatz(None, pfad=self.pfad)
+        try:
+            self._waehlen(f, "cosmic")
+            self.assertFalse(f.k_anwenden.isEnabled())
+            self.assertIn("nicht installiert", f.p_extern.text())
+        finally:
+            p.extern = alt
+            f.close(); f.deleteLater()
+
     def test_menue_im_hauptfenster(self):
         from ui.main_window import MainWindow
         from gui_support import stilles_hauptfenster

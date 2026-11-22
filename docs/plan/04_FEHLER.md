@@ -48,6 +48,18 @@ Stand 22.11.2026. Je Fehler: was, wie es sich meldete, wie gemessen, Test.
   Kalibrierbilder anderer Objekte daneben. Heute meldet sie Größen-/Kopfdaten-Unterschiede
   laut; gleich große fremde Darks würden aber angenommen.
 
+## GraXpert-Aufruf scheiterte unter pytest (23.11.2026, behoben)
+
+* `graxpert_engine` startete GraXpert mit `capture_output=True`, aber ohne `stdin=`. Unter
+  pytest erbt der Aufruf ein stdin ohne gültigen Windows-Handle → `OSError: [WinError 50]`.
+  Gefunden durch den neuen echten GraXpert-Test. Jetzt `stdin=subprocess.DEVNULL`.
+* `test_prozesshilfe` erwartete für dieselbe Ursache nur WinError 6; je nach vorher gelaufenem
+  Test kam 50. Der Test lässt jetzt beide gelten.
+* **Verdacht, nicht nachgewiesen:** 15 weitere `subprocess.run(... capture_output=True)` ohne
+  `stdin=` in `core/` (Siril, StarNet, Cosmic Clarity, exiftool, …). Im fertigen Windows-Paket
+  ohne Konsole legt Python laut seiner Quelle selbst eine Ersatzleitung an — dort vermutlich
+  unkritisch. Am echten Paket prüfen, dann einheitlich `stdin=subprocess.DEVNULL` setzen.
+
 ## Kleinkram aus dem Testlauf (behoben)
 
 * `tests/test_windows_gaps.py:197`: `SyntaxWarning: "\P" is an invalid escape sequence` —

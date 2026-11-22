@@ -52,7 +52,8 @@ def _run_remote(inp, out_base, command, smoothing, gpu, rem, timeout, log):
     host, gbin = rem["host"], rem["bin"]
     rdir = "~/.forgepix_graxpert"
     sp = _ssh_prefix(rem)
-    o = dict(capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
+    o = dict(capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout,
+             stdin=subprocess.DEVNULL)   # ohne eigenes stdin: WinError 6/50 unter pytest, s. test_prozesshilfe
     if rem.get("pass"):
         o["env"] = {**os.environ, "SSHPASS": rem["pass"]}   # Passwort NUR über die Umgebung
     log(f"    GraXpert {command} (Remote {host}, GPU) …")
@@ -116,7 +117,11 @@ def run(linear_bgr, work_dir, command="background-extraction", smoothing=0.2, gp
         if command == "background-extraction":
             cmd += ["-smoothing", str(smoothing)]
         log(f"    GraXpert {command} (lokal, GPU={gpu}) …")
-        proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=timeout)
+        # stdin ausdrücklich zu: `capture_output` leitet nur stdout/stderr um. Erbt der Aufruf ein
+        # stdin ohne gültigen Windows-Handle (so unter pytest), scheitert er mit WinError 6 oder 50
+        # — gefunden am 23.11.2026 beim echten GraXpert-Test im Arbeitsplatz.
+        proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace",
+                              timeout=timeout, stdin=subprocess.DEVNULL)
         if not sorted(glob.glob(out_base + "*")):
             raise RuntimeError(f"GraXpert lieferte keine Ausgabe (rc={proc.returncode})")
     outs = sorted(glob.glob(out_base + "*"))

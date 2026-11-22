@@ -42,7 +42,9 @@ class TestProzesse(unittest.TestCase):
     def test_jedes_klassische_werkzeug_laeuft(self):
         bild = sternfeld()
         for p in prozesse.PROZESSE:
-            if p.experimentell:
+            # experimentelle Modelle, externe Programme und Werkzeuge mit Pflicht-Zweitbild haben
+            # eigene Tests (unten) — hier nur, was mit dem offenen Bild allein läuft
+            if p.experimentell or p.extern or any(x.bild and x.pflicht for x in p.params):
                 continue
             with self.subTest(p.id):
                 r = prozesse.anwenden(bild, p.id)
@@ -59,7 +61,9 @@ class TestProzesse(unittest.TestCase):
         self.assertEqual(len(ids), len(set(ids)))
         for p in prozesse.PROZESSE:
             self.assertTrue(p.vorbild and p.beschreibung, p.id)
-            p.werte()                                   # Standardwerte liegen in der Spanne
+            for x in p.params:                          # Standardwerte liegen in der Spanne
+                if not x.bild:
+                    x.pruefen(x.standard)
 
     def test_ausserhalb_der_spanne_ist_fehler(self):
         with self.assertRaises(ValueError):
@@ -160,6 +164,7 @@ class TestProzesse(unittest.TestCase):
             texte += [w for x in p.params for w in (x.wahl or [])]
             fehlt += [t for t in texte if t not in en]
         fehlt += [m for m in prozesse.MASKEN if m not in en]
+        fehlt += [v for v in prozesse.PHASE_TEXT.values() if v not in en]
         self.assertEqual(fehlt, [])
 
     def test_statistik(self):

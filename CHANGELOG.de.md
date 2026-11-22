@@ -8,9 +8,25 @@ Alle nennenswerten Änderungen an ForgePix. Format orientiert an
 
 ## [Unreleased]
 
+### Arbeitsplatz: mehrere Bilder, Kurven, MaskedStretch, GraXpert, Ausschnitt-Probe
+
+Acht neue Werkzeuge (jetzt 45): PixelMath ueber das offene Bild und bis zu zwei weitere,
+Luminanz einsetzen (LRGB), Kontinuum abziehen mit aus den Sternen geschaetztem k, Kanal ersetzen
+(RGB/HOO/SHO aus Mono-Aufnahmen), Kurven mit ziehbarem Editor, MaskedStretch, GraXpert und Cosmic
+Clarity als externe Programme. Zweitbilder anderer Groesse sind ein Fehler statt still skaliert.
+Gegen bekannte Wahrheiten getestet: Kontinuum trifft ein eingebautes k = 0,37 auf ±0,02 und laesst
+die Sterne verschwinden; MaskedStretch erreicht den Zielhintergrund auf ±0,01 und haelt Sterne
+kleiner als ein gleich heller MTF-Stretch; die Kurve y = x aendert nichts, Werte ausserhalb 0…1
+bleiben unangetastet. GraXpert echt gelaufen (Testverlauf mehr als halbiert; ganzer Stapel 6 s).
+Uebersicht: neun nummerierte Gruppen in der Reihenfolge eines ueblichen Ablaufs, jedes Werkzeug
+sagt, ob es vor oder nach dem Strecken gehoert, nicht installierte Programme stehen grau da. Neu:
+„Am Ausschnitt probieren“ zeigt vorher | nachher, ohne etwas zu uebernehmen. Recherche zu freien
+KI-Modellen in `docs/plan/06_KI.md`: kein frei lizenziertes Astro-Modell gefunden; GraXperts
+Modelle stehen unter CC BY-NC-SA 4.0 (an den Lizenzdateien auf dem Testrechner gelesen).
+
 ### Arbeitsplatz im PixInsight-Stil
 
-Neues Fenster „Bearbeitung → Arbeitsplatz …“ (Strg+Umschalt+W): ein Bild offen, 39 Werkzeuge
+Neues Fenster „Bearbeitung → Arbeitsplatz …“ (Strg+Umschalt+W): ein Bild offen, 37 Werkzeuge
 darauf — die Siril-, PixInsight- und RC-Astro-artigen Rechnungen von ForgePix an einer Stelle,
 durchsuchbar auch mit deren Namen, jedes mit Vorbild. Jede Maske (Sterne, Hintergrund, Nebel,
 Helligkeitsbereich) auf jedes Werkzeug, Rueckgaengig/Wiederholen, Verlauf als Rezept fuer andere
@@ -18,7 +34,8 @@ Bilder, Verlauf als HISTORY im FITS, Bildschirm-Streckung nur fuer die Anzeige, 
 Statistik. Neu dazu die kleinen PixInsight-Prozesse Invert, Rescale, Exponent, Saettigung,
 Unscharf maskieren, Faltung, Morphologie, Zuschneiden, Drehen, Spiegeln, Groesse aendern. Die
 eigenen KI-Modelle stehen dabei, nur nach ausdruecklicher Zusage. Gemessen an einem echten Stapel
-(8 Seestar-Aufnahmen IC 5146, 1884×1047): alle 39 Werkzeuge gelaufen, Rueckgaengig/Wiederholen
+(8 Seestar-Aufnahmen IC 5146, 1884×1047): alle 37 Werkzeuge gelaufen (hier stand zuerst
+irrtuemlich 39), Rueckgaengig/Wiederholen
 und das Nachspielen eines Rezepts bitgleich. **Nicht** gleichwertig mit den Vorbildern
 nachgewiesen.
 

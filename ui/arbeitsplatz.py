@@ -56,6 +56,9 @@ class Arbeitsplatz(QDialog):
         self.quelle = None
         self._worker = None
         self._zeige_maske = None
+        self._probe = None
+        self.prozess = None
+        self._felder = {}
         self._baue()
         if pfad:
             self.oeffnen(pfad)
@@ -100,9 +103,18 @@ class Arbeitsplatz(QDialog):
         self.p_name.setStyleSheet("font-weight:600;font-size:14px;")
         self.p_vorbild = QLabel(""); self.p_vorbild.setWordWrap(True)
         self.p_text = QLabel(""); self.p_text.setWordWrap(True)
-        rl.addWidget(self.p_name); rl.addWidget(self.p_vorbild); rl.addWidget(self.p_text)
+        self.p_phase = QLabel(""); self.p_phase.setWordWrap(True)
+        self.p_phase.setStyleSheet("color:#9aa0a6;")
+        self.p_extern = QLabel(""); self.p_extern.setWordWrap(True)
+        self.p_extern.setStyleSheet("color:#e5a50a;")
+        for w in (self.p_name, self.p_vorbild, self.p_text, self.p_phase, self.p_extern):
+            rl.addWidget(w)
         self.p_form_host = QWidget(); self.p_form = QFormLayout(self.p_form_host)
         rl.addWidget(self.p_form_host)
+        from ui.components import CurveWidget
+        self.kurve = CurveWidget(self._kurve_geaendert)
+        self.kurve.hide()
+        rl.addWidget(self.kurve)
         self.p_experimentell = QCheckBox(tr("Experimentelles Modell bewusst verwenden"))
         self.p_experimentell.hide()
         rl.addWidget(self.p_experimentell)
@@ -122,7 +134,11 @@ class Arbeitsplatz(QDialog):
         rl.addWidget(maske)
         self.k_anwenden = QPushButton(tr("Anwenden")); self.k_anwenden.setObjectName("primary")
         self.k_anwenden.setEnabled(False)
-        rl.addWidget(self.k_anwenden)
+        self.k_probe = QPushButton(tr("Am Ausschnitt probieren"))
+        self.k_probe.setToolTip(tr("Rechnet nur einen Ausschnitt aus der Bildmitte und zeigt vorher | nachher. Nichts wird übernommen."))
+        self.k_probe.setEnabled(False)
+        zeile = QHBoxLayout(); zeile.addWidget(self.k_probe); zeile.addWidget(self.k_anwenden)
+        rl.addLayout(zeile)
         self.info = QPlainTextEdit(); self.info.setReadOnly(True); self.info.setMaximumBlockCount(500)
         rl.addWidget(QLabel(tr("Werte und Protokoll"))); rl.addWidget(self.info, 1)
         teiler.addWidget(rechts)
@@ -144,22 +160,27 @@ class Arbeitsplatz(QDialog):
         self.suche.textChanged.connect(self._baum_fuellen)
         self.baum.currentItemChanged.connect(lambda neu, _alt: self._prozess_waehlen(neu))
         self.k_anwenden.clicked.connect(self.anwenden)
+        self.k_probe.clicked.connect(self.probieren)
         self.m_zeigen.clicked.connect(self._maske_zeigen)
         self._knoepfe()
 
     def _baum_fuellen(self, *_):
         suche = self.suche.text().strip().lower() if hasattr(self, "suche") else ""
         self.baum.clear()
-        for gruppe in prozesse.GRUPPEN:
+        for nummer, gruppe in enumerate(prozesse.GRUPPEN, 1):
             treffer = [p for p in prozesse.PROZESSE if p.gruppe == gruppe and
-                       (not suche or suche in (p.name + " " + p.vorbild + " " + p.beschreibung).lower())]
+                       (not suche or suche in (p.name + " " + p.vorbild + " " + p.beschreibung + " "
+                                               + tr(p.name)).lower())]
             if not treffer:
                 continue
-            knoten = QTreeWidgetItem([tr(gruppe)])
+            knoten = QTreeWidgetItem(["%d · %s" % (nummer, tr(gruppe))])
             for p in treffer:
                 blatt = QTreeWidgetItem([tr(p.name)])
                 blatt.setData(0, Qt.UserRole, p.id)
                 blatt.setToolTip(0, p.vorbild)
+                if p.extern is not None and not p.verfuegbar()[0]:
+                    blatt.setText(0, tr(p.name) + "  " + tr("(nicht installiert)"))
+                    blatt.setForeground(0, Qt.gray)
                 knoten.addChild(blatt)
             self.baum.addTopLevelItem(knoten)
             knoten.setExpanded(True)
@@ -168,6 +189,7 @@ class Arbeitsplatz(QDialog):
     def oeffnen(self, pfad):
         bild, kopf = prozesse.bild_laden(pfad)
         self.arbeit = prozesse.Arbeitsbild(bild, quelle=pfad, log=self._schreiben)
+        self._probe = None
         self.kopf, self.quelle = kopf, pfad
         self.setWindowTitle(tr("Arbeitsplatz") + " — " + os.path.basename(pfad))
         self._schreiben(tr("Geöffnet: {pfad} ({h}×{w})").format(pfad=pfad, h=bild.shape[0], w=bild.shape[1]))
@@ -183,6 +205,10 @@ class Arbeitsplatz(QDialog):
                 QMessageBox.warning(self, tr("Arbeitsplatz"), str(e))
 
     def _anzeige_bild(self):
+        if getattr(self, "_probe", None) is not None:
+            vorher, nachher = self._probe
+            trenner = np.ones((vorher.shape[0], 4, 3), np.float32)
+            return np.hstack([vorher, trenner * float(np.max(nachher)), nachher]), self.stf.isChecked()
         if self._zeige_maske is not None:
             m = self._zeige_maske
             return np.dstack([m] * 3), False
@@ -235,11 +261,23 @@ class Arbeitsplatz(QDialog):
             self.p_experimentell.hide(); self._knoepfe()
             return
         p = self.prozess
+        self._probe = None
         self.p_name.setText(tr(p.name))
         self.p_vorbild.setText(tr("Vorbild: {vorbild}").format(vorbild=p.vorbild))
         self.p_text.setText(tr(p.beschreibung))
+        self.p_phase.setText(tr("Wann: {phase}").format(phase=tr(prozesse.PHASE_TEXT[prozesse.PHASE[p.id]])))
+        da, hinweis = p.verfuegbar()
+        self.p_extern.setText("" if da or p.extern is None else hinweis)
         for par in p.params:
-            if par.art == "wahl":
+            if par.art == "bild":
+                feld = QWidget(); zeile = QHBoxLayout(feld); zeile.setContentsMargins(0, 0, 0, 0)
+                feld.pfad = QLineEdit(); feld.pfad.setPlaceholderText(tr("ausgerichtet, gleich groß") if par.pflicht else tr("optional"))
+                knopf = QPushButton(tr("Wählen…"))
+                knopf.clicked.connect(lambda _=False, f=feld.pfad: self._bild_waehlen(f))
+                zeile.addWidget(feld.pfad, 1); zeile.addWidget(knopf)
+            elif par.art == "text":
+                feld = QLineEdit(str(par.standard or ""))
+            elif par.art == "wahl":
                 feld = QComboBox()
                 for w in par.wahl:
                     feld.addItem(tr(w), w)
@@ -255,12 +293,39 @@ class Arbeitsplatz(QDialog):
             self.p_form.addRow(tr(par.label), feld)
         self.p_experimentell.setVisible(p.experimentell)
         self.p_experimentell.setChecked(False)
+        self.kurve.setVisible(p.id == "kurven")
+        if p.id == "kurven":
+            self.kurve.points = [list(xy) for xy in prozesse.kurven_punkte(self._felder["punkte"].text())]
+            self.kurve.update()
+            self._felder["punkte"].editingFinished.connect(self._kurve_aus_text)
         self._knoepfe()
+
+    def _bild_waehlen(self, feld):
+        pfad, _ = QFileDialog.getOpenFileName(self, tr("Bild öffnen"), os.path.dirname(self.quelle or ""),
+                                              "FITS / TIFF (*.fit *.fits *.fts *.tif *.tiff)")
+        if pfad:
+            feld.setText(pfad)
+
+    def _kurve_geaendert(self, punkte):
+        feld = getattr(self, "_felder", {}).get("punkte")
+        if feld is not None:
+            feld.setText("; ".join("%.3f,%.3f" % (x, y) for x, y in sorted(punkte)))
+
+    def _kurve_aus_text(self):
+        try:
+            self.kurve.points = [list(xy) for xy in prozesse.kurven_punkte(self._felder["punkte"].text())]
+            self.kurve.update()
+        except ValueError as e:
+            self._schreiben("⚠️ " + str(e))
 
     def werte(self):
         aus = {}
         for name, feld in self._felder.items():
-            if isinstance(feld, QComboBox):
+            if hasattr(feld, "pfad"):
+                aus[name] = feld.pfad.text().strip() or None
+            elif isinstance(feld, QLineEdit):
+                aus[name] = feld.text()
+            elif isinstance(feld, QComboBox):
                 aus[name] = feld.currentData()
             elif isinstance(feld, QCheckBox):
                 aus[name] = feld.isChecked()
@@ -304,10 +369,48 @@ class Arbeitsplatz(QDialog):
         arbeit = self.arbeit
 
         def fertig(_):
+            self._probe = None
             self._zeige_maske = None; self.m_zeigen.setText(tr("Maske zeigen"))
             self._verlauf_zeigen(); self._anzeigen(); self._statistik(); self._knoepfe()
         self._schreiben(tr("Wende an: {name}").format(name=tr(p.name)))
-        self._hintergrund(lambda log: arbeit.anwenden(p.id, werte, maske, experimentell_erlaubt=erlaubt), fertig)
+        def rechnen(log):
+            arbeit.log = log                       # Meldungen aus dem Hintergrund-Thread über das Signal
+            try:
+                return arbeit.anwenden(p.id, werte, maske, experimentell_erlaubt=erlaubt)
+            finally:
+                arbeit.log = self._schreiben
+        self._hintergrund(rechnen, fertig)
+
+    def probieren(self, kante=600):
+        """Werkzeug an einem Ausschnitt der Bildmitte rechnen und vorher | nachher zeigen."""
+        if self.arbeit is None or self.prozess is None:
+            return
+        p = self.prozess
+        if p.aendert_groesse:
+            self._schreiben(tr("Größenändernde Werkzeuge werden direkt angewendet (Rückgängig geht immer)."))
+            return
+        if p.experimentell and not self.p_experimentell.isChecked():
+            QMessageBox.information(self, tr("Arbeitsplatz"),
+                                    tr("Das ist ein experimentelles Modell. Bitte die Zusage ankreuzen."))
+            return
+        bild = self.arbeit.bild
+        h, w = bild.shape[:2]
+        y0, x0 = max(0, h // 2 - kante // 2), max(0, w // 2 - kante // 2)
+        stueck = bild[y0:y0 + kante, x0:x0 + kante].copy()
+        werte, spec, erlaubt = self.werte(), self.maske(), self.p_experimentell.isChecked()
+        if any(par.bild for par in p.params):
+            self._schreiben(tr("Werkzeuge mit zweitem Bild lassen sich nicht am Ausschnitt probieren."))
+            return
+
+        def rechnen(log):
+            maske = prozesse.maske_bauen(stueck, **spec) if spec else None
+            return stueck, prozesse.anwenden(stueck, p.id, werte, maske, experimentell_erlaubt=erlaubt, log=log)
+
+        def fertig(paar):
+            self._probe = paar
+            self._schreiben(tr("Probe: links vorher, rechts nachher — nichts übernommen."))
+            self._anzeigen(); self._knoepfe()
+        self._hintergrund(rechnen, fertig)
 
     def _hintergrund(self, fn, fertig):
         if self._worker is not None and self._worker.isRunning():
@@ -338,11 +441,13 @@ class Arbeitsplatz(QDialog):
 
     def rueckgaengig(self):
         if self.arbeit is not None and self.arbeit.kann_zurueck:
+            self._probe = None
             self.arbeit.rueckgaengig()
             self._verlauf_zeigen(); self._anzeigen(); self._knoepfe()
 
     def wiederholen(self):
         if self.arbeit is not None and self.arbeit.kann_vor:
+            self._probe = None
             self.arbeit.wiederholen()
             self._verlauf_zeigen(); self._anzeigen(); self._knoepfe()
 
@@ -352,7 +457,11 @@ class Arbeitsplatz(QDialog):
             k.setEnabled(offen and not laeuft)
         self.k_zurueck.setEnabled(offen and not laeuft and self.arbeit.kann_zurueck)
         self.k_vor.setEnabled(offen and not laeuft and self.arbeit.kann_vor)
-        self.k_anwenden.setEnabled(offen and not laeuft and getattr(self, "prozess", None) is not None)
+        bereit = offen and not laeuft and getattr(self, "prozess", None) is not None
+        if bereit and self.prozess.extern is not None:
+            bereit = self.prozess.verfuegbar()[0]
+        self.k_anwenden.setEnabled(bereit)
+        self.k_probe.setEnabled(bereit and not self.prozess.aendert_groesse)
 
     # ------------------------------------------------------------------ Dateien ------------
     def speichern(self, pfad):

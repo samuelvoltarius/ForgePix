@@ -8,16 +8,31 @@ All notable changes to ForgePix. Format based on
 
 ## [Unreleased]
 
+### Workbench: several images, curves, MaskedStretch, GraXpert, trial on a crop
+
+Eight new tools (now 45): PixelMath over the open image and up to two more, insert luminance
+(LRGB), subtract continuum with k estimated from the stars, replace channel (RGB/HOO/SHO from mono
+frames), curves with a draggable editor, MaskedStretch, GraXpert and Cosmic Clarity as external
+programs. Second images of another size are an error instead of being silently scaled. Tested
+against known truths: continuum hits a built-in k = 0.37 within ±0.02 and removes the stars;
+MaskedStretch reaches the target background within ±0.01 and keeps stars smaller than an equally
+bright MTF stretch; the curve y = x changes nothing, values outside 0…1 stay untouched. GraXpert ran
+for real (test gradient more than halved; full stack 6 s). Overview: nine numbered groups in the
+order of a usual workflow, each tool says whether it belongs before or after stretching, programs
+that are not installed are shown grey. New: "Try on a crop" shows before | after without applying
+anything. Research on free AI models in `docs/plan/06_KI.md`: no freely licensed astro model found;
+GraXpert's models are CC BY-NC-SA 4.0 (read from the license files on the test machine).
+
 ### PixInsight-style workbench
 
-New window "Processing → Workbench …" (Ctrl+Shift+W): one image open, 39 tools on it — ForgePix's
+New window "Processing → Workbench …" (Ctrl+Shift+W): one image open, 37 tools on it — ForgePix's
 Siril-, PixInsight- and RC-Astro-like operations in one place, searchable by their names too, each
 naming its model. Any mask (stars, background, nebula, brightness range) on any tool, undo/redo,
 history as a recipe for other images, history as HISTORY in the FITS, screen stretch for display
 only, pixel values and statistics. New small PixInsight processes: Invert, Rescale, exponent,
 saturation, unsharp mask, convolution, morphology, crop, rotate, mirror, resize. The own AI models
 are included, only after explicit confirmation. Measured on a real stack (8 Seestar frames IC 5146,
-1884×1047): all 39 tools ran, undo/redo and replaying a recipe are bit-identical. Equivalence with
+1884×1047): all 37 tools ran (first written here as 39 by mistake), undo/redo and replaying a recipe are bit-identical. Equivalence with
 the models is **not** established.
 
 ### Masks changed the image outside the mask
