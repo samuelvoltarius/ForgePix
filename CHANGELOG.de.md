@@ -8,6 +8,20 @@ Alle nennenswerten Änderungen an ForgePix. Format orientiert an
 
 ## [Unreleased]
 
+### INDI: Geräte unter Linux und macOS
+
+Im Aufnahme-Fenster ist neben ASCOM Alpaca jetzt INDI waehlbar — die Treiberwelt unter Linux
+und macOS (indiserver, z. B. auf einem Raspberry Pi am Teleskop; ZWO ueber `indi_asi_ccd`).
+ForgePix ist INDI-Client nach der Protokollbeschreibung 1.7: Geraeteliste mit Typ, Kamera mit
+Bildtyp (Light/Dark/Bias/Flat, bei Alpaca nur hell/dunkel) und FITS-Bild, Filterrad (Faecher ab
+1 auf ForgePix-Zaehlung ab 0 umgerechnet), Fokussierer, Montierung. Geprueft gegen einen
+nachgebauten indiserver, der das Bild in 97-Byte-Stuecken schickt, auch ueber die Knoepfe —
+**nicht** gegen einen echten indiserver. Gefunden und behoben beim Bauen: Filternamen wurden
+gelesen, bevor der Server sie geschickt hatte (leer), und ein Gerät, das schneller antwortet als
+der Client „Busy“ setzt, haette bis zur Zeitueberschreitung gehangen (Test faellt mit der alten
+Reihenfolge). Beim Verbinden reisst ein scheiterndes Geraet die anderen nicht mehr mit: es wird
+genannt, der Rest wird verbunden.
+
 ### `--superbias` wirkt jetzt
 
 Das Superbias-Modell wurde erst nach der Kalibrierung gebaut und in eine Variable geschrieben,

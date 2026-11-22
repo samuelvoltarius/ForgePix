@@ -8,6 +8,19 @@ All notable changes to ForgePix. Format based on
 
 ## [Unreleased]
 
+### INDI: devices on Linux and macOS
+
+The capture window now offers INDI next to ASCOM Alpaca — the driver world on Linux and macOS
+(indiserver, e.g. on a Raspberry Pi at the telescope; ZWO via `indi_asi_ccd`). ForgePix is an INDI
+client per the protocol description 1.7: device list with type, camera with frame type
+(Light/Dark/Bias/Flat; Alpaca only knows light/dark) and FITS image, filter wheel (slots from 1
+converted to ForgePix's count from 0), focuser, mount. Checked against a simulated indiserver that
+sends the image in 97-byte pieces, also through the buttons — **not** against a real indiserver.
+Found and fixed while building: filter names were read before the server had sent them (empty),
+and a device answering faster than the client sets "Busy" would have hung until timeout (test fails
+with the old order). When connecting, one failing device no longer takes the others down: it is
+named and the rest connect.
+
 ### `--superbias` now has an effect
 
 The superbias model was built only after calibration and stored in a variable nobody read

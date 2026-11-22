@@ -193,8 +193,10 @@ class Kamera(Geraet):
     def temperatur(self):
         return self.lesen_oder_none("ccdtemperature")
 
-    def belichten(self, dauer, licht=True, abbruch=None, max_warten=None):
+    def belichten(self, dauer, licht=True, abbruch=None, max_warten=None, typ=None):
         """Eine Aufnahme machen und das Bild als numpy-Array (Zeilen × Spalten) liefern.
+
+        `typ` (Light/Dark/Flat/Bias) kennt Alpaca nicht — nur hell oder dunkel über `licht`.
 
         `abbruch`: threading.Event — gesetzt bricht die Belichtung ab (abortexposure).
         Alpaca liefert ImageArray als [x][y]; hier wird auf [y][x] gedreht, wie FITS und

@@ -1118,5 +1118,11 @@
   "Daumenkino gespeichert: {path}": "Blink animation saved: {path}",
   "Filterrad": "Filter wheel",
   "Fokussierer": "Focuser",
-  "Montierung": "Mount"
+  "Montierung": "Mount",
+  "Eigene Geräte (Alpaca / INDI)": "Own devices (Alpaca / INDI)",
+  "ForgePix spricht die Geräte selbst an. ASCOM Alpaca: Geräte mit Alpaca (z. B. Seestar), jedes ASCOM-Gerät unter Windows über „ASCOM Remote“, die ASCOM-Simulatoren. INDI: die Treiber unter Linux und macOS (indiserver, z. B. auf einem Raspberry Pi am Teleskop, Astroberry, StellarMate, KStars/Ekos).": "ForgePix talks to the devices itself. ASCOM Alpaca: devices with Alpaca (e.g. Seestar), any ASCOM device on Windows via \"ASCOM Remote\", the ASCOM simulators. INDI: the drivers on Linux and macOS (indiserver, e.g. on a Raspberry Pi at the telescope, Astroberry, StellarMate, KStars/Ekos).",
+  "ASCOM Alpaca": "ASCOM Alpaca",
+  "INDI (indiserver)": "INDI (indiserver)",
+  "nicht verbunden: {liste}": "not connected: {liste}",
+  "Nicht verbunden: {name} — {grund}": "Not connected: {name} — {grund}"
 }

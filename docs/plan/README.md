@@ -16,5 +16,6 @@ gelaufen ist (siehe CLAUDE.md: Code ist kein Beweis).
 | [03_EINRICHTUNG.md](03_EINRICHTUNG.md) | Ersteinrichtung, Windows / macOS / Linux |
 | [04_FEHLER.md](04_FEHLER.md) | gefundene und behobene Fehler, mit Messung |
 | [05_VERARBEITUNG.md](05_VERARBEITUNG.md) | PixInsight / Siril / GraXpert / SetiAstro / RC-Astro / Makro |
+| [06_KI.md](06_KI.md) | KI-Funktionen der anderen Programme und was ForgePix davon hat |
 
 Die vollständige Lückenliste von heute steht in [../LUECKEN.de.md](../LUECKEN.de.md).

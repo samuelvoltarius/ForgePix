@@ -1,6 +1,6 @@
 # 01 — Aufnahme: N.I.N.A.-Ersatz, N.I.N.A.-Fernsteuerung, INDI
 
-Stand 22.11.2026.
+Stand 22.11.2026 (INDI am selben Tag nachgezogen).
 
 ## Aufbau: Anschlüsse statt einer festen Lösung
 
@@ -10,7 +10,7 @@ Stand 22.11.2026.
                  │
      ┌───────────┼─────────────────────┬──────────────────────┐
      ▼           ▼                     ▼                      ▼
- ASCOM Alpaca  N.I.N.A.-Brücke       INDI (fehlt noch)     später: ForgePix-
+ ASCOM Alpaca  N.I.N.A.-Brücke       INDI                  später: ForgePix-
  (HTTP)        (Advanced API, HTTP)  (XML über TCP 7624)   Aufnahme-Server
      │           │                     │
  Seestar,      N.I.N.A. am           indiserver am Rig
@@ -36,8 +36,8 @@ offen bleiben, solange ein Ablaufplan läuft.
 | ASCOM Alpaca: Suche im Netz, Geräteliste, Kamera, Filterrad, Fokussierer, Montierung | `core/alpaca.py` | gebaut | gegen nachgebautes Gerät nach der Alpaca-Beschreibung (`tests/test_alpaca_aufnahme.py`). **Nicht** gegen ein echtes Gerät oder die OmniSim-Simulatoren — die liefen am 22.11. nicht. |
 | Ablaufplan (N × Belichtung × Typ × Filter → FITS mit Kopfdaten) | `core/aufnahme.py` | gebaut | gegen das nachgebaute Gerät, auch über die Knöpfe (`tests/test_aufnahme_ui.py`) |
 | N.I.N.A.-Brücke: Version, Geräte, verbinden/trennen, Testaufnahme, Ablaufplan starten/stoppen/Status, gespeicherte Bilder abholen | `core/nina.py` | gebaut | **live** gegen N.I.N.A. 3.2.0.9001 + Advanced API 2.2.15.2 auf Alfreds PC: Version, Geräteliste, Simulatorkamera verbunden, 1-s-Aufnahme als 640×480-Vorschau, getrennt. Rohdaten aus dem Bildverlauf: nur gegen den Nachbau (dafür braucht es einen Ablaufplan in N.I.N.A., der speichert). |
-| INDI | — | fehlt | — |
-| ZWO-Geräte direkt (ASI-SDK, EAF, EFW) ohne ASCOM | — | fehlt | Unter Windows gehen sie heute über ASCOM-Treiber + ASCOM Remote, unter Linux/macOS über INDI (sobald gebaut). |
+| INDI: Geräteliste mit Typ (DRIVER_INTERFACE oder typisches Merkmal), Kamera mit Bildtyp (Light/Dark/Bias/Flat) und FITS-Bild, Filterrad, Fokussierer, Montierung | `core/indi.py` | gebaut, im Aufnahme-Fenster wählbar | gegen nachgebauten indiserver nach der Protokollbeschreibung 1.7, auch über die Knöpfe (`tests/test_indi.py`, `tests/test_aufnahme_ui.py`). **Nicht** gegen einen echten `indiserver` — kein Linux in dieser Sitzung. |
+| ZWO-Geräte direkt (ASI-SDK, EAF, EFW) ohne ASCOM/INDI | — | fehlt | Unter Windows über ASCOM-Treiber + ASCOM Remote, unter Linux/macOS über INDI (`indi_asi_ccd` usw.). |
 | ASIAIR | — | offen | keine bekannte offizielle Schnittstelle; Ausgabeordner beobachten geht schon (Live-Stapeln). |
 
 ### Gemessene Eigenheiten der N.I.N.A. Advanced API (22.11.2026)
@@ -54,9 +54,9 @@ offen bleiben, solange ein Ablaufplan läuft.
 
 1. **Live-Test an echten Geräten**: ASCOM OmniSimulator starten, dann Alfreds Kamera über
    ASCOM Remote / Seestar über Alpaca. Erst danach „funktioniert" sagen.
-2. **INDI-Anschluss** (Linux/macOS, Raspberry Pi am Rig): getProperties, CCD_EXPOSURE,
-   BLOB-Empfang (FITS), Filterrad, Fokussierer, Montierung. Test gegen `indiserver` mit
-   `indi_simulator_ccd` auf Linux.
+2. **INDI an einem echten indiserver prüfen**: unter Linux die INDI-Simulatoren starten
+   (`indi_simulator_ccd`, `indi_simulator_wheel`, `indi_simulator_telescope`,
+   `indi_simulator_focus`), dann Alfreds ZWO-Kamera mit `indi_asi_ccd`.
 3. **Autofokus**: Fokussierer in Schritten fahren, HFR je Position messen (Sternmessung gibt
    es schon in `astro_quality`), Kurve anpassen, Minimum anfahren.
 4. **Plate-Solve zum Einrichten**: Testaufnahme lösen (`astrometry.py`), Montierung syncen,
@@ -69,6 +69,46 @@ offen bleiben, solange ein Ablaufplan läuft.
 8. **Flat-Assistent**: Belichtung suchen, bis der Median ~40–50 % trifft.
 9. **Eigener Aufnahme-Server** (ohne Oberfläche, am Rig), ForgePix als Client.
 10. Makro: **Fokusschiene** (StackShot/WeMacro/Cognisys) und Kamera-Auslösung (gPhoto2, Sony-SDK).
+
+## Haben wir alle N.I.N.A.-Funktionen? — Nein.
+
+Stand 22.11.2026, aus Kenntnis von N.I.N.A. 3.x (nicht Funktion für Funktion nachgeschlagen):
+
+| N.I.N.A. | ForgePix |
+|---|---|
+| Kamera: belichten, Gain/Offset, Kühlung, Binning | belichten ✅ (Alpaca, INDI); Gain/Offset/Temperatur nur **lesen**; Kühlung und Binning setzen ❌ |
+| Filterrad | ✅ (Alpaca, INDI) |
+| Fokussierer fahren | ✅ — **Autofokus** ❌ |
+| Montierung: GoTo, Nachführen, Parken, Stopp | im Code ✅, im Fenster ❌ (nur Position für den FITS-Kopf) |
+| Rotator, Kuppel, Flat-Panel, Wetter, Sicherheitsmonitor, Schalter | ❌ (über die N.I.N.A.-Brücke nur anzeigen) |
+| Ablaufplan (Sequenzer) | einfach ✅: N × Belichtung × Typ × Filter. Bedingungen, Schleifen, Auslöser, Ziele mit Koordinaten ❌ |
+| Nachführung (PHD2), Dithern | ❌ |
+| Meridian-Flip | ❌ |
+| Plate-Solve + Zentrieren | Lösen nachträglich ✅ (`astrometry.py`), mit der Montierung zentrieren ❌ |
+| Framing-Assistent, Himmelsatlas, Mosaikplaner | ❌ |
+| Flat-Assistent, Polausrichtung | ❌ |
+| HFR/Sternzahl je Aufnahme während der Nacht | Messung vorhanden (`astro_quality`), Anzeige beim Aufnehmen ❌ |
+| Live-Stapeln | ✅ |
+| Plugins | ❌ |
+
+ForgePix ist heute ein **Aufnahme-Grundgerüst mit drei Anschlüssen**, kein vollständiger
+N.I.N.A.-Ersatz. Die Reihenfolge oben ist der Weg dahin.
+
+## Gibt es Linux-Treiber? — Ja, über INDI.
+
+Unter Linux und macOS ist INDI die Treiberwelt; ForgePix spricht sie jetzt als Client. Die
+Treiber selbst kommen aus den INDI-Paketen, nicht von ForgePix (aus Kenntnis, nicht an einem
+Linux-Rechner nachgeprüft):
+
+* Ubuntu/Debian: Paket `indi-full` aus dem PPA `mutlaqja/ppa` — enthält u. a. `indi_asi_ccd`,
+  `indi_asi_focuser`, `indi_asi_wheel` (ZWO), `indi_eqmod_telescope`, `indi_lx200*`,
+  `indi_ioptron*`, `indi_celestron_gps` und die Simulatoren.
+* Raspberry Pi am Teleskop: Astroberry oder StellarMate bringen indiserver fertig mit.
+* macOS: KStars bringt INDI mit; ForgePix verbindet sich mit dessen indiserver.
+* ZWO liefert für Linux/macOS auch ein eigenes Kamera-SDK; ForgePix nutzt es (noch) nicht
+  direkt, der Weg geht über `indi_asi_ccd`.
+* ASCOM Alpaca geht auch unter Linux: Geräte mit eigenem Alpaca (Seestar) brauchen gar keinen
+  Treiber auf dem Rechner.
 
 ## Offene Fragen
 

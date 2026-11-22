@@ -38,8 +38,16 @@ class AufnahmeUI(unittest.TestCase):
     def setUp(self):
         geraet._Geraet.zustand = {}
         self.ziel = tempfile.mkdtemp()
+        # Ein modales Fehlerfenster wartet offscreen ewig — Fehler sollen im Protokoll stehen
+        # und den Test scheitern lassen, nicht ihn anhalten. Echte Funktion statt MagicMock.
+        import ui.aufnahme_dialog as ad
+        self._warnung = ad.QMessageBox.warning
+        self.warnungen = []
+        ad.QMessageBox.warning = staticmethod(lambda *a, **k: self.warnungen.append(a[-1]))
 
     def tearDown(self):
+        import ui.aufnahme_dialog as ad
+        ad.QMessageBox.warning = self._warnung
         shutil.rmtree(self.ziel, ignore_errors=True)
 
     def _warten(self, dialog, sekunden=30):
@@ -72,6 +80,31 @@ class AufnahmeUI(unittest.TestCase):
             self.assertTrue(d.a_start.isEnabled(), "Start bleibt nach dem Lauf gesperrt")
         finally:
             d.close(); d.deleteLater(); self.app.processEvents()
+
+    def test_ablaufplan_ueber_indi(self):
+        """Derselbe Weg mit INDI statt Alpaca — gegen den Nachbau aus test_indi."""
+        import test_indi
+        from ui.aufnahme_dialog import AufnahmeDialog
+        tcp = test_indi._Server(("127.0.0.1", 0), test_indi._Handler)
+        threading.Thread(target=tcp.serve_forever, daemon=True).start()
+        d = AufnahmeDialog(None)
+        try:
+            d.a_art.setCurrentIndex(d.a_art.findData("indi"))
+            self.assertEqual(d.a_port.value(), 7624)
+            d.a_port.setValue(tcp.server_address[1])
+            d._alpaca_laden(); self._warten(d)
+            self.assertEqual(d.a_wahl["camera"].currentData(), "CCD Simulator", self.warnungen)
+            d._alpaca_verbinden(); self._warten(d)
+            self.assertEqual(d._filter_namen, ["L", "R", "Ha"])
+            d.a_ordner.setText(self.ziel)
+            d.plan.cellWidget(0, 0).setValue(1)
+            d.plan.cellWidget(0, 1).setValue(0.0)
+            d._alpaca_start(); self._warten(d)
+            self.assertEqual(len([f for f in os.listdir(self.ziel) if f.endswith(".fits")]), 1,
+                             d.log.toPlainText())
+        finally:
+            d.close(); d.deleteLater(); self.app.processEvents()
+            tcp.shutdown(); tcp.server_close()
 
     def test_menues_im_hauptfenster(self):
         from ui.main_window import MainWindow

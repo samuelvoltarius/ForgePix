@@ -3,7 +3,7 @@
 core/aufnahme.py — ein Ablaufplan für die eigene Aufnahme (der N.I.N.A.-Ersatz, Schritt 1).
 
 Ein Plan ist eine Liste von Schritten „N Aufnahmen × Belichtung × Filter × Typ". Der Lauf
-belichtet über einen Kamera-Anschluss (heute: `alpaca.Kamera`), dreht das Filterrad, liest
+belichtet über einen Kamera-Anschluss (`alpaca.Kamera` oder `indi.Kamera`), dreht das Filterrad, liest
 die Position der Montierung mit und schreibt jede Aufnahme als FITS mit vollständigen
 Kopfdaten in einen Ordner. Diesen Ordner kann ForgePix gleichzeitig live stapeln; die
 Kalibrierbilder (Dark/Flat/Bias) erkennt die vorhandene Header-Suche am IMAGETYP.
@@ -137,7 +137,7 @@ class Lauf:
                 beginn = _dt.datetime.now(_dt.timezone.utc)
                 bild = self.kamera.belichten(schritt.belichtung,
                                              licht=schritt.typ not in ("Dark", "Bias", "DarkFlat"),
-                                             abbruch=self._abbruch)
+                                             abbruch=self._abbruch, typ=schritt.typ)
                 info["temperatur"] = self.kamera.temperatur()      # je Aufnahme frisch
                 kopf = kopfdaten(info, schritt, beginn, position=position, objekt=self.objekt)
                 pfad = fits_schreiben(os.path.join(self.ordner, dateiname(schritt, beginn, nummer)),

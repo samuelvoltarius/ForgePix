@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, Q
 
 import alpaca
 import aufnahme
+import indi
 import nina
 from i18n import tr
 from ui.workers import _ToolWorker
@@ -52,7 +53,7 @@ class AufnahmeDialog(QDialog):
         self._nina_schon = set()
         layout = QVBoxLayout(self)
         tabs = QTabWidget()
-        tabs.addTab(self._seite_alpaca(), tr("Eigene Geräte (ASCOM Alpaca)"))
+        tabs.addTab(self._seite_alpaca(), tr("Eigene Geräte (Alpaca / INDI)"))
         tabs.addTab(self._seite_nina(), tr("N.I.N.A. fernsteuern"))
         layout.addWidget(tabs, 3)
         self.vorschau = QLabel(tr("Noch keine Testaufnahme."))
@@ -100,10 +101,16 @@ class AufnahmeDialog(QDialog):
     def _seite_alpaca(self):
         seite = QWidget(); lay = QVBoxLayout(seite)
         hinweis = QLabel(tr(
-            "ForgePix spricht die Geräte selbst an. Geräte mit Alpaca (z. B. Seestar), jedes "
-            "ASCOM-Gerät unter Windows über „ASCOM Remote“ oder die ASCOM-Simulatoren zum Üben."))
+            "ForgePix spricht die Geräte selbst an. ASCOM Alpaca: Geräte mit Alpaca (z. B. "
+            "Seestar), jedes ASCOM-Gerät unter Windows über „ASCOM Remote“, die ASCOM-Simulatoren. "
+            "INDI: die Treiber unter Linux und macOS (indiserver, z. B. auf einem Raspberry Pi am "
+            "Teleskop, Astroberry, StellarMate, KStars/Ekos)."))
         hinweis.setWordWrap(True); lay.addWidget(hinweis)
         zeile = QHBoxLayout()
+        self.a_art = QComboBox()
+        self.a_art.addItem(tr("ASCOM Alpaca"), "alpaca")
+        self.a_art.addItem(tr("INDI (indiserver)"), "indi")
+        zeile.addWidget(self.a_art)
         self.a_host = QLineEdit("127.0.0.1")
         self.a_port = QSpinBox(); self.a_port.setRange(1, 65535); self.a_port.setValue(11111)
         suchen = QPushButton(tr("Im Netz suchen"))
@@ -158,6 +165,12 @@ class AufnahmeDialog(QDialog):
         zeile.addWidget(self.a_start); zeile.addWidget(self.a_stopp); zeile.addStretch(1)
         lay.addLayout(zeile)
 
+        def art_gewechselt():
+            ist_indi = self.a_art.currentData() == "indi"
+            self.a_port.setValue(indi.STANDARD_PORT if ist_indi else 11111)
+            suchen.setEnabled(not ist_indi)              # INDI hat keine Netzsuche
+            self._indi_schliessen()
+        self.a_art.currentIndexChanged.connect(art_gewechselt)
         suchen.clicked.connect(self._alpaca_suchen)
         laden.clicked.connect(self._alpaca_laden)
         verbinden.clicked.connect(self._alpaca_verbinden)
@@ -172,8 +185,27 @@ class AufnahmeDialog(QDialog):
         self._schritt_hinzu()
         return seite
 
+    def _modul(self):
+        return indi if self.a_art.currentData() == "indi" else alpaca
+
     def _server(self):
-        return alpaca.Server(self.a_host.text(), self.a_port.value())
+        """Alpaca fragt je Anfrage neu; INDI hält eine Verbindung — die wird wiederverwendet,
+        solange Rechner und Port gleich bleiben."""
+        if self.a_art.currentData() != "indi":
+            return alpaca.Server(self.a_host.text(), self.a_port.value())
+        ziel = (self.a_host.text().strip(), self.a_port.value())
+        alt = getattr(self, "_indi_server", None)
+        if alt is not None and (alt.host, alt.port) == ziel:
+            return alt
+        self._indi_schliessen()
+        self._indi_server = indi.Server(*ziel)
+        return self._indi_server
+
+    def _indi_schliessen(self):
+        alt = getattr(self, "_indi_server", None)
+        if alt is not None:
+            alt.schliessen()
+        self._indi_server = None
 
     def _schritt_hinzu(self, anzahl=10, belichtung=60.0):
         zeile = self.plan.rowCount()
@@ -212,7 +244,8 @@ class AufnahmeDialog(QDialog):
                 box.clear(); box.addItem(tr("— keins —"), None)
                 for g in liste:
                     if g["typ"] == typ:
-                        box.addItem("%s (#%d)" % (g["name"], g["nummer"]), g["nummer"])
+                        text = g["name"] if isinstance(g["nummer"], str) else "%s (#%d)" % (g["name"], g["nummer"])
+                        box.addItem(text, g["nummer"])
                 if box.count() > 1:
                     box.setCurrentIndex(1)
             self._schreiben(tr("{n} Geräte gefunden.").format(n=len(liste)))
@@ -220,8 +253,9 @@ class AufnahmeDialog(QDialog):
 
     def _gewaehlt(self):
         server = self._server()
-        klassen = {"camera": alpaca.Kamera, "filterwheel": alpaca.Filterrad,
-                   "focuser": alpaca.Fokussierer, "telescope": alpaca.Montierung}
+        m = self._modul()
+        klassen = {"camera": m.Kamera, "filterwheel": m.Filterrad,
+                   "focuser": m.Fokussierer, "telescope": m.Montierung}
         return {typ: klassen[typ](server, box.currentData())
                 for typ, box in self.a_wahl.items() if box.currentData() is not None}
 
@@ -232,19 +266,32 @@ class AufnahmeDialog(QDialog):
             return
 
         def verbinden(log):
-            stand = {}
+            # Jedes Gerät für sich: eine streikende Montierung darf die Kamera nicht mitreißen.
+            # Was scheitert, wird genannt und bleibt draußen.
+            stand, fehler = {}, []
             for typ, g in geraete.items():
-                g.verbinden()
-                stand[typ] = g.name
+                try:
+                    g.verbinden()
+                except Exception as e:                   # noqa: BLE001 — wird gemeldet
+                    fehler.append("%s: %s" % (g.name, e))
+                    log("⚠️ " + tr("Nicht verbunden: {name} — {grund}").format(name=g.name, grund=e))
+                    continue
+                stand[typ] = g
                 log(tr("Verbunden: {name}").format(name=g.name))
-            namen = geraete["filterwheel"].namen() if "filterwheel" in geraete else []
-            return stand, namen
+            if not stand:
+                raise RuntimeError("; ".join(fehler))
+            namen = stand["filterwheel"].namen() if "filterwheel" in stand else []
+            return stand, namen, fehler
 
         def fertig(ergebnis):
-            stand, namen = ergebnis
-            self._geraete = geraete
+            stand, namen, fehler = ergebnis
+            self._geraete = stand
             self._filter_namen = namen
-            self.a_status.setText(", ".join("%s" % n for n in stand.values()))
+            text = ", ".join(g.name for g in stand.values())
+            if fehler:
+                text += " — " + tr("nicht verbunden: {liste}").format(
+                    liste=", ".join(f.split(":")[0] for f in fehler))
+            self.a_status.setText(text)
             for zeile in range(self.plan.rowCount()):
                 box = self.plan.cellWidget(zeile, 3)
                 aktuell = box.currentData()
@@ -429,6 +476,7 @@ class AufnahmeDialog(QDialog):
 
     def closeEvent(self, event):
         self._nina_timer.stop()
+        self._indi_schliessen()
         if self._lauf is not None:
             self._lauf.abbrechen()
         if self._worker is not None and self._worker.isRunning():
