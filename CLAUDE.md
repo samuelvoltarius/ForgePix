@@ -158,6 +158,10 @@ Zwischen Oberfläche und Pipeline laufen **maschinenlesbare Marker** über die S
 * **Die GUI deutet jede Zeile mit „Vorschlag:" als Begründung.** Wer eine solche Zeile ausgibt,
   landet ungewollt dort.
 * **Zeilenenden**: Git wandelt beim Einchecken; Dateien mit `newline="\n"` schreiben.
+* **Messskripte brauchen `if __name__ == "__main__":`.** `register_and_cache` richtet über
+  mehrere Prozesse aus; unter Windows führt jeder davon ein ungeschütztes Skript noch einmal aus.
+  Am 23.11.2026: 8 Läufe gleichzeitig, 778 s statt 48 s gemessen — und fast als „ForgePix ist
+  58× langsamer als Siril“ berichtet.
 
 ## Alfreds Ausrüstung
 
