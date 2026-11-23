@@ -8,8 +8,9 @@ die Position der Montierung mit und schreibt jede Aufnahme als FITS mit vollstä
 Kopfdaten in einen Ordner. Diesen Ordner kann ForgePix gleichzeitig live stapeln; die
 Kalibrierbilder (Dark/Flat/Bias) erkennt die vorhandene Header-Suche am IMAGETYP.
 
-Was hier NOCH NICHT ist (steht in docs/plan/): Autofokus, Meridian-Flip, Nachführung/Dithern,
-Plate-Solve zum Einrichten, Bedingungen (Höhe, Dämmerung). Kein Qt.
+Dithern über PHD2 alle N Lights (`phd2.py`); Autofokus steht in `autofokus.py`. Was hier NOCH
+NICHT ist (docs/plan/01): Meridian-Flip, Plate-Solve zum Einrichten, Bedingungen (Höhe,
+Dämmerung). Kein Qt.
 """
 import datetime as _dt
 import os
@@ -98,11 +99,14 @@ class Lauf:
     — maschinenlesbar, wie die anderen Marker der Oberfläche."""
 
     def __init__(self, kamera, plan, ordner, filterrad=None, montierung=None, objekt=None,
-                 log=log_print):
+                 phd2=None, dither_alle=0, log=log_print):
         if not plan:
             raise ValueError("Der Ablaufplan ist leer.")
         self.kamera, self.plan, self.ordner = kamera, list(plan), ordner
         self.filterrad, self.montierung, self.objekt = filterrad, montierung, objekt
+        self.phd2, self.dither_alle = phd2, int(dither_alle or 0)
+        if self.dither_alle and self.phd2 is None:
+            raise ValueError("Dithern verlangt eine PHD2-Verbindung.")
         self.log = log
         self._abbruch = threading.Event()
         self.dateien = []
@@ -120,6 +124,7 @@ class Lauf:
             raise ValueError("Der Plan nennt Filter, aber kein Filterrad ist verbunden.")
         info = self.kamera.info()
         nummer = 0
+        lights = 0
         for schritt in self.plan:
             if self._abbruch.is_set():
                 break
@@ -144,6 +149,12 @@ class Lauf:
                                       bild, kopf)
                 self.dateien.append(pfad)
                 self.log("AUFNAHME:%s" % pfad)
+                if schritt.typ == "Light":
+                    lights += 1
+                    if (self.dither_alle and lights % self.dither_alle == 0
+                            and len(self.dateien) < self.gesamt and not self._abbruch.is_set()):
+                        self.log("Dithern (nach %d Lights) …" % lights)
+                        self.phd2.dithern()
         fertig = len(self.dateien)
         if fertig < self.gesamt:
             self.log("Abgebrochen: %d von %d Aufnahmen gespeichert." % (fertig, self.gesamt))

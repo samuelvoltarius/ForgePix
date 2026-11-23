@@ -51,7 +51,9 @@ class _Geraet(BaseHTTPRequestHandler):
         teile = urlparse(self.path).path.strip("/").split("/")
         if teile[:3] == ["management", "v1", "configureddevices"]:
             return self._antwort([{"DeviceName": "Sim-Kamera", "DeviceType": "Camera",
-                                   "DeviceNumber": 0, "UniqueID": "k1"}])
+                                   "DeviceNumber": 0, "UniqueID": "k1"}]
+                                 + ([{"DeviceName": "Sim-Montierung", "DeviceType": "Telescope",
+                                      "DeviceNumber": 0, "UniqueID": "t1"}] if self.zustand.get("mit_montierung") else []))
         typ, methode = teile[2], teile[4]
         werte = {
             ("camera", "connected"): z.get("kamera_an", False), ("camera", "name"): "Sim-Kamera",
@@ -64,7 +66,9 @@ class _Geraet(BaseHTTPRequestHandler):
             ("filterwheel", "names"): ["L", "R", "Ha"],
             ("filterwheel", "position"): z.get("filter", 0),
             ("filterwheel", "connected"): True,
-            ("telescope", "rightascension"): 20.5, ("telescope", "declination"): 40.0,
+            ("telescope", "rightascension"): z.get("ra", 20.5), ("telescope", "declination"): z.get("dec", 40.0),
+            ("telescope", "slewing"): False, ("telescope", "tracking"): z.get("tracking", False),
+            ("telescope", "connected"): True,
         }
         if (typ, methode) in (("camera", "gain"), ("camera", "offset")):
             return self._antwort(None, alpaca.NICHT_UMGESETZT, "Gain not implemented")
@@ -86,6 +90,12 @@ class _Geraet(BaseHTTPRequestHandler):
             self.zustand["bereit"] = True
         elif (typ, methode) == ("filterwheel", "position"):
             self.zustand["filter"] = int(form["Position"])
+        elif (typ, methode) == ("telescope", "slewtocoordinatesasync"):
+            self.zustand["ra"], self.zustand["dec"] = float(form["RightAscension"]), float(form["Declination"])
+        elif (typ, methode) == ("telescope", "tracking"):
+            self.zustand["tracking"] = form["Tracking"] == "True"
+        elif (typ, methode) == ("telescope", "park"):
+            self.zustand["geparkt"] = True
         return self._antwort()
 
 

@@ -214,11 +214,48 @@ def _modul(modul, name, **fest):
 
 
 # ------------------------------------------------------------------ mehrere Bilder -----------
-def _zweitbild(pfad, form):
-    """Ein weiteres Bild laden. Es muss schon ausgerichtet und gleich groß sein — hier wird
-    nichts still skaliert (der Kanäle-Dialog richtet Mono-Aufnahmen aneinander aus)."""
+def ausrichten_an(referenz, bild, log=log_print, toleranz=0.05):
+    """`bild` über die Sterne auf `referenz` legen (Translation + Drehung, wie StarAlignment).
+
+    Geprüft wird der Maßstab der gefundenen Abbildung: weicht er um mehr als `toleranz` von 1 ab,
+    ist es eine andere Optik oder ein falscher Treffer — dann Fehler statt eines verzerrten
+    Bildes (CLAUDE.md: Kameras mischen liefert sonst „ok“ mit Maßstab 0,58)."""
+    import astro
+    import cv2
+    ref_g, img_g = _grau(referenz).astype(np.float32), _grau(bild).astype(np.float32)
+    if ref_g.shape == img_g.shape and np.array_equal(ref_g, img_g):
+        return bild
+    m = astro._estimate_star_transform(ref_g, img_g)
+    if m is None:
+        m = astro._estimate_star_transform_robust(ref_g, img_g)
+    if m is None or not np.isfinite(m).all():
+        raise ValueError("Das zweite Bild ließ sich nicht über die Sterne ausrichten — "
+                         "zeigt es dasselbe Sternfeld?")
+    massstab = float(np.sqrt(abs(np.linalg.det(np.asarray(m, np.float64)[:, :2]))))
+    if abs(massstab - 1.0) > toleranz:
+        raise ValueError("Ausrichten ergab Maßstab %.3f statt 1 — andere Optik oder falscher "
+                         "Treffer; nicht übernommen." % massstab)
+    h, w = ref_g.shape
+    kanaele = [bild[..., k] for k in range(bild.shape[2])] if bild.ndim == 3 else [bild]
+    gelegt = [cv2.warpAffine(k.astype(np.float32), np.asarray(m, np.float32), (w, h),
+                             flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT,
+                             borderValue=float("nan")) for k in kanaele]
+    aus = np.dstack(gelegt) if bild.ndim == 3 else gelegt[0]
+    leer = ~np.isfinite(aus if aus.ndim == 2 else aus[..., 0])
+    if leer.any():
+        log("Ausrichten: %.2f %% des Bildes ohne Daten (Rand) — dort mit dem Median gefüllt" % (100 * leer.mean()))
+        aus = np.where(np.isfinite(aus), aus, np.nanmedian(aus))
+    log("Ausrichten: Maßstab %.4f, Verschiebung %.1f / %.1f px" % (massstab, m[0][2], m[1][2]))
+    return aus.astype(np.float32)
+
+
+def _zweitbild(pfad, form, referenz=None, ausrichten=False, log=log_print):
+    """Ein weiteres Bild laden. Ohne `ausrichten` muss es schon ausgerichtet und gleich groß
+    sein — nichts wird still skaliert."""
     import astro
     b = np.asarray(astro._read_float(pfad), np.float32)
+    if ausrichten:
+        return ausrichten_an(referenz, b, log=log)
     if b.shape[:2] != tuple(form[:2]):
         raise ValueError("%s hat %d×%d Pixel, das offene Bild %d×%d. Erst ausrichten oder "
                          "gleich zuschneiden." % (os.path.basename(pfad), b.shape[0], b.shape[1],
@@ -230,23 +267,23 @@ def _grau(b):
     return b.mean(axis=2) if b.ndim == 3 else b
 
 
-def pixelmath_formel(a, formel="A", B=None, C=None):
+def pixelmath_formel(a, formel="A", B=None, C=None, ausrichten=True, log=log_print):
     """PixelMath über das offene Bild (A) und bis zu zwei weitere (B, C)."""
     import pixelmath
     bilder = {"A": a}
     for name, pfad in (("B", B), ("C", C)):
         if pfad:
-            b = _zweitbild(pfad, a.shape)
+            b = _zweitbild(pfad, a.shape, a, ausrichten, log)
             if b.ndim == 2 and a.ndim == 3:
                 b = np.repeat(b[..., None], 3, axis=2)
             bilder[name] = b
     return pixelmath.evaluate(formel, bilder)
 
 
-def lrgb(a, L=None, gewicht=1.0):
+def lrgb(a, L=None, gewicht=1.0, ausrichten=True, log=log_print):
     """Helligkeit des Farbbilds durch eine (Mono-)Luminanz ersetzen, Farbverhältnisse bleiben.
     Gedacht nach dem Strecken, wie LRGBCombination in PixInsight üblich benutzt wird."""
-    l_neu = _grau(_zweitbild(L, a.shape))
+    l_neu = _grau(_zweitbild(L, a.shape, a, ausrichten, log))
     l_alt = _grau(a)
     gueltig = np.abs(l_alt) > 1e-6
     faktor = np.where(gueltig, l_neu / np.where(gueltig, l_alt, 1.0), 1.0)
@@ -255,11 +292,11 @@ def lrgb(a, L=None, gewicht=1.0):
     return a + float(gewicht) * (neu - a)
 
 
-def kontinuum(a, breitband=None, faktor=1.0, auto=True, log=log_print):
+def kontinuum(a, breitband=None, faktor=1.0, auto=True, ausrichten=True, log=log_print):
     """Kontinuum abziehen: Schmalband − k·(Breitband − Hintergrund). Mit `auto` wird k so
     geschätzt, dass die Sterne verschwinden (Median des Verhältnisses über die hellsten 0,5 %
     des Breitbands) — und das gewählte k gemeldet."""
-    b = _grau(_zweitbild(breitband, a.shape))
+    b = _grau(_zweitbild(breitband, a.shape, a, ausrichten, log))
     b0 = b - float(np.median(b))
     if auto:
         hell = b0 > np.percentile(b0, 99.5)
@@ -271,10 +308,10 @@ def kontinuum(a, breitband=None, faktor=1.0, auto=True, log=log_print):
     return a - faktor * (b0[..., None] if a.ndim == 3 else b0)
 
 
-def kanal_ersetzen(a, kanal="Rot", quelle=None):
+def kanal_ersetzen(a, kanal="Rot", quelle=None, ausrichten=True, log=log_print):
     """Einen Farbkanal durch ein (Mono-)Bild ersetzen — so entsteht RGB, HOO oder SHO Schritt
     für Schritt aus einzelnen Aufnahmen."""
-    b = _grau(_zweitbild(quelle, a.shape))
+    b = _grau(_zweitbild(quelle, a.shape, a, ausrichten, log))
     aus = a.copy()
     aus[..., {"Blau": 0, "Grün": 1, "Rot": 2}[kanal]] = b
     return aus
@@ -391,6 +428,115 @@ def cosmic_schaerfen(a, art="Nur Nebel", log=log_print):
     import cosmicclarity_engine
     modus = {"Nur Nebel": "Non-Stellar Only", "Nur Sterne": "Stellar Only", "Beides": "Both"}[art]
     return cosmicclarity_engine.sharpen(np.clip(a, 0, 1), mode=modus, log=log)
+
+
+# ------------------------------------------------------------------ Runde 3: ACDNR, HDR --------
+def _mad(x):
+    x = np.asarray(x, np.float32)
+    return float(np.median(np.abs(x - np.median(x))) * 1.4826)
+
+
+def acdnr(a, staerke_l=0.5, staerke_c=1.0, radius=2.0, schutz=0.7):
+    """Helligkeit und Farbe getrennt entrauschen (Vorbild: PixInsight ACDNR, nach dessen
+    Beschreibung): Farbrauschen kräftig weichzeichnen, Helligkeit kantenerhaltend glätten, helle
+    Stellen (Sterne, Kerne) je nach `schutz` schonen."""
+    import cv2
+    L = _grau(a).astype(np.float32)
+    C = a - L[..., None]
+    rauschen = max(_mad(L), 1e-6)
+    Lf = cv2.bilateralFilter(L, d=0, sigmaColor=3.0 * rauschen, sigmaSpace=float(radius))
+    Cf = cv2.GaussianBlur(C, (0, 0), 2.0 * float(radius))
+    lo, hi = np.percentile(L, [1.0, 99.5])
+    hell = np.clip((L - lo) / max(float(hi - lo), 1e-9), 0, 1)
+    w = 1.0 - float(schutz) * hell
+    L2 = L + float(staerke_l) * w * (Lf - L)
+    C2 = C + float(staerke_c) * w[..., None] * (Cf - C)
+    return L2[..., None] + C2
+
+
+def _helligkeit_ersetzen(a, L_alt, L_neu):
+    """Farbbild mit neuer Helligkeit, Farbverhältnisse bleiben."""
+    gueltig = np.abs(L_alt) > 1e-6
+    faktor = np.where(gueltig, L_neu / np.where(gueltig, L_alt, 1.0), 1.0)[..., None]
+    aus = a * faktor
+    aus[~gueltig] = a[~gueltig] + (L_neu - L_alt)[~gueltig][:, None]
+    return aus
+
+
+def hdr_multiskala(a, ebenen=6, staerke=0.7):
+    """Dynamik zusammendrücken über Wavelet-Ebenen (Vorbild: PixInsight HDRMultiscaleTransform,
+    nach Beschreibung): die groben Ebenen — der helle Kern einer Galaxie, eines Nebels — werden
+    flacher, die feinen Strukturen darin bleiben. Gedacht nach dem Strecken."""
+    import wavelet
+    L = _grau(a).astype(np.float32)
+    details, rest = wavelet.atrous(L, levels=int(ebenen))
+    mittel = float(np.mean(rest))
+    flacher = mittel + (rest - mittel) * (1.0 - float(staerke))
+    L2 = flacher + np.sum(details, axis=0)
+    return _helligkeit_ersetzen(a, L, L2.astype(np.float32))
+
+
+def _poisson_neumann(div):
+    """∇²I = div mit Neumann-Rand über die Kosinus-Transformation lösen."""
+    from scipy.fft import dctn, idctn
+    h, w = div.shape
+    d = dctn(div, type=2, norm="ortho")
+    ky = 2.0 * np.cos(np.pi * np.arange(h) / h) - 2.0
+    kx = 2.0 * np.cos(np.pi * np.arange(w) / w) - 2.0
+    nenner = ky[:, None] + kx[None, :]
+    nenner[0, 0] = 1.0
+    d = d / nenner
+    d[0, 0] = 0.0
+    return idctn(d, type=2, norm="ortho")
+
+
+def gradienten_hdr(a, staerke=0.85, schwelle=0.1):
+    """Kontrast im Gradientenbereich zusammendrücken (Vorbild: PixInsight GradientsHDRCompression;
+    Verfahren nach Fattal u. a. 2002, einskalig): große Helligkeitssprünge werden gedämpft,
+    kleine bleiben, das Bild wird aus den Gradienten neu zusammengesetzt. staerke = 1 lässt das
+    Bild unverändert (bis auf die Helligkeitsspanne)."""
+    L = _grau(a).astype(np.float64)
+    lo = float(L.min())
+    H = np.log(L - lo + 1e-4)
+    gx = np.zeros_like(H); gy = np.zeros_like(H)
+    gx[:, :-1] = H[:, 1:] - H[:, :-1]
+    gy[:-1, :] = H[1:, :] - H[:-1, :]
+    betrag = np.hypot(gx, gy)
+    alpha = max(float(schwelle) * float(betrag.mean()), 1e-12)
+    phi = np.where(betrag > 0, (np.maximum(betrag, 1e-12) / alpha) ** (float(staerke) - 1.0), 1.0)
+    Gx, Gy = gx * phi, gy * phi
+    div = np.zeros_like(H)
+    div[:, 0] = Gx[:, 0]; div[:, 1:] = Gx[:, 1:] - Gx[:, :-1]
+    div[0, :] += Gy[0, :]; div[1:, :] += Gy[1:, :] - Gy[:-1, :]
+    I = _poisson_neumann(div)
+    # Spanne am dunklen Ende (0,1 %) und am HELLSTEN Wert festmachen — mit 99,9 % liefen helle
+    # Sterne am echten Stapel bis 1,73 hinaus (gemessen 23.11.2026)
+    q_alt = np.percentile(H, [0.1, 100.0]); q_neu = np.percentile(I, [0.1, 100.0])
+    I = q_alt[0] + (I - q_neu[0]) * (q_alt[1] - q_alt[0]) / max(q_neu[1] - q_neu[0], 1e-12)
+    L2 = np.exp(I) + lo - 1e-4
+    return _helligkeit_ersetzen(a, L.astype(np.float32), L2.astype(np.float32))
+
+
+def _starnet_finden():
+    import tools_engine
+    return tools_engine.find_starnet()
+
+
+def starnet(a, log=log_print):
+    """StarNet++ selbst rechnen lassen. StarNet nimmt nur 16-bit-TIFF eines GESTRECKTEN Bildes —
+    darum hier nur nach dem Strecken; Werte außerhalb 0…1 werden dafür begrenzt (gemeldet)."""
+    import tifffile
+    import tools_engine
+    draussen = float(np.mean((a < 0) | (a > 1)))
+    if draussen:
+        log("StarNet: %.2f %% der Werte außerhalb 0…1 werden für StarNet begrenzt" % (100 * draussen))
+    with tempfile.TemporaryDirectory() as d:
+        ein = os.path.join(d, "starnet_in.tif")
+        tifffile.imwrite(ein, (np.clip(a[..., ::-1], 0, 1) * 65535).astype(np.uint16), photometric="rgb")
+        aus = tools_engine.run_starnet(ein, os.path.join(d, "starnet_out.tif"), log=log)
+        b = tifffile.imread(aus).astype(np.float32)
+    b = b / (65535.0 if b.max() > 1.5 else 1.0)
+    return b[..., ::-1] if b.ndim == 3 else np.repeat(b[..., None], 3, axis=2)
 
 
 _STILL = {"log": lambda *a: None}
@@ -527,21 +673,21 @@ PROZESSE = [
             "Formel über das offene Bild A und bis zu zwei weitere (B, C). Beispiele: 0.8*A+0.2*B, "
             "rgb(B, C, A), max(A, B).",
             [Param("formel", "Formel", "A", text=True), Param("B", "Bild B", None, bild=True, pflicht=False),
-             Param("C", "Bild C", None, bild=True, pflicht=False)], pixelmath_formel),
+             Param("C", "Bild C", None, bild=True, pflicht=False), Param("ausrichten", "über die Sterne ausrichten", True)], pixelmath_formel),
     Prozess("lrgb", "Luminanz einsetzen (LRGB)", "Mehrere Bilder",
             "PixInsight: LRGBCombination · Siril: RGB Composition mit L",
             "Helligkeit durch eine Mono-Luminanz ersetzen, Farbe bleibt. Nach dem Strecken anwenden.",
-            [Param("L", "Luminanz-Bild", None, bild=True), Param("gewicht", "Gewicht", 1.0, 0.0, 1.0)], lrgb),
+            [Param("L", "Luminanz-Bild", None, bild=True), Param("gewicht", "Gewicht", 1.0, 0.0, 1.0), Param("ausrichten", "über die Sterne ausrichten", True)], lrgb),
     Prozess("kontinuum", "Kontinuum abziehen", "Mehrere Bilder",
             "SetiAstro: Continuum Subtraction · PixInsight: PixelMath-Rezept",
             "Schmalband − k·Breitband: Sterne und Kontinuum raus, reines Linienlicht bleibt.",
             [Param("breitband", "Breitband-Bild (z. B. Rot)", None, bild=True),
-             Param("auto", "k aus den Sternen schätzen", True), Param("faktor", "k (von Hand)", 1.0, 0.0, 5.0)],
+             Param("auto", "k aus den Sternen schätzen", True), Param("faktor", "k (von Hand)", 1.0, 0.0, 5.0), Param("ausrichten", "über die Sterne ausrichten", True)],
             kontinuum),
     Prozess("kanal", "Kanal ersetzen", "Mehrere Bilder",
             "PixInsight: ChannelCombination · Siril: RGB Composition",
             "Einen Farbkanal durch eine Mono-Aufnahme ersetzen (RGB, HOO, SHO Schritt für Schritt).",
-            [Param("kanal", "Kanal", "Rot", wahl=["Rot", "Grün", "Blau"]), Param("quelle", "Mono-Bild", None, bild=True)],
+            [Param("kanal", "Kanal", "Rot", wahl=["Rot", "Grün", "Blau"]), Param("quelle", "Mono-Bild", None, bild=True), Param("ausrichten", "über die Sterne ausrichten", True)],
             kanal_ersetzen),
     # --- Kurven und MaskedStretch ----------------------------------------------------------
     Prozess("kurven", "Kurven", "Strecken", "PixInsight: CurvesTransformation · Siril: Curves",
@@ -561,6 +707,22 @@ PROZESSE = [
             "KI-Schärfung. Cosmic Clarity muss installiert sein.",
             [Param("art", "Was schärfen", "Nur Nebel", wahl=["Nur Nebel", "Nur Sterne", "Beides"])],
             cosmic_schaerfen, extern=_cosmic_finden),
+    Prozess("acdnr", "Entrauschen (Helligkeit/Farbe getrennt)", "Rauschen und Schärfe",
+            "PixInsight: ACDNR · Siril: Denoise (Chroma)",
+            "Farbrauschen kräftig, Helligkeit kantenerhaltend glätten; helle Stellen werden geschont.",
+            [Param("staerke_l", "Stärke Helligkeit", 0.5, 0.0, 1.0), Param("staerke_c", "Stärke Farbe", 1.0, 0.0, 1.0),
+             Param("radius", "Radius", 2.0, 0.5, 10.0), Param("schutz", "Schutz heller Stellen", 0.7, 0.0, 1.0)], acdnr),
+    Prozess("hdrmt", "Dynamik zusammendrücken (Wavelet)", "Strecken", "PixInsight: HDRMultiscaleTransform",
+            "Helle Kerne flacher, die Strukturen darin bleiben sichtbar.",
+            [Param("ebenen", "Ebenen", 6, 2, 9, ganz=True), Param("staerke", "Stärke", 0.7, 0.0, 1.0)], hdr_multiskala),
+    Prozess("gradienten_hdr", "Dynamik zusammendrücken (Gradienten)", "Strecken",
+            "PixInsight: GradientsHDRCompression (Fattal 2002, einskalig)",
+            "Große Helligkeitssprünge dämpfen, kleine behalten; 1 = unverändert.",
+            [Param("staerke", "Stärke (1 = aus)", 0.85, 0.3, 1.0), Param("schwelle", "Schwelle", 0.1, 0.01, 1.0)],
+            gradienten_hdr),
+    Prozess("starnet", "StarNet++", "Externe Programme", "StarNet++ (das Programm selbst, KI)",
+            "Sterne entfernen mit StarNets eigener KI — nur am gestreckten Bild. StarNet muss installiert sein.",
+            [], starnet, extern=_starnet_finden),
     # --- eigene KI (experimentell) ----------------------------------------------------------
     Prozess("ki_entrauschen", "KI: Entrauschen", "Eigene KI (experimentell)",
             "RC-Astro NoiseXTerminator · GraXpert Denoise · Cosmic Clarity Denoise (eigenes Modell, nicht gleichwertig)",
@@ -605,7 +767,8 @@ PHASE = {
     "unclip": "linear", "morphologie": "gestreckt",
     "pixelmath": "beides", "lrgb": "gestreckt", "kontinuum": "linear", "kanal": "linear",
     "larson": "gestreckt",
-    "graxpert": "linear", "cosmic": None,
+    "graxpert": "linear", "cosmic": None, "starnet": "gestreckt",
+    "acdnr": "beides", "hdrmt": "gestreckt", "gradienten_hdr": "gestreckt",
     "ki_entrauschen": "linear", "ki_schaerfen": "linear", "ki_sterne": "linear", "ki_hintergrund": "linear",
 }
 assert set(PHASE) == set(NACH_ID), "Werkzeug ohne Phase: %s" % (set(NACH_ID) ^ set(PHASE))

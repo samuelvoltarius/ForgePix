@@ -8,6 +8,29 @@ All notable changes to ForgePix. Format based on
 
 ## [Unreleased]
 
+### Capture: autofocus, mount in the window, PHD2 with dithering
+
+Autofocus like N.I.N.A.: step the focuser (always from the same direction), measure HFR at each
+position, fit a hyperbola, move to the minimum; minimum outside the range or too few stars → back
+to the start instead of a wrong position. Against simulated optics with a known focus: within 30
+steps; HFR on real Seestar frames 1.9 px, after blurring 4.5 px. Mount in the capture window: slew,
+tracking, park, stop (Alpaca and INDI). PHD2 via its event server: state, start guiding, dither
+every N lights in the sequence, waiting for "SettleDone" (not after the last frame). All checked
+against simulated devices — **not** on a real focuser, mount or PHD2. Found while building: the
+first HFR measurement reached into neighbouring stars (focus 99 steps off), and a device without a
+name crashed the status line inside a Qt slot without any test failing — the GUI tests now collect
+such exceptions.
+
+### Workbench: ACDNR, HDR, StarNet, alignment
+
+Four new tools (now 49): denoise brightness and colour separately (like ACDNR; −33 % colour noise
+in the background of a real stack), compress dynamic range via wavelets (like
+HDRMultiscaleTransform) and via gradients (like GradientsHDRCompression, method after Fattal 2002)
+— both exactly unchanged at strength "off" —, StarNet++ as an external program. Second images are
+now aligned via the stars (like StarAlignment): a real Seestar frame laid onto the stack,
+correlation 0.07 → 0.955; a scale 8 % off is rejected instead of being distorted (counter-check
+without the guard: silently accepted).
+
 ### Workbench: several images, curves, MaskedStretch, GraXpert, trial on a crop
 
 Eight new tools (now 45): PixelMath over the open image and up to two more, insert luminance

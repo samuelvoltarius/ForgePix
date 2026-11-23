@@ -420,6 +420,9 @@ class Montierung(Geraet):
         s.fertig(g, "EQUATORIAL_EOD_COORD", max_warten, "Schwenk")
         return self.position()
 
+    def nachfuehrung(self):
+        return bool(self.server.vektor(self.geraet, "TELESCOPE_TRACK_STATE").werte.get("TRACK_ON"))
+
     def nachfuehren(self, an=True):
         s, g = self.server, self.geraet
         s.neu(g, "TELESCOPE_TRACK_STATE", {"TRACK_ON" if an else "TRACK_OFF": True})

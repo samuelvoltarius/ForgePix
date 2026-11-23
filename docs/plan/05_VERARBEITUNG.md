@@ -10,7 +10,7 @@ Kein Bildqualitätsvergleich gegen sie ist gerechnet.
 
 Ein Bild offen, jedes Werkzeug darauf, wie in PixInsight und Siril:
 
-* **45 Werkzeuge** (Stand 23.11.2026) in **neun nummerierten Gruppen in der Reihenfolge eines
+* **49 Werkzeuge** (Stand 23.11.2026, abends) in **neun nummerierten Gruppen in der Reihenfolge eines
   üblichen Ablaufs** (1 Geometrie → 2 Hintergrund und Farbe → 3 Rauschen und Schärfe → 4 Strecken
   → 5 Sterne → 6 Mehrere Bilder → 7 Komet → 8 Externe Programme → 9 Eigene KI), durchsuchbar auch
   mit PixInsight-/Siril-/RC-Astro-Namen (`core/prozesse.py`). Jedes nennt sein Vorbild — als
@@ -54,16 +54,20 @@ frisch gerechneten Stapel derselben Aufnahmen: alle gelaufen, GraXpert echt in 6
 
 ## Was noch fehlt (Reihenfolge-Vorschlag)
 
-1. [x] Mehrere Bilder im Arbeitsplatz: PixelMath, LRGB, Kanal ersetzen, Kontinuum (23.11.).
-       Offen: Ausrichten im Arbeitsplatz selbst (heute: vorher mit dem Kanäle-Dialog).
+1. [x] Mehrere Bilder im Arbeitsplatz: PixelMath, LRGB, Kanal ersetzen, Kontinuum (23.11.), mit
+       Ausrichten über die Sterne (wie StarAlignment) und Maßstabsprüfung: eine echte Seestar-
+       Aufnahme auf den Stapel gelegt, Übereinstimmung 0,07 → 0,955; 8 % anderer Maßstab wird
+       abgelehnt (Gegenprobe ohne Prüfung: still übernommen).
 2. [x] Am Ausschnitt probieren (23.11.). Offen: Ausschnitt selbst wählen statt Bildmitte.
 3. [x] Kurven mit Punkten und Editor (23.11.). Offen: STF von Hand, Kurve über Sättigung/Farbton.
-4. [x] MaskedStretch (23.11., nach Beschreibung nachgebaut, nicht gegen PixInsight verglichen).
-       Offen: ACDNR, HDRMultiscaleTransform, GradientsHDR.
+4. [x] MaskedStretch, ACDNR, HDRMultiscaleTransform, GradientsHDR (23.11., nach Beschreibung
+       nachgebaut, nicht gegen PixInsight verglichen). Gegenproben: beide HDR-Werkzeuge lassen das
+       Bild bei Stärke „aus“ exakt unverändert; ACDNR senkt das Farbrauschen im Hintergrund eines
+       echten Stapels um 33 %.
 5. [ ] SPCC ohne Siril (Gaia-Spektren × Sensor-QE × Filterkurve).
 6. [ ] Himmelsmosaik (WCS-bewusst); Plate-Solve ohne Hinweis (Blindsuche).
-7. [x] GraXpert und Cosmic Clarity im Arbeitsplatz (23.11.; Cosmic Clarity hier nicht installiert,
-       daher nicht echt geprüft). Offen: StarNet (nicht installiert).
+7. [x] GraXpert, Cosmic Clarity und StarNet++ im Arbeitsplatz (23.11.; GraXpert echt gelaufen,
+       Cosmic Clarity und StarNet hier nicht installiert, daher nicht echt geprüft).
 8. [ ] KI-Werkzeuge gegen GraXpert / Cosmic Clarity an denselben Daten messen.
 9. [ ] RC-Astro-Niveau: braucht neues Training mit echten Paaren — eigenes Vorhaben, Ergebnis offen.
        Freie Ausgangsmodelle: siehe 06_KI (NAFNet MIT, auf eigenen Aufnahmen nachtrainieren).

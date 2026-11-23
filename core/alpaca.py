@@ -286,6 +286,9 @@ class Montierung(Geraet):
             time.sleep(0.5)
         return self.position()
 
+    def nachfuehrung(self):
+        return bool(self.lesen("tracking"))
+
     def nachfuehren(self, an=True):
         self.setzen("tracking", Tracking=bool(an))
         return bool(self.lesen("tracking"))

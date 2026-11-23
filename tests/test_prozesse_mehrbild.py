@@ -52,7 +52,8 @@ class TestMehrbild(unittest.TestCase):
         schmal = linie + 0.37 * (breit - np.median(breit)) + 0.01
         zeilen = []
         r = prozesse.anwenden(np.dstack([schmal] * 3), "kontinuum",
-                              {"breitband": self._fits("rot.fits", breit)}, log=zeilen.append)
+                              {"breitband": self._fits("rot.fits", breit), "ausrichten": False},
+                              log=zeilen.append)
         k = float(zeilen[0].split("k = ")[1].split()[0])
         self.assertAlmostEqual(k, 0.37, delta=0.02)
         rest = r[..., 0] - np.median(r[..., 0])
@@ -63,29 +64,65 @@ class TestMehrbild(unittest.TestCase):
     def test_kanal_ersetzen(self):
         bild = sternfeld()
         mono = np.full(bild.shape[:2], 0.5, np.float32)
-        r = prozesse.anwenden(bild, "kanal", {"kanal": "Rot", "quelle": self._fits("ha.fits", mono)})
+        r = prozesse.anwenden(bild, "kanal", {"kanal": "Rot", "quelle": self._fits("ha.fits", mono),
+                                                 "ausrichten": False})
         np.testing.assert_array_equal(r[..., 2], mono)
         np.testing.assert_array_equal(r[..., :2], bild[..., :2])
 
     def test_lrgb_setzt_helligkeit(self):
         bild = np.clip(sternfeld() + 0.1, 0, 1)
         L = np.full(bild.shape[:2], 0.4, np.float32)
-        r = prozesse.anwenden(bild, "lrgb", {"L": self._fits("l.fits", L)})
+        r = prozesse.anwenden(bild, "lrgb", {"L": self._fits("l.fits", L), "ausrichten": False})
         np.testing.assert_allclose(r.mean(axis=2), 0.4, atol=1e-5)
         # Farbverhältnisse bleiben
         np.testing.assert_allclose(r[..., 2] / r[..., 0], bild[..., 2] / bild[..., 0], rtol=1e-4)
 
     def test_pixelmath_mit_zwei_bildern(self):
         a = sternfeld(seed=1); b = sternfeld(seed=2)
-        r = prozesse.anwenden(a, "pixelmath", {"formel": "0.25*A + 0.75*B", "B": self._fits("b.fits", b)})
+        r = prozesse.anwenden(a, "pixelmath", {"formel": "0.25*A + 0.75*B", "B": self._fits("b.fits", b),
+                                                  "ausrichten": False})
         np.testing.assert_allclose(r, 0.25 * a + 0.75 * b, atol=1e-6)
 
     def test_falsche_groesse_ist_fehler(self):
         a = sternfeld()
         klein = self._fits("klein.fits", np.zeros((10, 10), np.float32))
         with self.assertRaises(ValueError) as e:
-            prozesse.anwenden(a, "kanal", {"kanal": "Rot", "quelle": klein})
+            prozesse.anwenden(a, "kanal", {"kanal": "Rot", "quelle": klein, "ausrichten": False})
         self.assertIn("ausrichten", str(e.exception))
+
+    def _verschoben(self, bild, dx, dy, grad=0.0, massstab=1.0):
+        import cv2
+        h, w = bild.shape[:2]
+        m = cv2.getRotationMatrix2D((w / 2, h / 2), grad, massstab)
+        m[0, 2] += dx; m[1, 2] += dy
+        return np.dstack([cv2.warpAffine(bild[..., k], m, (w, h), flags=cv2.INTER_LINEAR,
+                                         borderMode=cv2.BORDER_CONSTANT, borderValue=0.02)
+                          for k in range(3)])
+
+    def test_ausrichten_trifft_bekannte_verschiebung(self):
+        """Zweitbild = dasselbe Sternfeld, 7,3 / −4,6 px verschoben und 1,5° gedreht."""
+        ref = sternfeld(h=200, w=260, seed=7)
+        zweit = self._verschoben(ref, 7.3, -4.6, 1.5)
+        zeilen = []
+        r = prozesse.anwenden(ref, "pixelmath", {"formel": "B", "B": self._fits("z.fits", zweit)},
+                              log=zeilen.append)
+        innen = (slice(20, -20), slice(20, -20))
+        vorher = float(np.abs(zweit[innen] - ref[innen]).mean())
+        nachher = float(np.abs(r[innen] - ref[innen]).mean())
+        self.assertLess(nachher, vorher / 5, "nach dem Ausrichten muss das Bild auf dem offenen liegen")
+        self.assertTrue(any("Maßstab" in z for z in zeilen))
+
+    def test_ausrichten_lehnt_anderen_massstab_ab(self):
+        """Gegenprobe: 20 % größer (andere Optik) darf nicht still verzerrt übernommen werden."""
+        ref = sternfeld(h=200, w=260, seed=7)
+        zweit = self._verschoben(ref, 0, 0, 0, massstab=1.2)
+        with self.assertRaises(ValueError):              # die Sternsuche findet schon nichts
+            prozesse.anwenden(ref, "pixelmath", {"formel": "B", "B": self._fits("g.fits", zweit)})
+        # 8 % kommt durch die Sternsuche — dann muss die Maßstabsprüfung selbst ablehnen
+        knapp = self._verschoben(ref, 0, 0, 0, massstab=1.08)
+        with self.assertRaises(ValueError) as e:
+            prozesse.anwenden(ref, "pixelmath", {"formel": "B", "B": self._fits("k.fits", knapp)})
+        self.assertIn("Maßstab", str(e.exception))
 
     def test_fehlende_datei_und_pflichtbild(self):
         with self.assertRaises(ValueError):

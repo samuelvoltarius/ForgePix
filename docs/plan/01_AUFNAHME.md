@@ -57,12 +57,10 @@ offen bleiben, solange ein Ablaufplan läuft.
 2. **INDI an einem echten indiserver prüfen**: unter Linux die INDI-Simulatoren starten
    (`indi_simulator_ccd`, `indi_simulator_wheel`, `indi_simulator_telescope`,
    `indi_simulator_focus`), dann Alfreds ZWO-Kamera mit `indi_asi_ccd`.
-3. **Autofokus**: Fokussierer in Schritten fahren, HFR je Position messen (Sternmessung gibt
-   es schon in `astro_quality`), Kurve anpassen, Minimum anfahren.
+3. [x] **Autofokus** (23.11.2026). Offen: an echtem Fokussierer prüfen; Temperaturnachführung.
 4. **Plate-Solve zum Einrichten**: Testaufnahme lösen (`astrometry.py`), Montierung syncen,
    Ziel nachschwenken.
-5. **Nachführung**: PHD2 über seine JSON-Schnittstelle (Port 4400): starten, Dithern zwischen
-   Aufnahmen, Pause beim Flip.
+5. [x] **Nachführung mit PHD2**, Dithern (23.11.2026). Offen: an echtem PHD2 prüfen; Pause beim Flip.
 6. **Meridian-Flip**: `TimeToMeridianFlip`/SideOfPier lesen, rechtzeitig anhalten, flippen,
    neu lösen, weiter.
 7. **Bedingungen**: Höhe über Horizont, Dämmerung, Mond; Start/Ende danach.
@@ -78,11 +76,11 @@ Stand 22.11.2026, aus Kenntnis von N.I.N.A. 3.x (nicht Funktion für Funktion na
 |---|---|
 | Kamera: belichten, Gain/Offset, Kühlung, Binning | belichten ✅ (Alpaca, INDI); Gain/Offset/Temperatur nur **lesen**; Kühlung und Binning setzen ❌ |
 | Filterrad | ✅ (Alpaca, INDI) |
-| Fokussierer fahren | ✅ — **Autofokus** ❌ |
-| Montierung: GoTo, Nachführen, Parken, Stopp | im Code ✅, im Fenster ❌ (nur Position für den FITS-Kopf) |
+| Fokussierer fahren, **Autofokus** | ✅ HFR-Kurve mit Hyperbel wie N.I.N.A. (`autofokus.py`), im Fenster; gegen nachgebaute Optik geprüft, HFR an echten Seestar-Aufnahmen gemessen (1,9 px) — **nicht** an einem echten Fokussierer |
+| Montierung: GoTo, Nachführen, Parken, Stopp | ✅ im Fenster (Alpaca und INDI), gegen nachgebautes Gerät |
 | Rotator, Kuppel, Flat-Panel, Wetter, Sicherheitsmonitor, Schalter | ❌ (über die N.I.N.A.-Brücke nur anzeigen) |
 | Ablaufplan (Sequenzer) | einfach ✅: N × Belichtung × Typ × Filter. Bedingungen, Schleifen, Auslöser, Ziele mit Koordinaten ❌ |
-| Nachführung (PHD2), Dithern | ❌ |
+| Nachführung (PHD2), Dithern | ✅ PHD2 über seinen Ereignis-Server: Zustand, Führen starten, Dithern alle N Lights im Ablaufplan mit Warten auf „SettleDone“ (`phd2.py`); gegen nachgebauten PHD2-Server — **nicht** gegen echtes PHD2 |
 | Meridian-Flip | ❌ |
 | Plate-Solve + Zentrieren | Lösen nachträglich ✅ (`astrometry.py`), mit der Montierung zentrieren ❌ |
 | Framing-Assistent, Himmelsatlas, Mosaikplaner | ❌ |

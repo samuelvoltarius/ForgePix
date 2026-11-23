@@ -8,6 +8,30 @@ Alle nennenswerten Änderungen an ForgePix. Format orientiert an
 
 ## [Unreleased]
 
+### Aufnahme: Autofokus, Montierung im Fenster, PHD2 mit Dithern
+
+Autofokus wie N.I.N.A.: Fokussierer in Schritten durchfahren (immer aus derselben Richtung),
+HFR je Stelle messen, Hyperbel anpassen, Minimum anfahren; Minimum ausserhalb der Spanne oder zu
+wenige Sterne → zurueck an den Start statt einer falschen Stelle. Gegen eine nachgebaute Optik mit
+bekanntem Fokus: Treffer unter 30 Schritten; die HFR an echten Seestar-Aufnahmen 1,9 px, nach
+Weichzeichnen 4,5 px. Montierung im Aufnahme-Fenster: hinschwenken, Nachfuehrung, parken, stoppen
+(Alpaca und INDI). PHD2 ueber dessen Ereignis-Server: Zustand, Fuehren starten, Dithern alle N
+Lights im Ablaufplan mit Warten auf „SettleDone“ (nicht nach der letzten Aufnahme). Alles gegen
+nachgebaute Geraete geprueft — **nicht** an echtem Fokussierer, echter Montierung oder echtem PHD2.
+Beim Bauen gefunden: die erste HFR-Messung griff in Nachbarsterne (Fokus 99 Schritte daneben), und
+ein Geraet ohne Namen liess die Statuszeile in einem Qt-Slot abstuerzen, ohne dass ein Test fiel —
+die Oberflaechentests sammeln solche Ausnahmen jetzt ein.
+
+### Arbeitsplatz: ACDNR, HDR, StarNet, Ausrichten
+
+Vier neue Werkzeuge (jetzt 49): Entrauschen getrennt nach Helligkeit und Farbe (wie ACDNR; am
+echten Stapel −33 % Farbrauschen im Hintergrund), Dynamik zusammendruecken ueber Wavelets (wie
+HDRMultiscaleTransform) und ueber Gradienten (wie GradientsHDRCompression, Verfahren nach Fattal
+2002) — beide bei Staerke „aus“ exakt unveraendert —, StarNet++ als externes Programm. Zweite
+Bilder werden jetzt ueber die Sterne ausgerichtet (wie StarAlignment): eine echte Seestar-Aufnahme
+auf den Stapel gelegt, Uebereinstimmung 0,07 → 0,955; ein um 8 % anderer Massstab wird abgelehnt
+statt verzerrt uebernommen (Gegenprobe ohne Pruefung: still uebernommen).
+
 ### Arbeitsplatz: mehrere Bilder, Kurven, MaskedStretch, GraXpert, Ausschnitt-Probe
 
 Acht neue Werkzeuge (jetzt 45): PixelMath ueber das offene Bild und bis zu zwei weitere,

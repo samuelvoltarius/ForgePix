@@ -48,6 +48,21 @@ Stand 22.11.2026. Je Fehler: was, wie es sich meldete, wie gemessen, Test.
   Kalibrierbilder anderer Objekte daneben. Heute meldet sie Größen-/Kopfdaten-Unterschiede
   laut; gleich große fremde Darks würden aber angenommen.
 
+## Autofokus 99 Schritte daneben (heute gebaut, heute gefunden)
+
+* Die erste HFR-Messung nahm ein festes Fenster um jeden Stern; bei Unschärfe griff es in
+  Nachbarsterne, die Kurve war nicht V-förmig (z. B. 18,4 / 26,4 / 17,6 px nebeneinander). Eine
+  Parabel darauf landete 99 Schritte neben dem Fokus. Jetzt: nur der Stern selbst, Sterne mit
+  berührendem Nachbarn werden nicht gemessen, Hyperbel statt Parabel → saubere V-Kurve
+  (6,7 … 1,9 … 4,6 px), Treffer unter 30 Schritten. Test `test_autofokus_phd2`.
+
+## Gerät ohne Namen ließ die Statuszeile abstürzen — und kein Test merkte es
+
+* Alpaca-Treiber müssen keinen Namen melden; `", ".join(...)` mit None warf in einem Qt-Slot. PySide
+  druckt solche Ausnahmen nur aus, der Test blieb grün. Jetzt steht der Gerätetyp da, und die
+  Oberflächentests sammeln Ausnahmen aus Slots ein und fallen damit (Gegenprobe: mit dem alten
+  Fehler fällt der Test).
+
 ## GraXpert-Aufruf scheiterte unter pytest (23.11.2026, behoben)
 
 * `graxpert_engine` startete GraXpert mit `capture_output=True`, aber ohne `stdin=`. Unter

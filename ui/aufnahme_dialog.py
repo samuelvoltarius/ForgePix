@@ -12,12 +12,14 @@ from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QLabel,
     QLineEdit, QPushButton, QSpinBox, QDoubleSpinBox, QComboBox, QTabWidget, QWidget,
-    QTableWidget, QHeaderView, QPlainTextEdit, QFileDialog, QCheckBox, QMessageBox)
+    QTableWidget, QHeaderView, QPlainTextEdit, QFileDialog, QCheckBox, QMessageBox, QGroupBox)
 
 import alpaca
 import aufnahme
+import autofokus
 import indi
 import nina
+import phd2
 from i18n import tr
 from ui.workers import _ToolWorker
 
@@ -140,6 +142,50 @@ class AufnahmeDialog(QDialog):
         zeile.addWidget(QLabel(tr("Belichtung"))); zeile.addWidget(self.a_test); zeile.addWidget(test)
         zeile.addStretch(1)
         lay.addLayout(zeile)
+
+        # --- Montierung ------------------------------------------------------------------
+        gruppe = QGroupBox(tr("Montierung")); gl = QHBoxLayout(gruppe)
+        self.m_ra = QDoubleSpinBox(); self.m_ra.setRange(0.0, 24.0); self.m_ra.setDecimals(4); self.m_ra.setSuffix(" h")
+        self.m_dec = QDoubleSpinBox(); self.m_dec.setRange(-90.0, 90.0); self.m_dec.setDecimals(4); self.m_dec.setSuffix(" °")
+        k_goto = QPushButton(tr("Hinschwenken")); k_track = QPushButton(tr("Nachführen an/aus"))
+        k_park = QPushButton(tr("Parken")); k_stopp = QPushButton(tr("Stopp"))
+        for w in (QLabel("RA"), self.m_ra, QLabel("Dec"), self.m_dec, k_goto, k_track, k_park, k_stopp):
+            gl.addWidget(w)
+        gl.addStretch(1)
+        lay.addWidget(gruppe)
+        k_goto.clicked.connect(self._montierung_goto)
+        k_track.clicked.connect(self._montierung_nachfuehren)
+        k_park.clicked.connect(lambda: self._montierung("parken"))
+        k_stopp.clicked.connect(lambda: self._montierung("stopp"))
+
+        # --- Fokus ------------------------------------------------------------------------
+        gruppe = QGroupBox(tr("Fokus")); gl = QHBoxLayout(gruppe)
+        self.f_schritt = QSpinBox(); self.f_schritt.setRange(1, 100000); self.f_schritt.setValue(100)
+        self.f_punkte = QSpinBox(); self.f_punkte.setRange(5, 25); self.f_punkte.setValue(9)
+        self.f_belichtung = QDoubleSpinBox(); self.f_belichtung.setRange(0.01, 120.0); self.f_belichtung.setValue(2.0)
+        self.f_belichtung.setSuffix(" s")
+        k_af = QPushButton(tr("Autofokus"))
+        self.f_ergebnis = QLabel("")
+        for w in (QLabel(tr("Schritt")), self.f_schritt, QLabel(tr("Punkte")), self.f_punkte,
+                  QLabel(tr("Belichtung")), self.f_belichtung, k_af, self.f_ergebnis):
+            gl.addWidget(w)
+        gl.addStretch(1)
+        lay.addWidget(gruppe)
+        k_af.clicked.connect(self._autofokus)
+
+        # --- Nachführung (PHD2) ------------------------------------------------------------
+        gruppe = QGroupBox(tr("Nachführung (PHD2)")); gl = QHBoxLayout(gruppe)
+        self.g_host = QLineEdit("127.0.0.1")
+        self.g_port = QSpinBox(); self.g_port.setRange(1, 65535); self.g_port.setValue(phd2.STANDARD_PORT)
+        k_g_zustand = QPushButton(tr("Zustand")); k_g_start = QPushButton(tr("Führen starten"))
+        self.g_dither = QSpinBox(); self.g_dither.setRange(0, 100); self.g_dither.setValue(0)
+        self.g_dither.setPrefix(tr("Dithern alle ")); self.g_dither.setSuffix(tr(" Lights (0 = aus)"))
+        self.g_status = QLabel("")
+        for w in (self.g_host, self.g_port, k_g_zustand, k_g_start, self.g_dither, self.g_status):
+            gl.addWidget(w)
+        lay.addWidget(gruppe)
+        k_g_zustand.clicked.connect(lambda: self._phd2_befehl("zustand"))
+        k_g_start.clicked.connect(lambda: self._phd2_befehl("start"))
 
         lay.addWidget(QLabel(tr("Ablaufplan")))
         self.plan = QTableWidget(0, 4)
@@ -265,6 +311,12 @@ class AufnahmeDialog(QDialog):
             self._schreiben(tr("Zuerst „Geräte laden“ und mindestens ein Gerät wählen."))
             return
 
+        typ_namen = dict(_TYPEN_ALPACA)
+
+        def anzeige(typ, g):
+            # Nicht jeder Treiber meldet einen Namen (Alpaca „name“ ist nicht Pflicht) — dann der Gerätetyp
+            return g.name or tr(typ_namen.get(typ, typ))
+
         def verbinden(log):
             # Jedes Gerät für sich: eine streikende Montierung darf die Kamera nicht mitreißen.
             # Was scheitert, wird genannt und bleibt draußen.
@@ -273,11 +325,11 @@ class AufnahmeDialog(QDialog):
                 try:
                     g.verbinden()
                 except Exception as e:                   # noqa: BLE001 — wird gemeldet
-                    fehler.append("%s: %s" % (g.name, e))
-                    log("⚠️ " + tr("Nicht verbunden: {name} — {grund}").format(name=g.name, grund=e))
+                    fehler.append("%s: %s" % (anzeige(typ, g), e))
+                    log("⚠️ " + tr("Nicht verbunden: {name} — {grund}").format(name=anzeige(typ, g), grund=e))
                     continue
                 stand[typ] = g
-                log(tr("Verbunden: {name}").format(name=g.name))
+                log(tr("Verbunden: {name}").format(name=anzeige(typ, g)))
             if not stand:
                 raise RuntimeError("; ".join(fehler))
             namen = stand["filterwheel"].namen() if "filterwheel" in stand else []
@@ -287,7 +339,7 @@ class AufnahmeDialog(QDialog):
             stand, namen, fehler = ergebnis
             self._geraete = stand
             self._filter_namen = namen
-            text = ", ".join(g.name for g in stand.values())
+            text = ", ".join(anzeige(typ, g) for typ, g in stand.items())
             if fehler:
                 text += " — " + tr("nicht verbunden: {liste}").format(
                     liste=", ".join(f.split(":")[0] for f in fehler))
@@ -342,9 +394,12 @@ class AufnahmeDialog(QDialog):
             return
         try:
             plan = self._plan_lesen()
+            dither = self.g_dither.value()
             lauf = aufnahme.Lauf(kamera, plan, ordner, filterrad=self._geraete.get("filterwheel"),
                                  montierung=self._geraete.get("telescope"),
-                                 objekt=self.a_objekt.text().strip() or None, log=self._schreiben)
+                                 objekt=self.a_objekt.text().strip() or None,
+                                 phd2=self._phd2() if dither else None, dither_alle=dither,
+                                 log=self._schreiben)
         except ValueError as e:
             QMessageBox.warning(self, tr("Aufnahme steuern"), str(e))
             return
@@ -363,6 +418,66 @@ class AufnahmeDialog(QDialog):
             self._lauf = lauf
             self._worker.failed.connect(lambda _m: fertig(None))
             self.a_start.setEnabled(False); self.a_stopp.setEnabled(True)
+
+    # ------------------------------------------------------------------ Montierung/Fokus/PHD2
+    def _geraet(self, typ, name):
+        g = self._geraete.get(typ)
+        if g is None:
+            self._schreiben(tr("Kein Gerät verbunden: {name}").format(name=tr(name)))
+        return g
+
+    def _montierung_goto(self):
+        m = self._geraet("telescope", "Montierung")
+        if m is None:
+            return
+        ra, dec = self.m_ra.value(), self.m_dec.value()
+        self._schreiben(tr("Schwenke auf RA {ra:.4f} h, Dec {dec:+.4f}° …").format(ra=ra, dec=dec))
+        self._im_hintergrund(lambda log: m.schwenken(ra, dec),
+                             lambda pos: self._schreiben(tr("Angekommen: RA {0:.4f} h, Dec {1:+.4f}°").format(*pos)))
+
+    def _montierung_nachfuehren(self):
+        m = self._geraet("telescope", "Montierung")
+        if m is None:
+            return
+        self._im_hintergrund(lambda log: m.nachfuehren(not m.nachfuehrung()),
+                             lambda an: self._schreiben(tr("Nachführung: {zustand}").format(
+                                 zustand=tr("an") if an else tr("aus"))))
+
+    def _montierung(self, was):
+        m = self._geraet("telescope", "Montierung")
+        if m is None:
+            return
+        self._im_hintergrund(lambda log: getattr(m, was)(),
+                             lambda _: self._schreiben(tr("Montierung: {was} erledigt").format(was=tr(was))))
+
+    def _autofokus(self):
+        k = self._geraet("camera", "Kamera")
+        f = self._geraet("focuser", "Fokussierer")
+        if k is None or f is None:
+            return
+        schritt, punkte, dauer = self.f_schritt.value(), self.f_punkte.value(), self.f_belichtung.value()
+
+        def fertig(e):
+            self.f_ergebnis.setText(tr("Position {pos}, HFR {hfr:.2f} px").format(pos=e["position"], hfr=e["hfr_erwartet"]))
+        self._im_hintergrund(lambda log: autofokus.autofokus(k, f, schritt, punkte, dauer, log=log), fertig)
+
+    def _phd2(self):
+        ziel = (self.g_host.text().strip(), self.g_port.value())
+        alt = getattr(self, "_phd2_verbindung", None)
+        if alt is None or (alt.host, alt.port) != ziel:
+            if alt is not None:
+                alt.schliessen()
+            self._phd2_verbindung = phd2.Phd2(*ziel)
+        return self._phd2_verbindung
+
+    def _phd2_befehl(self, was):
+        p = self._phd2()
+
+        def befehl(log):
+            if was == "start":
+                p.guiding_starten()
+            return p.zustand()
+        self._im_hintergrund(befehl, lambda z: self.g_status.setText(tr("PHD2: {z}").format(z=z)))
 
     def _alpaca_stopp(self):
         if self._lauf is not None:
@@ -477,6 +592,8 @@ class AufnahmeDialog(QDialog):
     def closeEvent(self, event):
         self._nina_timer.stop()
         self._indi_schliessen()
+        if getattr(self, "_phd2_verbindung", None) is not None:
+            self._phd2_verbindung.schliessen()
         if self._lauf is not None:
             self._lauf.abbrechen()
         if self._worker is not None and self._worker.isRunning():

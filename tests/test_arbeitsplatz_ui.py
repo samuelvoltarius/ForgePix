@@ -33,8 +33,13 @@ class ArbeitsplatzUI(unittest.TestCase):
         self._warnung = ap.QMessageBox.warning
         self.warnungen = []
         ap.QMessageBox.warning = staticmethod(lambda *a, **k: self.warnungen.append(a[-1]))
+        self.slot_fehler = []                    # Ausnahmen in Qt-Slots sonst nur gedruckt
+        self._alter_hook = sys.excepthook
+        sys.excepthook = lambda typ, wert, tb: self.slot_fehler.append("%s: %s" % (typ.__name__, wert))
 
     def tearDown(self):
+        sys.excepthook = self._alter_hook
+        self.assertEqual(self.slot_fehler, [], "Ausnahme in einem Qt-Slot")
         import ui.arbeitsplatz as ap
         ap.QMessageBox.warning = self._warnung
         shutil.rmtree(self.d, ignore_errors=True)
@@ -146,6 +151,7 @@ class ArbeitsplatzUI(unittest.TestCase):
         try:
             self._waehlen(f, "kanal")
             f._felder["quelle"].pfad.setText(mono)
+            f._felder["ausrichten"].setChecked(False)    # einfarbig: nichts zum Ausrichten
             f.anwenden(); self._warten(f)
             self.assertEqual(self.warnungen, [])
             np.testing.assert_array_equal(f.arbeit.bild[..., 2], 0.5)
