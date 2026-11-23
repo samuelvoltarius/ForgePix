@@ -1428,5 +1428,8 @@
   "Linux, macOS": "Linux, macOS",
   "Plate-Solve blind, als Alternative zu ASTAP": "Blind plate solving, as an alternative to ASTAP",
   "Linux, macOS (Windows über WSL)": "Linux, macOS (Windows via WSL)",
-  "Das Programm ist nicht installiert (oder in den Einstellungen nicht eingetragen).": "The program is not installed (or not entered in the settings)."
+  "Das Programm ist nicht installiert (oder in den Einstellungen nicht eingetragen).": "The program is not installed (or not entered in the settings).",
+  "GoPro-RAW (.gpr) in DNG umwandeln": "Convert GoPro RAW (.gpr) to DNG",
+  "Windows, macOS, Linux (selbst bauen)": "Windows, macOS, Linux (build yourself)",
+  "Frei (MIT/Apache). Die eingebaute RAW-Bibliothek liest .gpr nicht.": "Free (MIT/Apache). The built-in RAW library cannot read .gpr."
 }

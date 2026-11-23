@@ -8,6 +8,22 @@ All notable changes to ForgePix. Format based on
 
 ## [Unreleased]
 
+### Test data from all manufacturers, RAW formats
+
+* `testdaten_holen.py` fetches freely usable test data into `testdata/` (not in the repository): RAW
+  from 18 manufacturers (raw.pixls.us, CC0), two focus series (focus-stack, MIT; one with a reference
+  result), a waterfall video for long exposure (Wikimedia, CC0), the own sample data. Described in
+  `docs/TESTDATEN.md`.
+* Measured: 19 of 20 real RAWs developed (18 manufacturers plus Sony A7 V and A7 III), orientation
+  19/19 like the camera, colour on average like the camera (B/G 1.00, R/G 0.99), brightness only
+  0.58 of the camera preview in the median (decision pending).
+* **Bug fixed:** Hasselblad (.fff/.3fr), Phase One (.iiq), Leica (.rwl), Nikon compacts (.nrw) and
+  older formats were missing from the extension list — such files were not even recognised as
+  images in a folder, although they develop fine.
+* Unreadable RAWs now name the file and the reason instead of "Out of order call of libraw
+  function"; GoPro .gpr points to GoPro's free converter gpr_tools (MIT/Apache), also in Add-on
+  programs.
+
 ### ASTAP blind, add-on programs with download links
 
 * **Blind solving with ASTAP** (`core/astap.py`): without a hint `-fov 0 -r 180`, with a hint fast.

@@ -96,6 +96,9 @@ PROGRAMME = [
      "https://ascom-standards.org/Downloads/Index.htm", _ascom, "nur Windows", ""),
     ("indi", "INDI", "Gerätetreiber unter Linux und macOS (indiserver)",
      "https://www.indilib.org/download.html", _indi, "Linux, macOS", ""),
+    ("gpr", "GoPro GPR-Werkzeuge (gpr_tools)", "GoPro-RAW (.gpr) in DNG umwandeln",
+     "https://github.com/gopro/gpr", lambda: shutil.which("gpr_tools"), "Windows, macOS, Linux (selbst bauen)",
+     "Frei (MIT/Apache). Die eingebaute RAW-Bibliothek liest .gpr nicht."),
     ("astrometry", "astrometry.net", "Plate-Solve blind, als Alternative zu ASTAP",
      "https://astrometry.net/use.html", _solve_field, "Linux, macOS (Windows über WSL)", ""),
 ]

@@ -16,6 +16,7 @@ import os
 import numpy as np
 import cv2
 from constants import RAW_EXTS, STD_EXTS, FITS_EXTS, imread, log_print
+from constants import raw_oeffnen
 
 
 def _load_gray(path, max_side=1000):
@@ -26,7 +27,7 @@ def _load_gray(path, max_side=1000):
         # Schnellpfad: eingebettetes Kamera-JPEG nutzen (für reine Schärfe-Analyse völlig ausreichend
         # und viel schneller als volle Entwicklung). Nur wenn groß genug, sonst sauberer Fallback.
         try:
-            with rawpy.imread(path) as raw:
+            with raw_oeffnen(path) as raw:
                 th = raw.extract_thumb()
             if getattr(th, "format", None) == rawpy.ThumbFormat.JPEG:
                 tg = cv2.imdecode(np.frombuffer(th.data, np.uint8), cv2.IMREAD_GRAYSCALE)
@@ -35,7 +36,7 @@ def _load_gray(path, max_side=1000):
         except Exception:
             g = None
         if g is None:
-            with rawpy.imread(path) as raw:
+            with raw_oeffnen(path) as raw:
                 rgb = raw.postprocess(output_bps=8, use_camera_wb=True, no_auto_bright=True, half_size=True)
             g = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
     else:

@@ -8,8 +8,59 @@ import os
 
 VERSION = "1.28.0-beta"
 
-# Kamera-RAW-Formate, die rawpy entwickeln kann
-RAW_EXTS = {".arw", ".cr2", ".cr3", ".nef", ".raf", ".rw2", ".dng", ".orf", ".pef", ".srw"}
+# Kamera-RAW-Formate, die rawpy (LibRaw) entwickeln kann. Bis 23.11.2026 fehlten Hasselblad
+# (.fff/.3fr), Phase One (.iiq), Leica (.rwl), Nikon-Kompakte (.nrw) und ältere Formate — solche
+# Dateien wurden in einem Ordner gar nicht als Bilder erkannt, obwohl LibRaw sie liest (an echten
+# Dateien von raw.pixls.us geprüft: X2D 100C .fff, IQ4 150MP .iiq). GoPro .gpr steht mit drin,
+# damit ein GoPro-Ordner eine klare Meldung bekommt statt „keine Bilder“ (`raw_oeffnen`).
+RAW_EXTS = {".arw", ".cr2", ".cr3", ".nef", ".raf", ".rw2", ".dng", ".orf", ".pef", ".srw",
+            ".fff", ".3fr", ".iiq", ".rwl", ".nrw", ".crw", ".erf", ".mef", ".mos", ".kdc",
+            ".dcr", ".mrw", ".sr2", ".srf", ".x3f", ".gpr"}
+
+GPR_WERKZEUG = "https://github.com/gopro/gpr"
+
+
+class _RawOeffnen:
+    """`with raw_oeffnen(pfad) as raw:` — wie rawpy.imread, aber eine unlesbare Datei meldet
+    sich mit Namen und Grund statt mit „Out of order call of libraw function“ (so meldete sich
+    eine echte GoPro-GPR-Datei am 23.11.2026). Übersetzt werden Fehler beim Öffnen UND im
+    `with`-Block (dort entpackt LibRaw erst) — ohne vorab alles zu entpacken, damit der schnelle
+    Weg über das eingebettete Vorschaubild schnell bleibt."""
+
+    def __init__(self, pfad):
+        self.pfad = pfad
+        self.raw = None
+
+    def _fehler(self, e):
+        endung = os.path.splitext(self.pfad)[1].lower()
+        if endung == ".gpr":
+            return ForgePixFehler(
+                "%s: GoPro-GPR kann die eingebaute RAW-Bibliothek nicht lesen. Mit GoPros freiem "
+                "Werkzeug gpr_tools in DNG umwandeln (%s), dann geht es."
+                % (os.path.basename(self.pfad), GPR_WERKZEUG))
+        return ForgePixFehler("%s: RAW-Datei nicht lesbar (%s: %s). Beschädigt, oder das Kameramodell "
+                              "ist neuer als die eingebaute RAW-Bibliothek."
+                              % (os.path.basename(self.pfad), type(e).__name__, e))
+
+    def __enter__(self):
+        import rawpy
+        try:
+            self.raw = rawpy.imread(self.pfad)
+        except rawpy.LibRawError as e:
+            raise self._fehler(e) from e
+        return self.raw
+
+    def __exit__(self, typ, wert, tb):
+        import rawpy
+        if self.raw is not None:
+            self.raw.close()
+        if wert is not None and isinstance(wert, rawpy.LibRawError):
+            raise self._fehler(wert) from wert
+        return False
+
+
+def raw_oeffnen(pfad):
+    return _RawOeffnen(pfad)
 
 # Übliche Bildformate
 STD_EXTS = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp"}

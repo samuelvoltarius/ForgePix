@@ -26,6 +26,21 @@ nachbauen können, einen Download zu dem Projekt verlinken**, das die Leute selb
 | PixInsight-Werkzeuge (Arbeitsplatz) | PixInsight | je Werkzeug gleiches Bild, Differenzbild, Kennzahl | eigener Stapel | 50 Werkzeuge gebaut, kein Vergleich gegen PixInsight |
 | KI (Entrauschen, Schärfen, Sterne, Hintergrund) | RC-Astro, GraXpert, Cosmic Clarity | Rauschen, Sternfluss, Artefakte | eigener Stapel | eigenes Entrauschen gemessen, Rest schlechter als klassisch |
 
+## Testdaten (23.11.2026 besorgt)
+
+Siehe [../TESTDATEN.md](../TESTDATEN.md): RAW von 18 Herstellern (CC0), zwei freie Fokusreihen
+(eine mit Referenz-Ergebnis), ein CC0-Wasserfall-Video für Langzeit, die eigenen Beispieldaten.
+Holen mit `python3 testdaten_holen.py`.
+
+### Ergebnisse bisher
+
+| Bereich | Ergebnis | Folge |
+|---|---|---|
+| RAW-Lesen | 19/20 Dateien von 18 Herstellern + A7 V/A7 III; GoPro .gpr nicht | Endungsliste ergänzt (Hasselblad/Phase One wurden nicht erkannt), GPR-Meldung mit Link |
+| RAW-Aussehen | Farbe ±10 % zur Kamera; **Helligkeit im Median 0,58 der Kamera-Vorschau** | Entscheidung offen: Vorgabe „treu“ (heute) oder „wie die Kamera“ |
+| Fokus-Stacking | — | als Nächstes: focus-stack_pcb gegen `expected.jpg` |
+| Langzeit | — | als Nächstes: Wasserfall-Video |
+
 ## Was dafür gebraucht wird
 
 * **Daten**: je Bereich ein echter Datensatz (Makro-Reihe, Langzeit-Serie, RAW-Dateien mit

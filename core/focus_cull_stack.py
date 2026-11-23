@@ -28,7 +28,7 @@ import cv2
 import numpy as np
 
 from constants import (RAW_EXTS, STD_EXTS, FITS_EXTS, to_uint8, force_utf8_stdio,
-                       imread, imwrite, log_print, ForgePixFehler)
+                       imread, imwrite, log_print, ForgePixFehler, raw_oeffnen)
 
 
 def phase(key):
@@ -63,7 +63,7 @@ def load_gray(path, max_side=1600):
         # Schnellpfad: eingebettetes Kamera-JPEG (reicht fürs Schärfe-Culling, viel schneller).
         # Nur wenn groß genug, sonst voller Entwicklungs-Fallback.
         try:
-            with rawpy.imread(path) as raw:
+            with raw_oeffnen(path) as raw:
                 th = raw.extract_thumb()
             if getattr(th, "format", None) == rawpy.ThumbFormat.JPEG:
                 tg = cv2.imdecode(np.frombuffer(th.data, np.uint8), cv2.IMREAD_GRAYSCALE)
@@ -72,7 +72,7 @@ def load_gray(path, max_side=1600):
         except Exception:
             gray = None
         if gray is None:
-            with rawpy.imread(path) as raw:
+            with raw_oeffnen(path) as raw:
                 rgb = raw.postprocess(use_camera_wb=True, output_bps=8, half_size=True)
             gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
     else:
@@ -95,7 +95,7 @@ def develop_raw_to_bgr(path, wb="camera", auto_bright=False, bps=16, half=False,
     reconstruct_highlights: ausgebrannte Lichter rekonstruieren (Kanal-Verhältnis + Entsättigen).
     lens: optionales Dict mit Objektivkorrekturen {auto, vignette, distortion, ca}."""
     import rawpy
-    with rawpy.imread(path) as raw:
+    with raw_oeffnen(path) as raw:
         kw = dict(output_bps=bps, no_auto_bright=not auto_bright, half_size=half,
                   output_color=rawpy.ColorSpace.sRGB)
         if wb == "camera":
@@ -389,7 +389,7 @@ def _encode_jpeg_dataurl(path, max_side=768):
     ext = os.path.splitext(path)[1].lower()
     if ext in RAW_EXTS:
         import rawpy
-        with rawpy.imread(path) as raw:
+        with raw_oeffnen(path) as raw:
             rgb = raw.postprocess(use_camera_wb=True, output_bps=8, half_size=True)
         img = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
     else:
