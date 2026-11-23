@@ -275,8 +275,11 @@ class Arbeitsplatz(QDialog):
                 knopf = QPushButton(tr("Wählen…"))
                 knopf.clicked.connect(lambda _=False, f=feld.pfad: self._bild_waehlen(f))
                 zeile.addWidget(feld.pfad, 1); zeile.addWidget(knopf)
-            elif par.art == "text":
-                feld = QLineEdit(str(par.standard or ""))
+            elif par.art == "text" or (par.art in ("zahl", "ganz") and par.standard is None):
+                # Zahlen ohne Vorgabe als Textfeld: leer heißt „nicht angegeben“, nie eine 0
+                feld = QLineEdit("" if par.standard is None else str(par.standard))
+                if par.art != "text":
+                    feld.setPlaceholderText(tr("bitte angeben"))
             elif par.art == "wahl":
                 feld = QComboBox()
                 for w in par.wahl:
@@ -293,12 +296,34 @@ class Arbeitsplatz(QDialog):
             self.p_form.addRow(tr(par.label), feld)
         self.p_experimentell.setVisible(p.experimentell)
         self.p_experimentell.setChecked(False)
+        if p.id == "farbkalibrierung":
+            self._hinweise_vorbelegen()
         self.kurve.setVisible(p.id == "kurven")
         if p.id == "kurven":
             self.kurve.points = [list(xy) for xy in prozesse.kurven_punkte(self._felder["punkte"].text())]
             self.kurve.update()
             self._felder["punkte"].editingFinished.connect(self._kurve_aus_text)
         self._knoepfe()
+
+    def _hinweise_vorbelegen(self):
+        """RA/Dec/Bildmaßstab aus dem FITS-Kopf des offenen Bildes (ASIAIR, N.I.N.A., Seestar)."""
+        if not self.quelle or not self.quelle.lower().endswith((".fit", ".fits", ".fts")):
+            return
+        try:
+            import photometric
+            h = photometric.fits_hints(self.quelle) or {}
+        except Exception as e:                         # noqa: BLE001 — nur ein Vorschlag
+            self._schreiben(tr("Kopfdaten nicht lesbar: {e}").format(e=e))
+            return
+        if h.get("ra") is not None:
+            self._felder["ra"].setText("%.5f" % h["ra"])
+        if h.get("dec") is not None:
+            self._felder["dec"].setText("%.5f" % h["dec"])
+        skala = h.get("pixelscale_arcsec")
+        if skala is None and h.get("focal") and h.get("pixelsize"):
+            skala = 206.264806 * float(h["pixelsize"]) / float(h["focal"])
+        if skala:
+            self._felder["skala"].setText("%.4f" % skala)
 
     def _bild_waehlen(self, feld):
         pfad, _ = QFileDialog.getOpenFileName(self, tr("Bild öffnen"), os.path.dirname(self.quelle or ""),

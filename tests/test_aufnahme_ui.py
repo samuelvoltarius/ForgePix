@@ -173,6 +173,33 @@ class AufnahmeUI(unittest.TestCase):
             d.close(); d.deleteLater(); self.app.processEvents()
             tcp.shutdown(); tcp.server_close()
 
+    def test_framing_mosaik_im_ablaufplan(self):
+        from ui.aufnahme_dialog import AufnahmeDialog
+        geraet._Geraet.zustand = {"mit_montierung": True}
+        d = AufnahmeDialog(None)
+        try:
+            d.a_port.setValue(self.server.server_address[1])
+            d._alpaca_laden(); self._warten(d)
+            d._alpaca_verbinden(); self._warten(d)
+            self.assertEqual(d.z_pixel.value(), 3.76, "Pixelgröße aus der Kamera übernommen")
+            d.m_ra.setValue(0.7); d.m_dec.setValue(41.3); d.a_objekt.setText("M 31")
+            d.z_spalten.setValue(2); d.z_zeilen.setValue(2)
+            d._panele_berechnen()
+            self.assertEqual(len(d._ziele), 4)
+            self.assertTrue(d._ziele[0]["name"].startswith("M 31 Panel"))
+            self.assertFalse(d.z_vorschau.pixmap().isNull())
+            d.z_anfahren.setChecked(True)
+            d.z_meridian.setChecked(True)
+            d.a_ordner.setText(self.ziel)
+            d.plan.cellWidget(0, 0).setValue(1); d.plan.cellWidget(0, 1).setValue(0.0)
+            d._alpaca_start(); self._warten(d)
+            self.assertEqual(self.warnungen, [])
+            self.assertEqual(len([f for f in os.listdir(self.ziel) if f.endswith(".fits")]), 4)
+            self.assertIn("Meridian-Flip aus", d.log.toPlainText(),
+                          "der Nachbau meldet keine Sternzeit — das muss gesagt werden")
+        finally:
+            d.close(); d.deleteLater(); self.app.processEvents()
+
     def test_menues_im_hauptfenster(self):
         from ui.main_window import MainWindow
         from gui_support import stilles_hauptfenster
@@ -181,7 +208,7 @@ class AufnahmeUI(unittest.TestCase):
             try:
                 menues = {m.title(): [a.text() for a in m.actions()]
                           for m in w.menuBar().findChildren(QMenu)}
-                self.assertEqual(len(menues.get("Astro-Werkzeuge", [])), 7)
+                self.assertEqual(len(menues.get("Astro-Werkzeuge", [])), 8)
                 self.assertIn("Aufnahme", menues)
                 w.open_aufnahme()
                 self.assertTrue(w._aufnahme_dialog.isVisible())

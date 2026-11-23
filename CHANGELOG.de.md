@@ -8,6 +8,29 @@ Alle nennenswerten Änderungen an ForgePix. Format orientiert an
 
 ## [Unreleased]
 
+### Meridian-Flip, Plate-Solve mit Zentrieren, Framing, Himmelsmosaik, Farbkalibrierung ohne Siril
+
+* **Zentrieren** (wie N.I.N.A. „Slew and Center“): belichten, mit dem eigenen Solver loesen,
+  Montierung abgleichen, nachschwenken, bis die Mitte unter 1′ liegt. Am kuenstlichen Himmel mit
+  einer Montierung, die 0,12°/−0,08° daneben zeigt: unter 1′. Ohne Sterne: Fehler, kein Raten.
+* **Meridian-Flip** im Ablaufplan: vor einer Belichtung, die ueber die Grenze liefe, warten,
+  dasselbe Ziel neu anfahren, Seitenwechsel pruefen (sonst Warnung), neu zentrieren, Fuehrung neu
+  starten; genau einmal je Ziel. Meldet die Montierung keine Sternzeit, ist er aus — mit Meldung.
+* **Framing und Mosaikplaner** im Aufnahme-Fenster: Bildfeld aus Brennweite/Pixel/Sensor (Seestar
+  S30 = 3,99 ″/px), Panel-Raster mit Ueberlappung und Drehung, Vorschau mit Sternen aus dem lokalen
+  Katalog, Namenssuche online; die Panele werden im Ablaufplan nacheinander angefahren.
+* **Himmelsmosaik** aus geloesten Bildern (Astro-Werkzeuge): gemeinsames TAN-Raster, Umrechnung
+  ueber die WCS, Hintergruende per Ausgleichsrechnung angeglichen, weiche Raender; ohne WCS oder
+  ohne Ueberlappung ein Fehler. Am kuenstlichen Himmel Versatz 0,03 erkannt, gedrehtes Panel sitzt.
+* **Farbkalibrierung gegen Gaia-Farben** im Arbeitsplatz, ohne Siril (eigener Plate-Solve +
+  `pcc_echt`, G2V-Weisspunkt wie PixInsights PCC): ein eingebauter Kanalfehler B×0,7/R×1,4 wird auf
+  0,2 % zurueckgerechnet. Kein SPCC (keine Sensor-/Filterkurven).
+* Gaia-Archiv in Wartung meldet sich jetzt als solche (vorher „keine gueltige Auftragsadresse“);
+  ASTAP wird unter Windows auch im Programmordner gesucht (ungeprueft, hier nicht installiert).
+
+Alles gegen kuenstliche Daten bzw. nachgebaute Geraete geprueft — ein echter Lauf gegen Gaia war
+am 23.11.2026 nicht moeglich (ESA-Archiv in Wartung, VizieR nicht erreichbar).
+
 ### Aufnahme: Autofokus, Montierung im Fenster, PHD2 mit Dithern
 
 Autofokus wie N.I.N.A.: Fokussierer in Schritten durchfahren (immer aus derselben Richtung),

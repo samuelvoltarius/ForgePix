@@ -44,7 +44,7 @@ class TestProzesse(unittest.TestCase):
         for p in prozesse.PROZESSE:
             # experimentelle Modelle, externe Programme und Werkzeuge mit Pflicht-Zweitbild haben
             # eigene Tests (unten) — hier nur, was mit dem offenen Bild allein läuft
-            if p.experimentell or p.extern or any(x.bild and x.pflicht for x in p.params):
+            if p.experimentell or p.extern or any((x.bild or x.standard is None) and x.pflicht for x in p.params):
                 continue
             with self.subTest(p.id):
                 r = prozesse.anwenden(bild, p.id)
@@ -62,7 +62,7 @@ class TestProzesse(unittest.TestCase):
         for p in prozesse.PROZESSE:
             self.assertTrue(p.vorbild and p.beschreibung, p.id)
             for x in p.params:                          # Standardwerte liegen in der Spanne
-                if not x.bild:
+                if not x.bild and x.standard is not None:
                     x.pruefen(x.standard)
 
     def test_ausserhalb_der_spanne_ist_fehler(self):

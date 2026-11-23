@@ -8,6 +8,29 @@ All notable changes to ForgePix. Format based on
 
 ## [Unreleased]
 
+### Meridian flip, plate solve with centering, framing, sky mosaic, colour calibration without Siril
+
+* **Centering** (like N.I.N.A. "Slew and Center"): expose, solve with the own solver, sync the
+  mount, slew again until the centre is within 1′. On a synthetic sky with a mount pointing
+  0.12°/−0.08° off: within 1′. Without stars: an error, no guessing.
+* **Meridian flip** in the sequence: before an exposure that would cross the limit, wait, slew to
+  the same target, check the pier side changed (warning otherwise), re-center, restart guiding;
+  exactly once per target. If the mount reports no sidereal time it is off — with a message.
+* **Framing and mosaic planner** in the capture window: field of view from focal length/pixel/sensor
+  (Seestar S30 = 3.99 ″/px), panel grid with overlap and rotation, preview with stars from the local
+  catalogue, online name lookup; the panels are visited one after another in the sequence.
+* **Sky mosaic** from solved images (Astro tools): common TAN grid, reprojection via WCS,
+  backgrounds matched by least squares, feathered edges; no WCS or no overlap is an error. On a
+  synthetic sky the 0.03 offset was found and a rotated panel lands in place.
+* **Colour calibration against Gaia colours** in the workbench, without Siril (own plate solve +
+  `pcc_echt`, G2V white point like PixInsight's PCC): a built-in channel error B×0.7/R×1.4 is
+  recovered within 0.2 %. Not SPCC (no sensor/filter curves).
+* Gaia archive maintenance now reports as such (previously "no valid job address"); ASTAP is also
+  searched in the Windows program folder (unverified, not installed here).
+
+All checked against synthetic data or simulated devices — a real run against Gaia was not possible
+on 23.11.2026 (ESA archive in maintenance, VizieR unreachable).
+
 ### Capture: autofocus, mount in the window, PHD2 with dithering
 
 Autofocus like N.I.N.A.: step the focuser (always from the same direction), measure HFR at each

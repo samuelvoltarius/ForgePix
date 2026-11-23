@@ -17,9 +17,11 @@ from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, Q
 import alpaca
 import aufnahme
 import autofokus
+import framing
 import indi
 import nina
 import phd2
+import zentrieren
 from i18n import tr
 from ui.workers import _ToolWorker
 
@@ -187,6 +189,53 @@ class AufnahmeDialog(QDialog):
         k_g_zustand.clicked.connect(lambda: self._phd2_befehl("zustand"))
         k_g_start.clicked.connect(lambda: self._phd2_befehl("start"))
 
+        # --- Ziel, Framing und Mosaik ------------------------------------------------------
+        gruppe = QGroupBox(tr("Ziel, Framing und Mosaik")); gf = QVBoxLayout(gruppe)
+        zeile = QHBoxLayout()
+        self.z_name = QLineEdit(); self.z_name.setPlaceholderText(tr("Objektname, z. B. M 31"))
+        k_suchen = QPushButton(tr("Name suchen (online)"))
+        self.z_brenn = QDoubleSpinBox(); self.z_brenn.setRange(10, 20000); self.z_brenn.setValue(150); self.z_brenn.setSuffix(" mm")
+        self.z_pixel = QDoubleSpinBox(); self.z_pixel.setRange(0.5, 30); self.z_pixel.setDecimals(2); self.z_pixel.setValue(2.9); self.z_pixel.setSuffix(" µm")
+        self.z_b = QSpinBox(); self.z_b.setRange(16, 20000); self.z_b.setValue(1080)
+        self.z_h = QSpinBox(); self.z_h.setRange(16, 20000); self.z_h.setValue(1920)
+        for w in (self.z_name, k_suchen, QLabel(tr("Brennweite")), self.z_brenn, QLabel(tr("Pixel")),
+                  self.z_pixel, QLabel(tr("Sensor")), self.z_b, QLabel("×"), self.z_h):
+            zeile.addWidget(w)
+        gf.addLayout(zeile)
+        zeile = QHBoxLayout()
+        self.z_spalten = QSpinBox(); self.z_spalten.setRange(1, 10); self.z_spalten.setValue(1)
+        self.z_zeilen = QSpinBox(); self.z_zeilen.setRange(1, 10); self.z_zeilen.setValue(1)
+        self.z_ueber = QSpinBox(); self.z_ueber.setRange(0, 80); self.z_ueber.setValue(20); self.z_ueber.setSuffix(" %")
+        self.z_dreh = QDoubleSpinBox(); self.z_dreh.setRange(-180, 180); self.z_dreh.setSuffix(" °")
+        k_panele = QPushButton(tr("Panele berechnen"))
+        self.z_info = QLabel("")
+        for w in (QLabel(tr("Mosaik")), self.z_spalten, QLabel("×"), self.z_zeilen, QLabel(tr("Überlappung")),
+                  self.z_ueber, QLabel(tr("Drehung")), self.z_dreh, k_panele, self.z_info):
+            zeile.addWidget(w)
+        zeile.addStretch(1)
+        gf.addLayout(zeile)
+        zeile = QHBoxLayout()
+        self.z_vorschau = QLabel(); self.z_vorschau.setFixedSize(360, 240)
+        self.z_vorschau.setStyleSheet("background:#0b0b10;border:1px solid #2a2836;")
+        zeile.addWidget(self.z_vorschau)
+        schalter = QVBoxLayout()
+        self.z_anfahren = QCheckBox(tr("Panele im Ablaufplan nacheinander anfahren"))
+        self.z_zentrieren = QCheckBox(tr("Jedes Ziel per Plate-Solve zentrieren (lokaler Sternkatalog)"))
+        self.z_meridian = QCheckBox(tr("Meridian-Flip"))
+        self.z_meridian_min = QDoubleSpinBox(); self.z_meridian_min.setRange(-30, 60); self.z_meridian_min.setValue(5)
+        self.z_meridian_min.setSuffix(tr(" min nach dem Meridian"))
+        k_jetzt = QPushButton(tr("Jetzt auf RA/Dec zentrieren"))
+        for w in (self.z_anfahren, self.z_zentrieren, self.z_meridian, self.z_meridian_min, k_jetzt):
+            schalter.addWidget(w)
+        schalter.addStretch(1)
+        zeile.addLayout(schalter, 1)
+        gf.addLayout(zeile)
+        lay.addWidget(gruppe)
+        self._ziele = []
+        k_suchen.clicked.connect(self._name_suchen)
+        k_panele.clicked.connect(self._panele_berechnen)
+        k_jetzt.clicked.connect(self._jetzt_zentrieren)
+
         lay.addWidget(QLabel(tr("Ablaufplan")))
         self.plan = QTableWidget(0, 4)
         self.plan.setHorizontalHeaderLabels([tr("Anzahl"), tr("Belichtung (s)"), tr("Typ"), tr("Filter")])
@@ -333,10 +382,20 @@ class AufnahmeDialog(QDialog):
             if not stand:
                 raise RuntimeError("; ".join(fehler))
             namen = stand["filterwheel"].namen() if "filterwheel" in stand else []
+            if "camera" in stand:
+                try:
+                    stand["_info"] = stand["camera"].info()
+                except Exception as e:                   # noqa: BLE001 — nur Vorbelegung
+                    log(tr("Kameradaten nicht lesbar: {e}").format(e=e))
             return stand, namen, fehler
 
         def fertig(ergebnis):
             stand, namen, fehler = ergebnis
+            info = stand.pop("_info", None) or {}
+            if info.get("pixel_um"):
+                self.z_pixel.setValue(float(info["pixel_um"]))
+            if info.get("breite") and info.get("hoehe"):
+                self.z_b.setValue(int(info["breite"])); self.z_h.setValue(int(info["hoehe"]))
             self._geraete = stand
             self._filter_namen = namen
             text = ", ".join(anzeige(typ, g) for typ, g in stand.items())
@@ -395,10 +454,20 @@ class AufnahmeDialog(QDialog):
         try:
             plan = self._plan_lesen()
             dither = self.g_dither.value()
+            montierung = self._geraete.get("telescope")
+            zentrierer = None
+            if self.z_zentrieren.isChecked():
+                katalog, skala = self._katalog_und_skala()
+
+                def zentrierer(ra_h, dec):
+                    return zentrieren.zentrieren(kamera, montierung, ra_h, dec, katalog, skala, log=lauf.log)
             lauf = aufnahme.Lauf(kamera, plan, ordner, filterrad=self._geraete.get("filterwheel"),
-                                 montierung=self._geraete.get("telescope"),
+                                 montierung=montierung,
                                  objekt=self.a_objekt.text().strip() or None,
                                  phd2=self._phd2() if dither else None, dither_alle=dither,
+                                 ziele=self._ziele if self.z_anfahren.isChecked() else None,
+                                 zentrierer=zentrierer,
+                                 meridian_minuten=self.z_meridian_min.value() if self.z_meridian.isChecked() else None,
                                  log=self._schreiben)
         except ValueError as e:
             QMessageBox.warning(self, tr("Aufnahme steuern"), str(e))
@@ -460,6 +529,111 @@ class AufnahmeDialog(QDialog):
         def fertig(e):
             self.f_ergebnis.setText(tr("Position {pos}, HFR {hfr:.2f} px").format(pos=e["position"], hfr=e["hfr_erwartet"]))
         self._im_hintergrund(lambda log: autofokus.autofokus(k, f, schritt, punkte, dauer, log=log), fertig)
+
+    # ------------------------------------------------------------------ Framing/Zentrieren
+    def _bildfeld(self):
+        return framing.bildfeld(self.z_brenn.value(), self.z_pixel.value(), self.z_b.value(), self.z_h.value())
+
+    def _katalog_und_skala(self):
+        import gaia_lokal
+        pfad = gaia_lokal.standard_pfad()
+        if not os.path.exists(pfad):
+            raise ValueError(tr("Kein lokaler Sternkatalog — zuerst im Menü „Sternkatalog“ ein Feld laden."))
+        return gaia_lokal.Katalog.laden(pfad, log=lambda *a: None), self._bildfeld()[2]
+
+    def _name_suchen(self):
+        name = self.z_name.text().strip()
+        if not name:
+            return
+
+        def suchen(log):
+            from astropy.coordinates import SkyCoord
+            k = SkyCoord.from_name(name)              # Sesame (CDS) — braucht Netz
+            return float(k.ra.deg), float(k.dec.deg)
+
+        def fertig(radec):
+            self.m_ra.setValue(radec[0] / 15.0); self.m_dec.setValue(radec[1])
+            self.a_objekt.setText(name)
+            self._schreiben(tr("{name}: RA {ra:.4f} h, Dec {dec:+.4f}°").format(name=name, ra=radec[0] / 15.0, dec=radec[1]))
+        self._im_hintergrund(suchen, fertig)
+
+    def _panele_berechnen(self):
+        try:
+            b, h, skala = self._bildfeld()
+            self._ziele = framing.panele(self.m_ra.value() * 15.0, self.m_dec.value(), b, h,
+                                         self.z_spalten.value(), self.z_zeilen.value(),
+                                         self.z_ueber.value() / 100.0, self.z_dreh.value())
+        except ValueError as e:
+            QMessageBox.warning(self, tr("Aufnahme steuern"), str(e))
+            return
+        name = self.a_objekt.text().strip()
+        if name and len(self._ziele) > 1:
+            for z in self._ziele:
+                z["name"] = "%s %s" % (name, z["name"])
+        elif name:
+            self._ziele[0]["name"] = name
+        self.z_info.setText(tr("Bildfeld {b:.2f}° × {h:.2f}°, {s:.2f} ″/px, {n} Panele").format(
+            b=b, h=h, s=skala, n=len(self._ziele)))
+        self._vorschau_zeichnen(b, h)
+
+    def _vorschau_zeichnen(self, b, h):
+        """Panele in der Tangentialebene, dazu Sterne aus dem lokalen Katalog, falls vorhanden."""
+        import math
+        from PySide6.QtGui import QColor, QPainter, QPen, QPolygonF
+        from PySide6.QtCore import QPointF
+        breite, hoehe = self.z_vorschau.width(), self.z_vorschau.height()
+        ra0, dec0 = self.m_ra.value() * 15.0, self.m_dec.value()
+        spanne = max(b * self.z_spalten.value(), h * self.z_zeilen.value()) * 1.4
+        massstab = min(breite, hoehe) / max(spanne, 1e-6)
+
+        def punkt(ra, dec):
+            a0, d0, a, d = map(math.radians, (ra0, dec0, ra, dec))
+            c = math.sin(d0) * math.sin(d) + math.cos(d0) * math.cos(d) * math.cos(a - a0)
+            xi = math.cos(d) * math.sin(a - a0) / c
+            eta = (math.cos(d0) * math.sin(d) - math.sin(d0) * math.cos(d) * math.cos(a - a0)) / c
+            return QPointF(breite / 2 - math.degrees(xi) * massstab, hoehe / 2 - math.degrees(eta) * massstab)
+        bild = QPixmap(breite, hoehe); bild.fill(QColor("#0b0b10"))
+        maler = QPainter(bild)
+        try:
+            import gaia_lokal
+            pfad = gaia_lokal.standard_pfad()
+            if os.path.exists(pfad):
+                kat = gaia_lokal.Katalog.laden(pfad, log=lambda *a: None)
+                treffer = kat.kegelsuche(ra0, dec0, spanne / 1.2, max_mag=12.0)
+                maler.setPen(QPen(QColor("#cfd2cd")))
+                for ra, dec, g in zip(treffer["ra"], treffer["dec"], treffer["g_mag"]):
+                    q = punkt(float(ra), float(dec))
+                    r = max(0.6, 3.0 - 0.25 * (float(g) - 6))
+                    maler.drawEllipse(q, r, r)
+        except Exception as e:                           # noqa: BLE001 — Vorschau ohne Sterne
+            self._schreiben(tr("Vorschau ohne Sterne: {e}").format(e=e))
+        maler.setPen(QPen(QColor("#e5a50a"), 1.5))
+        th = math.radians(self.z_dreh.value())
+        for z in self._ziele:
+            mitte = punkt(z["ra_h"] * 15.0, z["dec"])
+            ecken = []
+            for sx, sy in ((-1, -1), (1, -1), (1, 1), (-1, 1)):
+                x, y = sx * b / 2 * massstab, sy * h / 2 * massstab
+                ecken.append(QPointF(mitte.x() + x * math.cos(th) - y * math.sin(th),
+                                     mitte.y() + x * math.sin(th) + y * math.cos(th)))
+            maler.drawPolygon(QPolygonF(ecken))
+        maler.end()
+        self.z_vorschau.setPixmap(bild)
+
+    def _jetzt_zentrieren(self):
+        k = self._geraet("camera", "Kamera")
+        m = self._geraet("telescope", "Montierung")
+        if k is None or m is None:
+            return
+        try:
+            katalog, skala = self._katalog_und_skala()
+        except ValueError as e:
+            QMessageBox.warning(self, tr("Aufnahme steuern"), str(e))
+            return
+        ra, dec = self.m_ra.value(), self.m_dec.value()
+        self._im_hintergrund(lambda log: zentrieren.zentrieren(k, m, ra, dec, katalog, skala, log=log),
+                             lambda e: self._schreiben(tr("Zentriert: {a:.2f}′ vom Ziel nach {n} Versuchen").format(
+                                 a=e["abstand_bogenmin"], n=e["versuche"])))
 
     def _phd2(self):
         ziel = (self.g_host.text().strip(), self.g_port.value())

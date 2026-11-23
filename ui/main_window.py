@@ -1497,6 +1497,7 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, ProjectM
                          (tr("Kometenstrukturen (Larson-Sekanina) …"), _wz.larson),
                          (tr("Streifenmuster entfernen (Fourier) …"), _wz.streifen),
                          (tr("Objekte und Koordinatengitter einzeichnen …"), _wz.beschriften),
+                         (tr("Himmelsmosaik aus gelösten Bildern …"), _wz.himmelsmosaik),
                          (tr("Lichtkurve messen (Photometrie, AAVSO) …"), _wz.lichtkurve),
                          (tr("Sonne, Mond, Planeten aus Video (Lucky Imaging) …"), _wz.lucky)):
             act = QAction(text, self)

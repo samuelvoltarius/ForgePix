@@ -69,6 +69,10 @@ class Param:
             return wert
         if self.art == "schalter":
             return bool(wert)
+        if wert is None or (isinstance(wert, str) and not wert.strip()):
+            if self.pflicht:
+                raise ValueError("%s: bitte einen Wert angeben." % self.label)
+            return None
         wert = int(wert) if self.ganz else float(wert)
         if (self.von is not None and wert < self.von) or (self.bis is not None and wert > self.bis):
             raise ValueError("%s: %g liegt außerhalb %g … %g" % (self.label, wert, self.von, self.bis))
@@ -539,6 +543,43 @@ def starnet(a, log=log_print):
     return b[..., ::-1] if b.ndim == 3 else np.repeat(b[..., None], 3, axis=2)
 
 
+# ------------------------------------------------------------------ Farbkalibrierung -----------
+KATALOG_PFAD = None          # None = der lokale Gaia-Katalog des Nutzers; Tests setzen einen eigenen
+
+
+def farbkalibrierung(a, ra=None, dec=None, skala=None, log=log_print):
+    """Photometrische Farbkalibrierung gegen Gaia-Farben (wie PixInsights PCC, G2V-Weißpunkt) —
+    ganz ohne Siril: eigener Plate-Solve gegen den lokalen Gaia-Katalog, dann `pcc_echt`.
+
+    Braucht RA/Dec (Grad) und Bildmaßstab (″/px) als Hinweis — bei ASIAIR-, N.I.N.A.- und
+    Seestar-FITS füllt der Arbeitsplatz sie aus dem Kopf vor. Kein SPCC: ohne hinterlegte
+    Sensor- und Filterkurven ist es eine empirische Kalibrierung (siehe pcc_echt)."""
+    import gaia_lokal
+    import pcc_echt
+    import photometric
+    pfad = KATALOG_PFAD or gaia_lokal.standard_pfad()
+    if not os.path.exists(pfad):
+        raise ValueError("Kein lokaler Sternkatalog — Menü „Sternkatalog verwalten …“, Feld laden.")
+    kat = gaia_lokal.Katalog.laden(pfad, log=log)
+    ok, n, satz = gaia_lokal.abdeckung(kat, float(ra), float(dec), 0.6)
+    if not ok:
+        raise ValueError("Der lokale Katalog deckt dieses Feld nicht ab (%s)." % satz)
+    wcs = photometric._solve_wcs_nativ(a, {"ra": float(ra), "dec": float(dec),
+                                           "pixelscale_arcsec": float(skala)}, kat, log)
+    if wcs is None:
+        raise ValueError("Die Himmelsposition ließ sich nicht bestimmen — RA/Dec/Maßstab prüfen.")
+    h, w = a.shape[:2]
+    mitte = wcs.pixel_to_world_values(w / 2.0, h / 2.0)
+    treffer = kat.kegelsuche(float(mitte[0]), float(mitte[1]), 0.6, max_mag=16.0)
+    x, y = wcs.world_to_pixel_values(np.asarray(treffer["ra"]), np.asarray(treffer["dec"]))
+    farbe = np.asarray(treffer["bp_rp"], float)
+    drin = (x > 20) & (x < w - 20) & (y > 20) & (y < h - 20) & np.isfinite(farbe)
+    aus, bericht = pcc_echt.farbkalibrieren(a, list(zip(x[drin], y[drin])), farbe[drin], log=log)
+    log("Farbkalibrierung: %d Sterne, Weißpunkt BP-RP %.2f (sonnenähnlich), Streuung %.3f/%.3f"
+        % (bericht["sterne"], bericht["bezugsfarbe"], bericht["streuung_b"], bericht["streuung_r"]))
+    return aus
+
+
 _STILL = {"log": lambda *a: None}
 
 PROZESSE = [
@@ -549,6 +590,12 @@ PROZESSE = [
             [Param("strength", "Stärke", 0.12, 0.0, 1.0), Param("grid", "Stützstellen je Seite", 12, 4, 40, ganz=True),
              Param("korrektur", "Art", "sub", wahl=["sub", "div"])],
             _astro("background_extract", **_STILL)),
+    Prozess("farbkalibrierung", "Farbkalibrierung (Gaia-Farben)", "Hintergrund und Farbe",
+            "PixInsight: PhotometricColorCalibration · Siril: PCC (ohne Siril, eigener Plate-Solve)",
+            "Kanäle so skalieren, dass ein sonnenähnlicher Stern weiß ist — gemessen an den "
+            "bekannten Gaia-Farben der Sterne im Bild. Braucht den lokalen Sternkatalog.",
+            [Param("ra", "RA der Bildmitte (°)", None, 0.0, 360.0), Param("dec", "Dec der Bildmitte (°)", None, -90.0, 90.0),
+             Param("skala", "Bildmaßstab (″/px)", None, 0.05, 60.0)], farbkalibrierung),
     Prozess("hintergrund_neutral", "Hintergrund neutralisieren", "Hintergrund und Farbe",
             "PixInsight: BackgroundNeutralization · Siril: Background Neutralization",
             "Himmelshintergrund je Kanal auf denselben Wert ziehen.",
@@ -756,6 +803,7 @@ PHASE = {
     "zuschneiden": "beides", "drehen": "beides", "spiegeln": "beides", "abtasten": "beides",
     "binning": "linear",
     "hintergrund": "linear", "hintergrund_neutral": "linear", "farbe": "linear", "scnr": "beides",
+    "farbkalibrierung": "linear",
     "saettigung": "gestreckt",
     "tv": "beides", "wavelet_nr": "beides", "wavelet_schaerfen": "gestreckt", "dekonvolution": "linear",
     "unscharf": "gestreckt", "falten": "beides", "streifen": "linear", "banding": "linear",

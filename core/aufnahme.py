@@ -8,9 +8,10 @@ die Position der Montierung mit und schreibt jede Aufnahme als FITS mit vollstä
 Kopfdaten in einen Ordner. Diesen Ordner kann ForgePix gleichzeitig live stapeln; die
 Kalibrierbilder (Dark/Flat/Bias) erkennt die vorhandene Header-Suche am IMAGETYP.
 
-Dithern über PHD2 alle N Lights (`phd2.py`); Autofokus steht in `autofokus.py`. Was hier NOCH
-NICHT ist (docs/plan/01): Meridian-Flip, Plate-Solve zum Einrichten, Bedingungen (Höhe,
-Dämmerung). Kein Qt.
+Dithern über PHD2 alle N Lights (`phd2.py`), mehrere Ziele (Mosaik-Panele) mit Zentrieren
+(`zentrieren.py`), Meridian-Flip mit Warten, Flip, Nachzentrieren und neuem Führungsstart.
+Autofokus steht in `autofokus.py`. Was hier NOCH NICHT ist (docs/plan/01): Bedingungen (Höhe,
+Dämmerung), Autofokus im Plan. Kein Qt.
 """
 import datetime as _dt
 import os
@@ -99,7 +100,11 @@ class Lauf:
     — maschinenlesbar, wie die anderen Marker der Oberfläche."""
 
     def __init__(self, kamera, plan, ordner, filterrad=None, montierung=None, objekt=None,
-                 phd2=None, dither_alle=0, log=log_print):
+                 phd2=None, dither_alle=0, ziele=None, zentrierer=None, meridian_minuten=None,
+                 takt=10.0, log=log_print):
+        """ziele: Liste von {'name', 'ra_h', 'dec'} (z. B. Mosaik-Panele) — je Ziel wird
+        hingeschwenkt, mit `zentrierer(ra_h, dec)` zentriert und der Plan abgearbeitet.
+        meridian_minuten: Meridian-Flip so viele Minuten nach dem Meridian (None = aus)."""
         if not plan:
             raise ValueError("Der Ablaufplan ist leer.")
         self.kamera, self.plan, self.ordner = kamera, list(plan), ordner
@@ -107,6 +112,15 @@ class Lauf:
         self.phd2, self.dither_alle = phd2, int(dither_alle or 0)
         if self.dither_alle and self.phd2 is None:
             raise ValueError("Dithern verlangt eine PHD2-Verbindung.")
+        self.ziele = list(ziele or [])
+        if self.ziele and montierung is None:
+            raise ValueError("Ziele anfahren verlangt eine verbundene Montierung.")
+        if meridian_minuten is not None and montierung is None:
+            raise ValueError("Meridian-Flip verlangt eine verbundene Montierung.")
+        self.zentrierer, self.meridian_minuten, self.takt = zentrierer, meridian_minuten, float(takt)
+        self._geflippt = False
+        self._ziel = None
+        self.flips = 0
         self.log = log
         self._abbruch = threading.Event()
         self.dateien = []
@@ -116,15 +130,79 @@ class Lauf:
 
     @property
     def gesamt(self):
-        return sum(s.anzahl for s in self.plan)
+        return sum(s.anzahl for s in self.plan) * max(1, len(self.ziele))
+
+    def _anfahren(self, ziel):
+        self.log("Ziel: %s — RA %.4f h, Dec %+.4f°" % (ziel["name"], ziel["ra_h"], ziel["dec"]))
+        if self.phd2 is not None:
+            self.phd2.stoppen()
+        if self.zentrierer is not None:
+            self.zentrierer(ziel["ra_h"], ziel["dec"])
+        else:
+            self.montierung.schwenken(ziel["ra_h"], ziel["dec"])
+        if self.phd2 is not None:
+            self.phd2.guiding_starten()
+        self._ziel, self._geflippt = ziel, False
+
+    def _meridian(self, dauer):
+        """Vor einer Belichtung: würde sie über die Flip-Grenze laufen, erst bis zur Grenze warten,
+        dann flippen (gleiches Ziel neu anfahren — eine deutsche Montierung wechselt dabei die
+        Seite), neu zentrieren, Führung neu starten. Einmal je Ziel."""
+        if self.meridian_minuten is None or self._geflippt:
+            return
+        ha = self.montierung.stundenwinkel()
+        if ha is None:
+            self.log("Meridian-Flip aus: die Montierung meldet keinen Stundenwinkel (Sternzeit).")
+            self.meridian_minuten = None
+            return
+        grenze = self.meridian_minuten / 60.0
+        if ha + dauer / 3600.0 < grenze:
+            return
+        if ha < grenze:
+            self.log("Warte %.1f min bis zum Meridian-Flip …" % ((grenze - ha) * 60))
+        while ha < grenze:
+            if self._abbruch.wait(self.takt):
+                return
+            ha = self.montierung.stundenwinkel()
+        vorher = self.montierung.seite()
+        self.log("Meridian-Flip (Stundenwinkel %+.1f min, Seite %s)" % (ha * 60, vorher or "unbekannt"))
+        if self.phd2 is not None:
+            self.phd2.stoppen()
+        ra_h, dec = ((self._ziel["ra_h"], self._ziel["dec"]) if self._ziel else self.montierung.position())
+        if self.zentrierer is not None:
+            self.zentrierer(ra_h, dec)
+        else:
+            self.montierung.schwenken(ra_h, dec)
+        nachher = self.montierung.seite()
+        if vorher is not None and nachher == vorher:
+            self.log("Achtung: Pfeilerseite nach dem Flip unverändert (%s) — hat die Montierung "
+                     "wirklich geflippt?" % nachher)
+        if self.phd2 is not None:
+            self.phd2.guiding_starten()
+        self._geflippt = True
+        self.flips += 1
 
     def ausfuehren(self):
         os.makedirs(self.ordner, exist_ok=True)
         if any(s.filter for s in self.plan) and self.filterrad is None:
             raise ValueError("Der Plan nennt Filter, aber kein Filterrad ist verbunden.")
         info = self.kamera.info()
-        nummer = 0
-        lights = 0
+        self._nummer, self._lights = 0, 0
+        for ziel in (self.ziele or [None]):
+            if self._abbruch.is_set():
+                break
+            if ziel is not None:
+                self._anfahren(ziel)
+            self._plan_abarbeiten(info, ziel)
+        fertig = len(self.dateien)
+        if fertig < self.gesamt:
+            self.log("Abgebrochen: %d von %d Aufnahmen gespeichert." % (fertig, self.gesamt))
+        else:
+            self.log("Ablaufplan fertig: %d Aufnahmen in %s" % (fertig, self.ordner))
+        return self.dateien
+
+    def _plan_abarbeiten(self, info, ziel):
+        objekt = (ziel or {}).get("name") or self.objekt
         for schritt in self.plan:
             if self._abbruch.is_set():
                 break
@@ -134,7 +212,12 @@ class Lauf:
             for _ in range(schritt.anzahl):
                 if self._abbruch.is_set():
                     break
-                nummer += 1
+                if schritt.typ == "Light" and self.montierung is not None:
+                    self._meridian(schritt.belichtung)
+                    if self._abbruch.is_set():
+                        break
+                self._nummer += 1
+                nummer = self._nummer
                 self.log("PHASE:Aufnahme %d/%d — %r" % (nummer, self.gesamt, schritt))
                 position = None
                 if self.montierung is not None and schritt.typ == "Light":
@@ -144,20 +227,14 @@ class Lauf:
                                              licht=schritt.typ not in ("Dark", "Bias", "DarkFlat"),
                                              abbruch=self._abbruch, typ=schritt.typ)
                 info["temperatur"] = self.kamera.temperatur()      # je Aufnahme frisch
-                kopf = kopfdaten(info, schritt, beginn, position=position, objekt=self.objekt)
+                kopf = kopfdaten(info, schritt, beginn, position=position, objekt=objekt)
                 pfad = fits_schreiben(os.path.join(self.ordner, dateiname(schritt, beginn, nummer)),
                                       bild, kopf)
                 self.dateien.append(pfad)
                 self.log("AUFNAHME:%s" % pfad)
                 if schritt.typ == "Light":
-                    lights += 1
-                    if (self.dither_alle and lights % self.dither_alle == 0
+                    self._lights += 1
+                    if (self.dither_alle and self._lights % self.dither_alle == 0
                             and len(self.dateien) < self.gesamt and not self._abbruch.is_set()):
-                        self.log("Dithern (nach %d Lights) …" % lights)
+                        self.log("Dithern (nach %d Lights) …" % self._lights)
                         self.phd2.dithern()
-        fertig = len(self.dateien)
-        if fertig < self.gesamt:
-            self.log("Abgebrochen: %d von %d Aufnahmen gespeichert." % (fertig, self.gesamt))
-        else:
-            self.log("Ablaufplan fertig: %d Aufnahmen in %s" % (fertig, self.ordner))
-        return self.dateien

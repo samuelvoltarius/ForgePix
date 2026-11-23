@@ -64,8 +64,14 @@ frisch gerechneten Stapel derselben Aufnahmen: alle gelaufen, GraXpert echt in 6
        nachgebaut, nicht gegen PixInsight verglichen). Gegenproben: beide HDR-Werkzeuge lassen das
        Bild bei Stärke „aus“ exakt unverändert; ACDNR senkt das Farbrauschen im Hintergrund eines
        echten Stapels um 33 %.
-5. [ ] SPCC ohne Siril (Gaia-Spektren × Sensor-QE × Filterkurve).
-6. [ ] Himmelsmosaik (WCS-bewusst); Plate-Solve ohne Hinweis (Blindsuche).
+5. [~] Farbkalibrierung ohne Siril (23.11.): photometrisch gegen Gaia BP-RP mit G2V-Weißpunkt
+       (wie PixInsights PCC) im Arbeitsplatz, eigener Plate-Solve. Am künstlichen Himmel: ein
+       eingebauter Kanalfehler (B×0,7, R×1,4) auf 0,2 % zurückgerechnet. **Echter SPCC** (Gaia-
+       Spektren × Sensor-QE × Filterkurve) bleibt offen. An echten Daten ungeprüft (Gaia-Archiv
+       am 23.11. in Wartung).
+6. [x] Himmelsmosaik aus gelösten Bildern (23.11., Menü „Astro-Werkzeuge“): gemeinsames
+       TAN-Raster, Umrechnung über die WCS, Hintergründe angeglichen, weiche Ränder. Am künstlichen
+       Himmel: Versatz 0,03 erkannt, gedrehtes Panel sitzt. Offen: Plate-Solve ohne Hinweis.
 7. [x] GraXpert, Cosmic Clarity und StarNet++ im Arbeitsplatz (23.11.; GraXpert echt gelaufen,
        Cosmic Clarity und StarNet hier nicht installiert, daher nicht echt geprüft).
 8. [ ] KI-Werkzeuge gegen GraXpert / Cosmic Clarity an denselben Daten messen.

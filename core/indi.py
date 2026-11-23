@@ -423,6 +423,32 @@ class Montierung(Geraet):
     def nachfuehrung(self):
         return bool(self.server.vektor(self.geraet, "TELESCOPE_TRACK_STATE").werte.get("TRACK_ON"))
 
+    def synchronisieren(self, ra_stunden, dec_grad):
+        s, g = self.server, self.geraet
+        s.neu(g, "ON_COORD_SET", {"SYNC": True})
+        s.fertig(g, "ON_COORD_SET", 10, "Sync wählen")
+        s.neu(g, "EQUATORIAL_EOD_COORD", {"RA": float(ra_stunden), "DEC": float(dec_grad)})
+        s.fertig(g, "EQUATORIAL_EOD_COORD", 30, "Sync")
+        s.neu(g, "ON_COORD_SET", {"TRACK": True})      # danach wieder normal schwenken
+        s.fertig(g, "ON_COORD_SET", 10, "Schwenkart zurücksetzen")
+        return self.position()
+
+    def stundenwinkel(self):
+        lst = self._wert("TIME_LST", "LST", warten=1.0)
+        if lst is None:
+            return None
+        return (float(lst) - self.position()[0] + 12.0) % 24.0 - 12.0
+
+    def seite(self):
+        v = self.server.vektoren.get((self.geraet, "TELESCOPE_PIER_SIDE"))
+        if v is None:
+            return None
+        if v.werte.get("PIER_EAST"):
+            return "Ost"
+        if v.werte.get("PIER_WEST"):
+            return "West"
+        return None
+
     def nachfuehren(self, an=True):
         s, g = self.server, self.geraet
         s.neu(g, "TELESCOPE_TRACK_STATE", {"TRACK_ON" if an else "TRACK_OFF": True})

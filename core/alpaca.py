@@ -289,6 +289,24 @@ class Montierung(Geraet):
     def nachfuehrung(self):
         return bool(self.lesen("tracking"))
 
+    def synchronisieren(self, ra_stunden, dec_grad):
+        """Der Montierung sagen, wohin sie WIRKLICH zeigt (nach einem Plate-Solve)."""
+        self.setzen("synctocoordinates", RightAscension=float(ra_stunden), Declination=float(dec_grad))
+        return self.position()
+
+    def stundenwinkel(self):
+        """Stundenwinkel in Stunden (−12 … 12): positiv = westlich des Meridians. None, wenn der
+        Treiber die Sternzeit nicht meldet."""
+        lst = self.lesen_oder_none("siderealtime")
+        if lst is None:
+            return None
+        return (float(lst) - float(self.lesen("rightascension")) + 12.0) % 24.0 - 12.0
+
+    def seite(self):
+        """'Ost', 'West' oder None (ASCOM SideOfPier 0 = pierEast, 1 = pierWest, −1 = unbekannt)."""
+        wert = self.lesen_oder_none("sideofpier")
+        return {0: "Ost", 1: "West"}.get(wert)
+
     def nachfuehren(self, an=True):
         self.setzen("tracking", Tracking=bool(an))
         return bool(self.lesen("tracking"))

@@ -139,7 +139,13 @@ def _find_solver():
     sf = shutil.which("solve-field")
     if sf:
         return ("astrometry", sf)
-    for p in ("/Applications/ASTAP.app/Contents/MacOS/astap",):
+    # Windows-Installer tragen ASTAP nicht in den PATH ein (dieselbe Falle wie bei Siril, W5):
+    # die üblichen Installationsordner ausdrücklich ansehen.
+    kandidaten = ["/Applications/ASTAP.app/Contents/MacOS/astap", "/opt/astap/astap"]
+    for basis in (os.environ.get("ProgramFiles"), os.environ.get("ProgramFiles(x86)"), r"C:\Program Files"):
+        if basis:
+            kandidaten += [os.path.join(basis, "astap", "astap_cli.exe"), os.path.join(basis, "astap", "astap.exe")]
+    for p in kandidaten:
         if os.path.isfile(p):
             return ("astap", p)
     return (None, None)

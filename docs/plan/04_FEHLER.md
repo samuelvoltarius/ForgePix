@@ -48,6 +48,24 @@ Stand 22.11.2026. Je Fehler: was, wie es sich meldete, wie gemessen, Test.
   Kalibrierbilder anderer Objekte daneben. Heute meldet sie Größen-/Kopfdaten-Unterschiede
   laut; gleich große fremde Darks würden aber angenommen.
 
+## Gaia-Wartung meldete sich als ForgePix-Fehler (23.11.2026, behoben)
+
+* Das ESA-Archiv antwortet in der Wartung mit „200 OK“ und einer HTML-Seite. ForgePix sagte
+  „keine gültige Auftragsadresse“. Jetzt: „Das Gaia-Archiv der ESA ist gerade nicht verfügbar“
+  — am echten Archiv während der Wartung geprüft.
+
+## ASTAP unter Windows nicht gefunden (23.11.2026, behoben, ungeprüft)
+
+* `_find_solver` suchte ASTAP nur im PATH und im macOS-Programmordner; der Windows-Installer
+  trägt sich nicht in den PATH ein (dieselbe Falle wie bei Siril, W5). Jetzt auch
+  `%ProgramFiles%\astap\`. ASTAP ist auf dem Testrechner nicht installiert — ungeprüft.
+
+## Ein Test maß Rauschen statt Farbe (23.11.2026)
+
+* Der erste Farbkalibrierungs-Test summierte alle positiven Pixel; das Rauschen zog die
+  Kanalverhältnisse Richtung 1 und meldete 12,7 % Fehler. Die Rechnung traf die Faktoren auf
+  0,2 %. Der Test misst jetzt nur über Sternpixeln (CLAUDE.md: ist ein Test rot, zuerst den Test).
+
 ## Autofokus 99 Schritte daneben (heute gebaut, heute gefunden)
 
 * Die erste HFR-Messung nahm ein festes Fenster um jeden Stern; bei Unschärfe griff es in

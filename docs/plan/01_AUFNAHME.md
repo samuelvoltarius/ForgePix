@@ -58,11 +58,9 @@ offen bleiben, solange ein Ablaufplan läuft.
    (`indi_simulator_ccd`, `indi_simulator_wheel`, `indi_simulator_telescope`,
    `indi_simulator_focus`), dann Alfreds ZWO-Kamera mit `indi_asi_ccd`.
 3. [x] **Autofokus** (23.11.2026). Offen: an echtem Fokussierer prüfen; Temperaturnachführung.
-4. **Plate-Solve zum Einrichten**: Testaufnahme lösen (`astrometry.py`), Montierung syncen,
-   Ziel nachschwenken.
+4. [x] **Plate-Solve und Zentrieren** (23.11.2026). Offen: blind lösen, an echter Montierung prüfen.
 5. [x] **Nachführung mit PHD2**, Dithern (23.11.2026). Offen: an echtem PHD2 prüfen; Pause beim Flip.
-6. **Meridian-Flip**: `TimeToMeridianFlip`/SideOfPier lesen, rechtzeitig anhalten, flippen,
-   neu lösen, weiter.
+6. [x] **Meridian-Flip** (23.11.2026). Offen: an echter Montierung prüfen.
 7. **Bedingungen**: Höhe über Horizont, Dämmerung, Mond; Start/Ende danach.
 8. **Flat-Assistent**: Belichtung suchen, bis der Median ~40–50 % trifft.
 9. **Eigener Aufnahme-Server** (ohne Oberfläche, am Rig), ForgePix als Client.
@@ -79,11 +77,11 @@ Stand 22.11.2026, aus Kenntnis von N.I.N.A. 3.x (nicht Funktion für Funktion na
 | Fokussierer fahren, **Autofokus** | ✅ HFR-Kurve mit Hyperbel wie N.I.N.A. (`autofokus.py`), im Fenster; gegen nachgebaute Optik geprüft, HFR an echten Seestar-Aufnahmen gemessen (1,9 px) — **nicht** an einem echten Fokussierer |
 | Montierung: GoTo, Nachführen, Parken, Stopp | ✅ im Fenster (Alpaca und INDI), gegen nachgebautes Gerät |
 | Rotator, Kuppel, Flat-Panel, Wetter, Sicherheitsmonitor, Schalter | ❌ (über die N.I.N.A.-Brücke nur anzeigen) |
-| Ablaufplan (Sequenzer) | einfach ✅: N × Belichtung × Typ × Filter. Bedingungen, Schleifen, Auslöser, Ziele mit Koordinaten ❌ |
+| Ablaufplan (Sequenzer) | ✅ N × Belichtung × Typ × Filter, **mehrere Ziele mit Koordinaten** (Mosaik-Panele) nacheinander. Bedingungen, Schleifen, Auslöser ❌ |
 | Nachführung (PHD2), Dithern | ✅ PHD2 über seinen Ereignis-Server: Zustand, Führen starten, Dithern alle N Lights im Ablaufplan mit Warten auf „SettleDone“ (`phd2.py`); gegen nachgebauten PHD2-Server — **nicht** gegen echtes PHD2 |
-| Meridian-Flip | ❌ |
-| Plate-Solve + Zentrieren | Lösen nachträglich ✅ (`astrometry.py`), mit der Montierung zentrieren ❌ |
-| Framing-Assistent, Himmelsatlas, Mosaikplaner | ❌ |
+| Meridian-Flip | ✅ im Ablaufplan: vor einer Belichtung, die über die Grenze liefe, bis zur Grenze warten, gleiches Ziel neu anfahren, Seitenwechsel prüfen (sonst Warnung), neu zentrieren, Führung neu starten (`aufnahme.py`). Ohne Sternzeit vom Gerät: aus, mit Meldung. Gegen nachgebaute Montierung — **nicht** an einer echten |
+| Plate-Solve + Zentrieren | ✅ belichten → eigener Solver → Sync → nachschwenken, bis unter 1′ (`zentrieren.py`); je Ziel und nach dem Flip. Gegen künstlichen Himmel: 0,12°/−0,08° Montierungsfehler → unter 1′. Blind (ohne Hinweis) ❌ |
+| Framing-Assistent, Mosaikplaner | ✅ Bildfeld aus Brennweite/Pixel/Sensor, Panel-Raster mit Überlappung und Drehung, Vorschau mit Sternen aus dem lokalen Katalog, Namenssuche online (Sesame), Panele als Ziele in den Ablaufplan (`framing.py`). Himmelsatlas mit Bildern ❌ |
 | Flat-Assistent, Polausrichtung | ❌ |
 | HFR/Sternzahl je Aufnahme während der Nacht | Messung vorhanden (`astro_quality`), Anzeige beim Aufnehmen ❌ |
 | Live-Stapeln | ✅ |

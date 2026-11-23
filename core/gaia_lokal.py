@@ -333,6 +333,14 @@ def _tap_abfrage(query, *, cancel=None, timeout=120, raw_rows=False):
     try:
         headers, _ = fetch(endpoint + "/async", {"REQUEST": "doQuery", "LANG": "ADQL",
                           "FORMAT": "json", "QUERY": query, "PHASE": "RUN"})
+        if not headers.get("Location"):
+            # Am 23.11.2026 beobachtet: das ESA-Archiv antwortet während einer Wartung mit
+            # „200 OK“ und einer HTML-Seite „ESDC Archives downtime“ statt eines Auftrags. Die
+            # alte Meldung („keine gültige Auftragsadresse“) klang nach einem ForgePix-Fehler.
+            art = (headers.get("Content-Type") or "").lower()
+            if "html" in art:
+                raise ForgePixFehler("Das Gaia-Archiv der ESA ist gerade nicht verfügbar (Wartungsseite "
+                                     "statt Antwort). Bitte später erneut versuchen.")
         location = parse.urljoin(endpoint + "/async/", headers.get("Location", ""))
         parsed = parse.urlsplit(location)
         if (parsed.hostname != "gea.esac.esa.int" or parsed.scheme not in ("http", "https")

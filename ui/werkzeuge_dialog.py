@@ -108,6 +108,25 @@ def beschriften(fenster):
                             lambda out: fenster._adopt_result(out, quelle))
 
 
+def himmelsmosaik(fenster):
+    """Gelöste FITS zu einem Himmelsmosaik (WCS-bewusst, Hintergründe angeglichen)."""
+    import himmelsmosaik as hm
+    dateien, _ = QFileDialog.getOpenFileNames(
+        fenster, tr("Himmelsmosaik: gelöste Bilder wählen (mit Himmelsposition)"), "", _FITS)
+    if not dateien:
+        return
+    if len(dateien) < 2:
+        QMessageBox.information(fenster, tr("Himmelsmosaik"), tr("Bitte mindestens zwei Bilder wählen."))
+        return
+    ziel = _ziel(fenster, tr("Himmelsmosaik speichern"),
+                 os.path.join(os.path.dirname(dateien[0]), "himmelsmosaik.fits"), _FITS)
+    if not ziel:
+        return
+    fenster._run_tool_async(tr("Himmelsmosaik"),
+                            lambda log: hm.mosaik_speichern(dateien, ziel, log=_zeilen(log))[0],
+                            lambda out: fenster._adopt_result(out, dateien[0]))
+
+
 def lucky(fenster):
     from ui.appinfo import SCRIPT
     video, _ = QFileDialog.getOpenFileName(fenster, tr("Video von Sonne, Mond oder Planet wählen"), "", _VIDEO)
