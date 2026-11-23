@@ -22,7 +22,7 @@ Stand 23.11.2026. Wiederholbar mit `python docs/vergleich/siril_vergleich.py <fi
 | Rauschen je ausgerichtetem Einzelbild | 0,000198 | 0,000253 |
 | Glättung durch das Ausrichten | 3 % | 16 % |
 | Stapel-Wirkung (1,0 = reines Mittel) | **1,15** | 1,26 |
-| Zeit | 51 s | **5 s** |
+| Zeit | 51 s → **21 s** (24.11.) | **5 s** |
 
 ## Was daraus folgt
 
@@ -32,7 +32,10 @@ Stand 23.11.2026. Wiederholbar mit `python docs/vergleich/siril_vergleich.py <fi
   kleineren Teil aus dem Stapeln selbst (1,15 gegen 1,26).
 * **Siril hat 2 % schärfere Sterne.** Passt zu einer schärferen Farbrekonstruktion, die mehr
   Rauschen mitnimmt. Welche Rekonstruktion ForgePix für Seestar-Daten nimmt, ist der nächste Punkt.
-* **Siril ist 10× schneller.** ForgePix: 18 s Ausrichten, 30 s Stapeln.
+* **Siril war 10× schneller, jetzt gut 4×.** Das Sigma-Stapeln las jede Datei viermal komplett
+  und rechnete jedes Mal das ganze Bild in Float64. Seit 24.11.2026 in Streifen, jede Datei
+  einmal, die Streifen parallel: Stapeln 30 s → 10 s, Ergebnis bitgenau gleich
+  (`tests/test_stapeln_streifen.py`). Übrig: Ausrichten und der Vorlauf der Normalisierung.
 * **Messfalle, die zugeschnappt ist:** Das erste Vergleichsskript hatte keinen Startschutz
   (`if __name__ == "__main__"`). Unter Windows führt jeder Hilfsprozess des Ausrichtens ein
   ungeschütztes Skript noch einmal aus — 8 Läufe gleichzeitig, gemessen 778 s statt 48 s. Die

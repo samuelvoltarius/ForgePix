@@ -8,6 +8,16 @@ Alle nennenswerten Änderungen an ForgePix. Format orientiert an
 
 ## [Unreleased]
 
+### Sigma-Stapeln dreimal so schnell
+
+* Sigma- und Winsor-Stapeln rechnen jetzt in Zeilenstreifen: jede Aufnahme wird einmal gelesen
+  statt viermal, die Streifen laufen parallel. An 28 Seestar-Aufnahmen (IC 5146): Stapeln
+  30 s → 10 s, ganzer Lauf gegen Siril 51 s → 21 s (Siril 5 s). Das Ergebnis ist bitgenau
+  dasselbe; `tests/test_stapeln_streifen.py` schickt dieselben Aufnahmen durch beide Wege, mit
+  Satellitenspur, kosmischem Treffer, ungleichen Rändern und gemischten Belichtungen. Dateien,
+  die sich nicht zeilenweise lesen lassen (FITS, komprimierte TIFFs) und die lokale
+  Normalisierung nehmen weiter den alten Weg.
+
 ### Camera-Raw-Editor vervollständigt, Stapeln gegen Siril gemessen
 
 * **Geprüft, was im Editor wirklich einstellbar ist.** Neu im Fenster Bearbeiten → Camera-Raw:

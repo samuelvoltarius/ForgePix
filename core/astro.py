@@ -1622,9 +1622,8 @@ def stack(paths, method="sigma", kappa=2.5, normalize=True, local_norm=False,
     # Fallback (FITS/komprimiert/lokale Normalisierung): bisheriger Voll-Read über rd().
     _mm = {}
 
-    def rows_of(i, p, y0, y1):
-        if ref_surf is not None:
-            return rd(i, p)[y0:y1]           # lokale Normalisierung braucht das Vollbild (Fläche)
+    def _mm_holen(p):
+        """Zeilenweise lesbare Ansicht der Datei oder None (FITS, komprimiert, andere Form)."""
         mm = _mm.get(p, False)
         if mm is False:
             mm = None
@@ -1636,8 +1635,14 @@ def stack(paths, method="sigma", kappa=2.5, normalize=True, local_norm=False,
                             and (m.dtype == np.uint16 or m.dtype == np.float32)):
                         mm = m
                 except Exception:
-                    mm = None
+                    mm = None                # kein Fehler: dann wird die Datei ganz gelesen
             _mm[p] = mm
+        return mm
+
+    def rows_of(i, p, y0, y1):
+        if ref_surf is not None:
+            return rd(i, p)[y0:y1]           # lokale Normalisierung braucht das Vollbild (Fläche)
+        mm = _mm_holen(p)
         if mm is None:
             return rd(i, p)[y0:y1]
         band = mm[y0:y1, :, ::-1].astype(np.float32)
@@ -1736,6 +1741,64 @@ def stack(paths, method="sigma", kappa=2.5, normalize=True, local_norm=False,
                 anzahl_out[y:y + rows] = w_.sum(axis=0).min(axis=2)
             log(f"    linearfit-Rejection Zeilen {y}/{shape[0]}")
         return finish(res, coverage_out, beitraege=anzahl_out)
+
+    # Sigma/Winsor in STREIFEN: alle Aufnahmen eines Zeilenbands auf einmal, alle Durchgänge
+    # (Statistik, Nachschätzung, Rejection) im Band, jede Datei damit nur EINMAL gelesen.
+    # Vorher: drei volle Durchläufe über alle Dateien (plus die Normalisierung), jedes Mal das
+    # ganze Bild in Float64 mit mehreren Zwischenarrays. Gemessen an 28 Seestar-Aufnahmen
+    # 1080x1920: 30 s fürs Stapeln, Siril für alles 5 s. Rechnung wie unten (gleiche Schwellen,
+    # gleiche Nachschätzung, Float64) — test_stapeln_streifen prüft, dass beide Wege gleich
+    # rechnen. Geht nur, wenn jede Datei zeilenweise lesbar ist; sonst der alte Weg.
+    if (method in ("sigma", "winsor") and ref_surf is None
+            and all(_mm_holen(p) is not None for p in paths)):
+        H, W, C = shape
+        res = np.zeros(shape, np.float32)
+        cnt_out = np.zeros(shape, np.float32)
+        rows = max(1, 1_500_000 // (n * W * C))         # ~12 MB je Band und Thread
+        wv = w.astype(np.float64)[:, None, None, None]
+
+        def _ms(b, inc):
+            anz = inc.sum(axis=0)
+            mean = np.where(inc, b, 0.0).sum(axis=0) / np.maximum(anz, 1)
+            d = np.where(inc, b - mean, 0.0)
+            std = np.sqrt((d * d).sum(axis=0) / np.maximum(anz, 1))
+            return mean, std, anz > 0
+
+        def _band(y):
+            y1 = min(H, y + rows)
+            b = np.stack([rows_of(i, p, y, y1) for i, p in enumerate(paths)]).astype(np.float64)
+            cov = np.stack([valid(p)[y:y1] for p in paths])[..., None]
+            cov = np.broadcast_to(cov, b.shape)
+            mean, std, _ = _ms(b, cov)
+            lo = mean - kappa * std; hi = mean + kappa * std
+            for _ in range(max(0, int(sigma_iters) - 1)):
+                mean, std, has = _ms(b, cov & (b >= lo) & (b <= hi))
+                lo = np.where(has, mean - kappa * std, lo)
+                hi = np.where(has, mean + kappa * std, hi)
+            if method == "winsor":
+                m = cov
+                b = np.clip(b, lo, hi)
+            else:
+                m = cov & (b >= lo) & (b <= hi)
+            anz = (m * wv).sum(axis=0)
+            res[y:y1] = (np.where(m, b * wv, 0.0).sum(axis=0) / np.clip(anz, 1e-6, None))
+            cnt_out[y:y1] = anz
+            return y1
+
+        # Bänder sind unabhängig und numpy gibt beim Rechnen den GIL frei: parallel in Threads.
+        # Die Masken einmal vorab laden (valid() cacht, aber nicht threadsicher beim ersten Mal).
+        for p_ in paths:
+            valid(p_)
+        from concurrent.futures import ThreadPoolExecutor
+        from parallel import cpu_workers
+        baender = list(range(0, H, rows))
+        with ThreadPoolExecutor(max_workers=min(cpu_workers(memory_heavy=True), len(baender))) as ex:
+            for k, y1 in enumerate(ex.map(_band, baender)):
+                log(f"    {method}-Rejection Zeilen {y1}/{H}")
+                if preview_cb and k % max(1, len(baender) // 12) == 0:
+                    preview_cb(np.clip(res * (np.arange(H) < y1)[:, None, None], 0, 1),
+                               int(n * y1 / H), n)
+        return finish(res, cnt_out > 0, beitraege=cnt_out)
 
     # Sigma/Winsor: Welford moments in Float64, including the products. Raw
     # Float32 E[x²]-E[x]² can report zero scatter around a rounded mean that

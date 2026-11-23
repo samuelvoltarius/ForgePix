@@ -8,6 +8,15 @@ All notable changes to ForgePix. Format based on
 
 ## [Unreleased]
 
+### Sigma stacking three times faster
+
+* Sigma and winsor stacking now work in row bands: each frame is read once instead of four
+  times, and the bands run in parallel. On 28 Seestar frames (IC 5146): stacking 30 s → 10 s,
+  the full run against Siril 51 s → 21 s (Siril 5 s). The result is bit-identical;
+  `tests/test_stapeln_streifen.py` sends the same frames through both paths, with a satellite
+  trail, a cosmic-ray hit, uneven edges and mixed exposures. Files that cannot be read row by
+  row (FITS, compressed TIFFs) and local normalisation still take the old path.
+
 ### Camera Raw editor completed, stacking measured against Siril
 
 * **Checked what the editor can really adjust.** New in Edit → Camera Raw: noise reduction
