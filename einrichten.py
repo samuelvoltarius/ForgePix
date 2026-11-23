@@ -43,6 +43,8 @@ FUNKTIONEN = {
     "requests": "KI-Server", "onnxruntime": "eigene KI-Modelle",
     "astroquery": "Gaia-Abfrage (optional)", "lensfunpy": "Objektivkorrektur (optional)",
 }
+LINKS = {"Siril": "https://siril.org/download/", "GraXpert": "https://www.graxpert.com/",
+         "StarNet++": "https://starnetastro.com/", "ASTAP (Plate-Solve)": "https://www.hnsky.org/astap.htm"}
 EXTERN = {"siril-cli": "Siril", "siril": "Siril", "GraXpert": "GraXpert", "graxpert": "GraXpert",
           "starnet++": "StarNet++", "starnet2": "StarNet++", "astap": "ASTAP (Plate-Solve)"}
 
@@ -236,7 +238,7 @@ def main(argv=None):
     if not args.still:
         melden("\nOptionale Programme (werden nie automatisch installiert):")
         for name in sorted(set(EXTERN.values())):
-            melden("  %-22s %s" % (name, extern.get(name, "nicht gefunden — optional")))
+            melden("  %-22s %s" % (name, extern.get(name) or "nicht gefunden — optional, " + LINKS.get(name, "")))
     if not gui_ok:
         return 5
     if not args.pruefen:

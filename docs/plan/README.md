@@ -18,5 +18,6 @@ gelaufen ist (siehe CLAUDE.md: Code ist kein Beweis).
 | [05_VERARBEITUNG.md](05_VERARBEITUNG.md) | PixInsight / Siril / GraXpert / SetiAstro / RC-Astro / Makro |
 | [06_KI.md](06_KI.md) | KI-Funktionen der anderen Programme und was ForgePix davon hat |
 | [07_PLATESOLVE.md](07_PLATESOLVE.md) | Plate-Solver: was ForgePix nutzt, was es fertig gibt |
+| [08_QUALITAET.md](08_QUALITAET.md) | **Leitlinie: alles gut, nicht nur alles da** — gemessene Qualitätsprüfung, freie Modelle, sonst verlinken |
 
 Die vollständige Lückenliste von heute steht in [../LUECKEN.de.md](../LUECKEN.de.md).

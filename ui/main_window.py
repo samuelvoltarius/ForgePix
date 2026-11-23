@@ -1507,6 +1507,10 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, ProjectM
         self.aufnahme_action = QAction(tr("Aufnahme steuern (Kamera, Filterrad, Montierung, N.I.N.A.) …"), self)
         self.aufnahme_action.triggered.connect(self.open_aufnahme)
         aufnahme_menu.addAction(self.aufnahme_action)
+        extras_menu = self.menuBar().addMenu(tr("Zusatzprogramme"))
+        self.zusatz_action = QAction(tr("Übersicht und Downloads (ASTAP, GraXpert, StarNet, PHD2 …) …"), self)
+        self.zusatz_action.triggered.connect(self.open_zusatzprogramme)
+        extras_menu.addAction(self.zusatz_action)
         self._restore_settings()
         self._set_step(0)
         self._set_task()
@@ -3238,6 +3242,12 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, ProjectM
         fenster = Arbeitsplatz(self, pfad=quelle, uebernehmen=lambda out, vorher: self._adopt_result(out, vorher or out))
         self._arbeitsplaetze = [f for f in getattr(self, "_arbeitsplaetze", []) if f.isVisible()] + [fenster]
         fenster.show(); fenster.raise_()
+
+    def open_zusatzprogramme(self):
+        from ui.zusatzprogramme_dialog import ZusatzprogrammeDialog
+        dialog = ZusatzprogrammeDialog(self)
+        dialog.exec()
+        dialog.deleteLater()
 
     def open_aufnahme(self):
         """Aufnahme-Fenster, nicht modal: es läuft neben dem Live-Stapeln weiter."""

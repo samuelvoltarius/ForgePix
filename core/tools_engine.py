@@ -137,7 +137,13 @@ def run_starnet(infile, outfile=None, path=None, log=log_print):
         except OSError:
             pass
     workdir = os.path.dirname(exe)            # Gewichte + dylibs liegen hier
-    cmd = [exe, infile, outfile]
+    if os.path.basename(exe).lower().startswith("starnet2"):
+        # StarNet2 (starnetastro.com, 2.x) nimmt benannte Argumente; StarNet++ v1 und
+        # StarNetv2CLI die Dateien der Reihe nach. Laut Recherche vom 23.11.2026, an einem
+        # echten StarNet2 NICHT geprüft (hier nicht installiert).
+        cmd = [exe, "-i", infile, "-o", outfile]
+    else:
+        cmd = [exe, infile, outfile]
     log("  StarNet++: " + " ".join(cmd) + f"  (cwd={workdir})")
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=1800, cwd=workdir)

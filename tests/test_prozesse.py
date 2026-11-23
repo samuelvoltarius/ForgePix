@@ -44,7 +44,9 @@ class TestProzesse(unittest.TestCase):
         for p in prozesse.PROZESSE:
             # experimentelle Modelle, externe Programme und Werkzeuge mit Pflicht-Zweitbild haben
             # eigene Tests (unten) — hier nur, was mit dem offenen Bild allein läuft
-            if p.experimentell or p.extern or any((x.bild or x.standard is None) and x.pflicht for x in p.params):
+            # Farbkalibrierung braucht einen Sternkatalog — eigener Test in test_himmel
+            if (p.experimentell or p.extern or p.id == "farbkalibrierung"
+                    or any((x.bild or x.standard is None) and x.pflicht for x in p.params)):
                 continue
             with self.subTest(p.id):
                 r = prozesse.anwenden(bild, p.id)

@@ -97,7 +97,10 @@ class Prozess:
         except Exception as e:                       # Suche ist nur ein Hinweis
             return False, "Suche nach dem Programm scheiterte: %s" % e
         if not pfad:
-            return False, "Das Programm ist nicht installiert (oder in den Einstellungen nicht eingetragen)."
+            import zusatzprogramme
+            url = zusatzprogramme.link(self.id) if self.id in {p[0] for p in zusatzprogramme.PROGRAMME} else None
+            return False, ("Das Programm ist nicht installiert (oder in den Einstellungen nicht eingetragen)."
+                           + (" Herunterladen: %s" % url if url else ""))
         return True, pfad
 
     def werte(self, gegeben=None):
@@ -561,13 +564,26 @@ def farbkalibrierung(a, ra=None, dec=None, skala=None, log=log_print):
     if not os.path.exists(pfad):
         raise ValueError("Kein lokaler Sternkatalog — Menü „Sternkatalog verwalten …“, Feld laden.")
     kat = gaia_lokal.Katalog.laden(pfad, log=log)
-    ok, n, satz = gaia_lokal.abdeckung(kat, float(ra), float(dec), 0.6)
+    wcs = None
+    if ra is not None and dec is not None and skala is not None:
+        wcs = photometric._solve_wcs_nativ(a, {"ra": float(ra), "dec": float(dec),
+                                               "pixelscale_arcsec": float(skala)}, kat, log)
+    if wcs is None:
+        import astap
+        if not astap.finden():
+            raise ValueError("Die Himmelsposition ließ sich nicht bestimmen. RA/Dec/Maßstab eintragen "
+                             "— oder ASTAP installieren, dann geht es auch blind: %s" % astap.DOWNLOAD)
+        hinweise = ({"ra": float(ra), "dec": float(dec), "pixelscale_arcsec": skala}
+                    if ra is not None and dec is not None else None)
+        try:
+            wcs = astap.loesen(a, hinweise, log=log)
+        except astap.AstapFehler as e:
+            raise ValueError(str(e)) from e
+    h0, w0 = a.shape[:2]
+    m_ra, m_dec = (float(v) for v in wcs.pixel_to_world_values(w0 / 2.0, h0 / 2.0))
+    ok, n, satz = gaia_lokal.abdeckung(kat, m_ra, m_dec, 0.6)
     if not ok:
         raise ValueError("Der lokale Katalog deckt dieses Feld nicht ab (%s)." % satz)
-    wcs = photometric._solve_wcs_nativ(a, {"ra": float(ra), "dec": float(dec),
-                                           "pixelscale_arcsec": float(skala)}, kat, log)
-    if wcs is None:
-        raise ValueError("Die Himmelsposition ließ sich nicht bestimmen — RA/Dec/Maßstab prüfen.")
     h, w = a.shape[:2]
     mitte = wcs.pixel_to_world_values(w / 2.0, h / 2.0)
     treffer = kat.kegelsuche(float(mitte[0]), float(mitte[1]), 0.6, max_mag=16.0)
@@ -593,9 +609,11 @@ PROZESSE = [
     Prozess("farbkalibrierung", "Farbkalibrierung (Gaia-Farben)", "Hintergrund und Farbe",
             "PixInsight: PhotometricColorCalibration · Siril: PCC (ohne Siril, eigener Plate-Solve)",
             "Kanäle so skalieren, dass ein sonnenähnlicher Stern weiß ist — gemessen an den "
-            "bekannten Gaia-Farben der Sterne im Bild. Braucht den lokalen Sternkatalog.",
-            [Param("ra", "RA der Bildmitte (°)", None, 0.0, 360.0), Param("dec", "Dec der Bildmitte (°)", None, -90.0, 90.0),
-             Param("skala", "Bildmaßstab (″/px)", None, 0.05, 60.0)], farbkalibrierung),
+            "bekannten Gaia-Farben der Sterne im Bild. Braucht den lokalen Sternkatalog; ohne "
+            "RA/Dec löst ASTAP blind, falls installiert.",
+            [Param("ra", "RA der Bildmitte (°)", None, 0.0, 360.0, pflicht=False),
+             Param("dec", "Dec der Bildmitte (°)", None, -90.0, 90.0, pflicht=False),
+             Param("skala", "Bildmaßstab (″/px)", None, 0.05, 60.0, pflicht=False)], farbkalibrierung),
     Prozess("hintergrund_neutral", "Hintergrund neutralisieren", "Hintergrund und Farbe",
             "PixInsight: BackgroundNeutralization · Siril: Background Neutralization",
             "Himmelshintergrund je Kanal auf denselben Wert ziehen.",

@@ -437,9 +437,16 @@ def _solve_wcs_external(kind, solver, lpath, work, hints, log):
         # ra UND dec prüfen — ASTAP braucht beide; dec=None crashte hier vorher mit TypeError
         if h.get("ra") is not None and h.get("dec") is not None:
             cmd += ["-ra", str(h["ra"] / 15.0), "-spd", str(h["dec"] + 90)]
-        subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=300, cwd=work)
+        subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=300, cwd=work,
+                       stdin=subprocess.DEVNULL)
         base = os.path.splitext(lpath)[0]
-        return _read_wcs2d(base + ".fit") if os.path.isfile(base + ".fit") else None
+        # ASTAP schreibt die Lösung mit -wcs nach <name>.wcs; <name>.fit gibt es nur mit -update.
+        # Bis 23.11.2026 wurde nur .fit gelesen — der ASTAP-Rückfall fand so nie eine Lösung
+        # (am Code gefunden, mangels ASTAP nicht an einem echten Lauf bestätigt).
+        for kandidat in (base + ".wcs", base + ".fit"):
+            if os.path.isfile(kandidat):
+                return _read_wcs2d(kandidat)
+        return None
     cmd = [solver, "--overwrite", "--no-plots", "--downsample", "2", lpath]
     if h.get("ra") is not None and h.get("dec") is not None:
         cmd += ["--ra", str(h["ra"]), "--dec", str(h["dec"]), "--radius", "3"]

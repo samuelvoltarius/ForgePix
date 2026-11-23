@@ -8,6 +8,24 @@ Alle nennenswerten Änderungen an ForgePix. Format orientiert an
 
 ## [Unreleased]
 
+### ASTAP blind, Zusatzprogramme mit Download-Links
+
+* **Blind loesen mit ASTAP** (`core/astap.py`): ohne Hinweis `-fov 0 -r 180`, mit Hinweis schnell.
+  Die Farbkalibrierung braucht dadurch kein RA/Dec mehr, wenn ASTAP da ist; Zentrieren nimmt
+  ASTAP, wenn der eigene Solver scheitert. Empfehlung der passenden ASTAP-Sterndatenbank je
+  Bildfeld (Seestar → D80/D50). Gegen einen Nachbau geprueft, der die Kommandozeile mitschreibt —
+  **nicht** gegen echtes ASTAP (hier nicht installiert).
+* **Fehler behoben (am Code gefunden):** der bisherige ASTAP-Rueckfall las die Loesung aus
+  `<Bild>.fit`, ASTAP schreibt sie mit `-wcs` aber nach `<Bild>.wcs` — er fand so nie eine Loesung.
+* **Neues Menue „Zusatzprogramme“**: ASTAP, GraXpert, Siril, StarNet2, Cosmic Clarity, PHD2,
+  N.I.N.A., ASCOM, INDI, astrometry.net — gefunden oder nicht, wofuer, auf welchen Systemen, und ein
+  Knopf zur offiziellen Download-Seite (alle elf Seiten am 23.11.2026 mit HTTP 200 erreichbar). Auf
+  dem Testrechner richtig erkannt: GraXpert, Siril, PHD2, N.I.N.A., ASCOM da; ASTAP, StarNet2,
+  Cosmic Clarity, INDI nicht. Fehlt ein Programm, nennt der Arbeitsplatz den Link anklickbar, und
+  `einrichten.py` gibt ihn aus. Mitgeliefert wird keines — ihre Lizenzen erlauben es nicht.
+* StarNet2 (Dateiname `starnet2…`) wird mit `-i/-o` aufgerufen statt mit Dateien der Reihe nach
+  (laut Recherche, ungeprueft).
+
 ### Meridian-Flip, Plate-Solve mit Zentrieren, Framing, Himmelsmosaik, Farbkalibrierung ohne Siril
 
 * **Zentrieren** (wie N.I.N.A. „Slew and Center“): belichten, mit dem eigenen Solver loesen,

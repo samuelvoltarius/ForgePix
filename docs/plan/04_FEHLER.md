@@ -54,6 +54,12 @@ Stand 22.11.2026. Je Fehler: was, wie es sich meldete, wie gemessen, Test.
   „keine gültige Auftragsadresse“. Jetzt: „Das Gaia-Archiv der ESA ist gerade nicht verfügbar“
   — am echten Archiv während der Wartung geprüft.
 
+## ASTAP-Lösung aus der falschen Datei gelesen (23.11.2026, behoben, ungeprüft)
+
+* `_solve_wcs_external` las nach ASTAP `<Bild>.fit`; mit `-wcs` schreibt ASTAP aber
+  `<Bild>.wcs` (`.fit` nur mit `-update`). Der ASTAP-Rückfall dürfte so nie eine Lösung gefunden
+  haben — am Code gefunden, mangels ASTAP nicht an einem echten Lauf bestätigt.
+
 ## ASTAP unter Windows nicht gefunden (23.11.2026, behoben, ungeprüft)
 
 * `_find_solver` suchte ASTAP nur im PATH und im macOS-Programmordner; der Windows-Installer

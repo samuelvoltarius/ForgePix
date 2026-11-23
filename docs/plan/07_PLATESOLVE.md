@@ -8,12 +8,12 @@ Stand 23.11.2026.
 |---|---|---|---|
 | **Eigener Solver** | `core/astrometry.py` | **nein** — braucht RA/Dec und Bildmaßstab als Hinweis (aus FITS-Kopf oder Montierung) | Dreiecksvergleich gegen den lokalen Gaia-Katalog, freie Drehung und Spiegelung, unabhängige Prüfsterne. Wird von Zentrieren, Farbkalibrierung und „Himmelsposition bestimmen“ benutzt. Offline, ohne fremde Programme. |
 | Siril | `photometric._solve_wcs_siril` | mit Hinweis | Rückfall, wenn installiert |
-| ASTAP | `photometric._find_solver` | mit Hinweis, sucht aber weit | Rückfall; seit 23.11. auch im Windows-Programmordner gesucht |
+| **ASTAP** | `core/astap.py` | **ja** (`-fov 0 -r 180`) | seit 23.11.: blind für die Farbkalibrierung ohne RA/Dec, Rückfall beim Zentrieren; Lösung aus `.wcs` gelesen (vorher fälschlich `.fit`); auch im Windows-Programmordner gesucht. Gegen Nachbau geprüft, **nicht** gegen echtes ASTAP |
 | astrometry.net `solve-field` | `photometric._find_solver` | **ja** | Rückfall, wenn lokal installiert |
 | nova.astrometry.net (online) | `photometric._solve_wcs_astrometry` | **ja** | braucht API-Schlüssel (`--astrometry-key`), lädt das Bild hoch |
 
-Zentrieren am Teleskop nutzt bewusst nur den eigenen Solver: der Hinweis kommt aus der
-Montierung, das ist schnell und braucht kein Netz.
+Zentrieren am Teleskop nutzt zuerst den eigenen Solver (Hinweis aus der Montierung, schnell,
+ohne Netz) und erst, wenn der scheitert, ASTAP mit demselben Hinweis.
 
 ## Fertige Projekte — Recherche vom 23.11.2026
 
@@ -34,11 +34,11 @@ nicht selbst nachgelesen**. Kein Solver wurde ausgeführt.
 
 ## Empfehlung
 
-1. **Blind lösen über ASTAP** als nächster Schritt: ASTAP ist frei, auf allen drei Systemen da,
+1. [x] **Blind lösen über ASTAP** (23.11.2026 eingebaut, an echtem ASTAP ungeprüft): ASTAP ist frei, auf allen drei Systemen da,
    kann blind und ist schon als Rückfall angebunden. Fehlt: der Blind-Aufruf
    (`-fov 0 -r 180`), die Suche des Windows-CLI (`astap_cli.exe`) — seit 23.11. drin — und ein
    Hinweis in der Einrichtung, welche Datenbank zum Bildfeld passt (Seestar 1,2°×2,1° → D50/D80).
 2. Der eigene Solver bleibt für Zentrieren und Farbkalibrierung (schnell, offline, mit Hinweis).
 3. tetra3 nur, wenn Weitfeld (Kamera-Objektiv, Polausrichtung) dazukommt.
-4. StarNet2 neu anbinden: `--machine-progress` lesen statt nur auf das Ende zu warten; die
-   Kommandozeile von StarNet2 weicht von v1 ab (`-i/-o`) — `tools_engine.run_starnet` prüfen.
+4. [~] StarNet2: Aufruf mit `-i/-o`, wenn die Datei `starnet2…` heißt (23.11.2026, laut Recherche,
+   ungeprüft). Offen: `--machine-progress` lesen, an echtem StarNet2 prüfen.

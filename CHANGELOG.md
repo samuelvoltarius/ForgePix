@@ -8,6 +8,23 @@ All notable changes to ForgePix. Format based on
 
 ## [Unreleased]
 
+### ASTAP blind, add-on programs with download links
+
+* **Blind solving with ASTAP** (`core/astap.py`): without a hint `-fov 0 -r 180`, with a hint fast.
+  Colour calibration no longer needs RA/Dec when ASTAP is present; centering uses ASTAP when the own
+  solver fails. Recommends the matching ASTAP star database per field (Seestar → D80/D50). Checked
+  against a stand-in that records the command line — **not** against real ASTAP (not installed here).
+* **Bug fixed (found in the code):** the previous ASTAP fallback read the solution from
+  `<image>.fit`, but with `-wcs` ASTAP writes `<image>.wcs` — so it never found a solution.
+* **New "Add-on programs" menu**: ASTAP, GraXpert, Siril, StarNet2, Cosmic Clarity, PHD2, N.I.N.A.,
+  ASCOM, INDI, astrometry.net — found or not, what for, which systems, and a button to the official
+  download page (all eleven pages answered HTTP 200 on 23.11.2026). On the test machine detected
+  correctly: GraXpert, Siril, PHD2, N.I.N.A., ASCOM present; ASTAP, StarNet2, Cosmic Clarity, INDI not.
+  When a program is missing the workbench shows the link clickable and `einrichten.py` prints it.
+  None is bundled — their licences do not allow it.
+* StarNet2 (file name `starnet2…`) is called with `-i/-o` instead of positional files (per
+  research, unverified).
+
 ### Meridian flip, plate solve with centering, framing, sky mosaic, colour calibration without Siril
 
 * **Centering** (like N.I.N.A. "Slew and Center"): expose, solve with the own solver, sync the

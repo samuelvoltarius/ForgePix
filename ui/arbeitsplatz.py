@@ -107,6 +107,8 @@ class Arbeitsplatz(QDialog):
         self.p_phase.setStyleSheet("color:#9aa0a6;")
         self.p_extern = QLabel(""); self.p_extern.setWordWrap(True)
         self.p_extern.setStyleSheet("color:#e5a50a;")
+        self.p_extern.setTextFormat(Qt.RichText)
+        self.p_extern.setOpenExternalLinks(True)
         for w in (self.p_name, self.p_vorbild, self.p_text, self.p_phase, self.p_extern):
             rl.addWidget(w)
         self.p_form_host = QWidget(); self.p_form = QFormLayout(self.p_form_host)
@@ -267,7 +269,16 @@ class Arbeitsplatz(QDialog):
         self.p_text.setText(tr(p.beschreibung))
         self.p_phase.setText(tr("Wann: {phase}").format(phase=tr(prozesse.PHASE_TEXT[prozesse.PHASE[p.id]])))
         da, hinweis = p.verfuegbar()
-        self.p_extern.setText("" if da or p.extern is None else hinweis)
+        if da or p.extern is None:
+            self.p_extern.setText("")
+        else:
+            import html
+            import re
+            text = html.escape(tr(hinweis.split(" Herunterladen: ")[0]))
+            url = re.search(r"https?://\S+", hinweis)
+            if url:
+                text += ' <a href="%s">%s</a>' % (url.group(0), html.escape(tr("Herunterladen")))
+            self.p_extern.setText(text)
         for par in p.params:
             if par.art == "bild":
                 feld = QWidget(); zeile = QHBoxLayout(feld); zeile.setContentsMargins(0, 0, 0, 0)

@@ -27,14 +27,22 @@ def winkelabstand(ra1, dec1, ra2, dec2):
     return math.degrees(math.acos(max(-1.0, min(1.0, c))))
 
 
-def bildmitte(bild, katalog, ra_grad, dec_grad, pixelskala, log=log_print):
-    """Gelöste Bildmitte (RA, Dec in Grad) und das Lösungsobjekt."""
+def bildmitte(bild, katalog, ra_grad, dec_grad, pixelskala, log=log_print, astap_befehl=None):
+    """Gelöste Bildmitte (RA, Dec in Grad) und das WCS. Erst der eigene Solver (schnell,
+    offline); scheitert er und ist ASTAP da, ASTAP mit demselben Hinweis."""
     import astrometry
-    loesung = astrometry.solve(bild, katalog, {"ra": ra_grad % 360, "dec": dec_grad,
-                                               "pixelscale_arcsec": pixelskala}, log=log)
+    hinweise = {"ra": ra_grad % 360, "dec": dec_grad, "pixelscale_arcsec": pixelskala}
     h, w = np.asarray(bild).shape[:2]
-    ra, dec = loesung.wcs.pixel_to_world_values((w - 1) / 2.0, (h - 1) / 2.0)
-    return float(ra) % 360, float(dec), loesung
+    try:
+        wcs = astrometry.solve(bild, katalog, hinweise, log=log).wcs
+    except Exception as eigener:
+        import astap
+        if astap_befehl is None and not astap.finden():
+            raise
+        log("Eigener Solver ohne Lösung (%s) — versuche ASTAP" % eigener)
+        wcs = astap.loesen(bild, dict(hinweise, radius=5), befehl=astap_befehl, log=log)
+    ra, dec = wcs.pixel_to_world_values((w - 1) / 2.0, (h - 1) / 2.0)
+    return float(ra) % 360, float(dec), wcs
 
 
 def zentrieren(kamera, montierung, ziel_ra_h, ziel_dec, katalog, pixelskala, belichtung=3.0,
