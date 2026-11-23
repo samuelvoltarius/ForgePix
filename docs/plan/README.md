@@ -17,5 +17,6 @@ gelaufen ist (siehe CLAUDE.md: Code ist kein Beweis).
 | [04_FEHLER.md](04_FEHLER.md) | gefundene und behobene Fehler, mit Messung |
 | [05_VERARBEITUNG.md](05_VERARBEITUNG.md) | PixInsight / Siril / GraXpert / SetiAstro / RC-Astro / Makro |
 | [06_KI.md](06_KI.md) | KI-Funktionen der anderen Programme und was ForgePix davon hat |
+| [07_PLATESOLVE.md](07_PLATESOLVE.md) | Plate-Solver: was ForgePix nutzt, was es fertig gibt |
 
 Die vollständige Lückenliste von heute steht in [../LUECKEN.de.md](../LUECKEN.de.md).
