@@ -654,3 +654,117 @@ def _hue_band_mask(h, lo, hi, fw):
     d = np.abs(h - center)
     d = np.minimum(d, 1.0 - d)                        # zyklische Distanz
     return np.clip(1.0 - _smoothstep(half, half + fw, d), 0, 1).astype(np.float32)
+
+
+# ===========================================================================
+# R6 — Color Grading, Effekte, Perspektive (Camera-Raw-Gegenstücke)
+# ===========================================================================
+
+def _farbton_bgr(grad):
+    """Reine Farbe zu einem Farbton (Grad, 0 = Rot) als BGR, Helligkeit abgezogen:
+    nur die Farbrichtung, keine Aufhellung."""
+    hsv = np.array([[[float(grad) % 360.0, 1.0, 1.0]]], np.float32)
+    c = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)[0, 0]
+    return c - float(luma(c[None, None, :])[0, 0])
+
+
+def color_grade(img, schatten=(0.0, 0.0), mitten=(0.0, 0.0), lichter=(0.0, 0.0), balance=0.0):
+    """Color Grading wie in Lightroom: je Tonbereich (Farbton in Grad, Stärke 0..100) eine Farbe
+    einmischen. Die Bereiche sind weiche Gewichte über die Helligkeit (Summe 1), `balance`
+    (-100..100) verschiebt die Grenze zwischen Schatten und Lichtern. Die Helligkeit bleibt:
+    zugemischt wird nur die Farbrichtung (Mittel ohne Helligkeit). Stärken außerhalb 0..100 sind
+    ein Bedienfehler und werden gemeldet, nicht beschnitten."""
+    for name, (_h, s) in (("schatten", schatten), ("mitten", mitten), ("lichter", lichter)):
+        if not 0.0 <= float(s) <= 100.0:
+            raise ValueError("Color Grading %s: Stärke %r außerhalb 0..100" % (name, s))
+    if not -100.0 <= float(balance) <= 100.0:
+        raise ValueError("Color Grading: Balance %r außerhalb -100..100" % balance)
+    f, dtype, maxv = _as_float(img)
+    if f.ndim != 3 or not any(float(s) for _h, s in (schatten, mitten, lichter)):
+        return img
+    L = np.clip(luma(f), 0.0, 1.0)
+    # Balance verschiebt den Mittelpunkt: L' = L ** (2 ** (-balance/100)) (+ = mehr Lichter)
+    Lb = L ** (2.0 ** (-float(balance) / 100.0))
+    w_s = (1.0 - Lb) ** 2
+    w_l = Lb ** 2
+    w_m = 1.0 - w_s - w_l
+    out = f.copy()
+    for (h, s), w in ((schatten, w_s), (mitten, w_m), (lichter, w_l)):
+        if float(s):
+            out += (0.25 * float(s) / 100.0) * w[..., None] * _farbton_bgr(h)[None, None, :]
+    out = np.clip(out, 0.0, 1.0)
+    return (out * maxv + 0.5).astype(dtype) if dtype != np.float32 else out.astype(np.float32)
+
+
+def vignette_effect(img, menge=0.0, mittelpunkt=50.0, weichheit=50.0):
+    """Effekt-Vignette nach dem Zuschnitt: `menge` -100 (dunkle Ecken) .. 100 (helle Ecken),
+    `mittelpunkt` 0..100 (wie weit die Mitte unberührt bleibt), `weichheit` 0..100. Elliptisch
+    im Seitenverhältnis des Bildes, wirkt multiplikativ (Farbe bleibt)."""
+    if not -100.0 <= float(menge) <= 100.0:
+        raise ValueError("Vignette: Menge %r außerhalb -100..100" % menge)
+    if not float(menge):
+        return img
+    f, dtype, maxv = _as_float(img)
+    h, w = f.shape[:2]
+    yy, xx = np.mgrid[0:h, 0:w].astype(np.float32)
+    r = np.sqrt(((xx - (w - 1) / 2) / (w / 2)) ** 2 + ((yy - (h - 1) / 2) / (h / 2)) ** 2) / np.sqrt(2.0)
+    innen = 0.15 + 0.7 * float(mittelpunkt) / 100.0
+    breite = 0.05 + 0.9 * float(weichheit) / 100.0
+    g = _smoothstep(innen, innen + breite, r)                   # 0 Mitte … 1 Ecke
+    faktor = 1.0 + (float(menge) / 100.0) * g
+    out = f * (faktor[..., None] if f.ndim == 3 else faktor)
+    out = np.clip(out, 0.0, 1.0)
+    return (out * maxv + 0.5).astype(dtype) if dtype != np.float32 else out.astype(np.float32)
+
+
+def add_grain(img, menge=0.0, groesse=25.0, seed=1):
+    """Filmkorn: `menge` 0..100, `groesse` 0..100. Das Korn hängt an der BILDBREITE, nicht an
+    Pixeln — eine verkleinerte Vorschau zeigt dasselbe Korn wie das volle Bild (sonst wäre das
+    Korn in der Vorschau 5× gröber als im gespeicherten Bild). Fester `seed`: gleiches Ergebnis
+    bei jedem Lauf. Stärker in den Mitten, schwächer in Tiefen und Lichtern (wie Film)."""
+    if not 0.0 <= float(menge) <= 100.0:
+        raise ValueError("Körnung: Menge %r außerhalb 0..100" % menge)
+    if not float(menge):
+        return img
+    f, dtype, maxv = _as_float(img)
+    h, w = f.shape[:2]
+    # Kornzellen über die Breite: 2400 (fein) … 300 (grob), unabhängig von der Auflösung
+    zellen = int(round(2400.0 - 21.0 * float(groesse)))
+    gw = max(8, zellen); gh = max(8, int(round(zellen * h / max(w, 1))))
+    rng = np.random.default_rng(int(seed))
+    korn = rng.standard_normal((gh, gw)).astype(np.float32)
+    korn = cv2.GaussianBlur(korn, (0, 0), 0.6)
+    korn /= max(float(korn.std()), 1e-6)
+    korn = cv2.resize(korn, (w, h), interpolation=cv2.INTER_AREA if gw > w else cv2.INTER_CUBIC)
+    L = np.clip(luma(f) if f.ndim == 3 else f, 0.0, 1.0)
+    staerke = 0.06 * float(menge) / 100.0 * (4.0 * L * (1.0 - L) * 0.8 + 0.2)
+    zusatz = korn * staerke
+    out = f + (zusatz[..., None] if f.ndim == 3 else zusatz)
+    out = np.clip(out, 0.0, 1.0)
+    return (out * maxv + 0.5).astype(dtype) if dtype != np.float32 else out.astype(np.float32)
+
+
+def perspective(img, senkrecht=0.0, waagerecht=0.0):
+    """Perspektive geraderichten (Camera Raw „Transformieren“): `senkrecht` -100..100 zieht die
+    obere Kante zusammen bzw. auseinander (stürzende Linien), `waagerecht` dasselbe für die
+    Seiten. Das Bildformat bleibt; Ränder, die frei werden, werden mit dem Rand aufgefüllt —
+    danach zuschneiden."""
+    for name, v in (("senkrecht", senkrecht), ("waagerecht", waagerecht)):
+        if not -100.0 <= float(v) <= 100.0:
+            raise ValueError("Perspektive %s: %r außerhalb -100..100" % (name, v))
+    if not float(senkrecht) and not float(waagerecht):
+        return img
+    h, w = img.shape[:2]
+    dv = 0.25 * float(senkrecht) / 100.0 * w          # + : oben schmaler (Gebäude kippen zurück)
+    dh = 0.25 * float(waagerecht) / 100.0 * h         # + : links schmaler
+    quelle = np.float32([[0, 0], [w - 1, 0], [w - 1, h - 1], [0, h - 1]])
+    # Ecken: links oben, rechts oben, rechts unten, links unten
+    ziel = np.float32([
+        [max(dv, 0) / 2, max(dh, 0) / 2],
+        [w - 1 - max(dv, 0) / 2, max(-dh, 0) / 2],
+        [w - 1 - max(-dv, 0) / 2, h - 1 - max(-dh, 0) / 2],
+        [max(-dv, 0) / 2, h - 1 - max(dh, 0) / 2],
+    ])
+    M = cv2.getPerspectiveTransform(quelle, ziel)
+    return cv2.warpPerspective(img, M, (w, h), flags=cv2.INTER_LANCZOS4, borderMode=cv2.BORDER_REPLICATE)
+

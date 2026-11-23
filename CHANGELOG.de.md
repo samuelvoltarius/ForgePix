@@ -8,6 +8,25 @@ Alle nennenswerten Änderungen an ForgePix. Format orientiert an
 
 ## [Unreleased]
 
+### Camera-Raw-Editor vervollständigt, Stapeln gegen Siril gemessen
+
+* **Geprüft, was im Editor wirklich einstellbar ist.** Neu im Fenster Bearbeiten → Camera-Raw:
+  Rauschminderung (Luminanz, Farbe), Color Grading (Schatten/Mitten/Lichter mit Farbton und
+  Stärke, Balance), Effekt-Vignette, Körnung mit Korngröße, Perspektive senkrecht/waagerecht.
+  Gemessen: Luminanz 50 senkt das Helligkeitsrauschen 0,030 → 0,014 bei erhaltener Kante;
+  Color Grading verschiebt die Farbe ohne die Helligkeit (Abweichung < 0,01); das Korn hängt an der
+  Bildbreite, die Vorschau zeigt dasselbe Korn wie das gespeicherte Vollbild (0,0109 gegen 0,0114).
+  An einem 61-MP-Foto: alles zusammen 0,3 s in der Vorschau, 9 s beim Speichern.
+* **Fehler behoben:** Dunst entfernen und Capture-Schärfung verschluckten Fehler (`except: pass`) —
+  der Regler tat dann kommentarlos nichts. Jetzt steht der Fehler rot im Fenster.
+* Die Lückenliste zu Camera Raw war an einer Stelle falsch: der HSL-Farbmischer war schon da.
+* **Astro-Stapeln gegen Siril an denselben 28 Seestar-Aufnahmen** (IC 5146, Sigma 3/3, ohne
+  Nachbearbeitung, eine Messung für beide; `docs/vergleich/SIRIL.md`, wiederholbar mit
+  `docs/vergleich/siril_vergleich.py`): ForgePix rauscht 29 % weniger (4,3·10⁻⁵ gegen 6,0·10⁻⁵),
+  Siril hat 2 % schärfere Sterne (HFR 2,011 gegen 2,056 px) und ist 10× schneller (5 s gegen 51 s).
+  Der Vorsprung kommt aus der Farbrekonstruktion, nicht aus weicherer Interpolation — die Vermutung
+  war falsch, Siril glättet beim Ausrichten stärker (16 % gegen 3 %).
+
 ### RAW wie die Kamera
 
 * **Neues Aussehen „Wie die Kamera“** (`core/kameralook.py`, Vorgabe; `--raw-look kamera|neutral`,

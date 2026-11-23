@@ -18,7 +18,7 @@ nachbauen können, einen Download zu dem Projekt verlinken**, das die Leute selb
 
 | Bereich | Vorbild | Kennzahl | Daten | Stand |
 |---|---|---|---|---|
-| Astro-Stapeln (Kalibrieren, Ausrichten, Integration) | Siril, PixInsight WBPP | Sternform (FWHM, Exzentrizität), Rauschen im Hintergrund, SNR, Abdeckung | D:\astro (Seestar, ASI294, ASI533) | Teilweise gemessen (M27, IC 5146), kein Vergleich gegen Siril an denselben Daten |
+| Astro-Stapeln (Kalibrieren, Ausrichten, Integration) | Siril, PixInsight WBPP | Sternform (FWHM, Exzentrizität), Rauschen im Hintergrund, SNR, Abdeckung | D:\astro (Seestar, ASI294, ASI533) | **gegen Siril gemessen** (IC 5146, [../vergleich/SIRIL.md](../vergleich/SIRIL.md)): 29 % weniger Rauschen, 2 % breitere Sterne, 10× langsamer; ASI294/533 offen |
 | Automatik / Anfänger-Modus | — | richtige Moduswahl, sinnvolle Standardwerte, keine stillen Fehler | gemischte Ordner | offen |
 | Fokus-Stacking (Makro) | Helicon Focus, Zerene Stacker | Schärfe je Region, Halos, Geister an Kanten | Makro-Fokusreihen (Beispieldaten-Download) | algorithmisch gebaut (DEEP_GAPS), Vergleich offen |
 | Langzeitbelichtung aus Einzelbildern | Sequator, StarStaX, Photoshop-Mittelwert | Rauschen, Bewegungsunschärfe, Geister | Serien normaler Kameras | offen |
@@ -38,29 +38,35 @@ Holen mit `python3 testdaten_holen.py`.
 |---|---|---|
 | RAW-Lesen | 19/20 Dateien von 18 Herstellern + A7 V/A7 III; GoPro .gpr nicht | Endungsliste ergänzt (Hasselblad/Phase One wurden nicht erkannt), GPR-Meldung mit Link |
 | RAW-Aussehen | vorher: Helligkeit im Median **0,58** der Kamera-Vorschau. Mit „Wie die Kamera“ (`core/kameralook.py`, jetzt Vorgabe): **0,989** (0,81 … 1,28), echtes Weiß-Clipping wie neutral, Farbe im Mittel ±5 % | erledigt; Ausreißer Leica Q2 1,28 und Phase One 0,81 offen |
+| Astro gegen Siril | Rauschen 4,3·10⁻⁵ gegen 6,0·10⁻⁵, HFR 2,056 gegen 2,011 px, 51 s gegen 5 s | Farbrekonstruktion und Geschwindigkeit als Nächstes |
+| Camera-Raw-Editor | Rauschminderung, Color Grading, Vignette, Körnung, Perspektive ergänzt; je Regler eine gemessene Wirkung (`tests/test_camera_raw_editor.py`) | stille Fehler bei Dunst/Schärfe behoben |
 | Fokus-Stacking | — | als Nächstes: focus-stack_pcb gegen `expected.jpg` |
 | Langzeit | — | als Nächstes: Wasserfall-Video |
 
 ## Camera Raw: was zu „vollständig“ fehlt (Stand 23.11.2026)
 
-Bausteine in `core/develop.py` gibt es schon; ob jeder davon in der Oberfläche einzeln
-erreichbar ist, ist nicht durchgeprüft. Darum steht „Baustein“, nicht „fertig“.
+Durchgeprüft am 23.11.2026: „im Editor“ heißt, der Regler steht im Fenster Bearbeiten →
+Camera-Raw (`ui/components.AdjustDialog`) und seine Wirkung ist in `tests/test_camera_raw_editor.py`
+oder `tests/test_engines.py` an einem Bild gemessen. „RAW-Teil“ heißt: beim Entwickeln im
+Hauptfenster einstellbar, nicht im Editor.
 
 | Funktion (Lightroom/Camera Raw) | ForgePix | Stand |
 |---|---|---|
 | Aussehen ab Werk („Adobe Farbe“) | Kamera-Look aus der eingebetteten Vorschau | gemessen, 0,989 der Kamera |
-| Weißabgleich, Belichtung, Lichter-Rekonstruktion | rawpy-Optionen, `highlight_reconstruct` | Baustein |
-| Gradationskurve | `tone_curve_lut` (PCHIP) | Baustein |
-| Klarheit, Dunst entfernen | `local_contrast`, `dehaze` | Baustein |
-| Rauschminderung Luminanz/Farbe | `denoise_chroma_luma` | Baustein |
-| Objektivkorrektur (Profil, Vignette, Verzeichnung, CA) | lensfun + manuell | Baustein |
-| Verlaufs-/Radialfilter, Bereichsmasken | `gradient_mask`, `radial_mask`, `parametric_mask` | Baustein |
-| Farbmischer HSL | Farbton-Masken vorhanden, kein HSL-Regler | fehlt |
-| Color Grading (Lichter/Mitten/Tiefen) | — | fehlt |
+| Weißabgleich, Belichtung, Tonwerte (Lichter/Schatten/Weiß/Schwarz) | Temperatur/Tönung + Tonwert-Regler | im Editor |
+| Lichter-Rekonstruktion | `highlight_reconstruct` | RAW-Teil |
+| Gradationskurve | ziehbare Kurve | im Editor |
+| Klarheit, Dunst entfernen, Capture-Schärfung | `local_contrast`, `dehaze`, `capture_sharpen` | im Editor; Fehler werden jetzt angezeigt statt verschluckt |
+| Rauschminderung Luminanz/Farbe | `denoise_chroma_luma` | **neu im Editor**; Luminanz 50: Rauschen 0,030 → 0,014, Kante bleibt |
+| Farbmischer HSL | 8 Farbbänder × Farbton/Sättigung/Luminanz | im Editor (stand vorher fälschlich als fehlend hier) |
+| Color Grading (Schatten/Mitten/Lichter, Balance) | `color_grade` | **neu im Editor**; Helligkeit bleibt (Abweichung < 0,01) |
+| Effekt-Vignette, Körnung | `vignette_effect`, `add_grain` | **neu im Editor**; Korn in Vorschau = Korn im Vollbild (±15 %) |
+| Perspektive senkrecht/waagerecht, Drehen, Beschneiden | `perspective` + Geometrie | **neu im Editor**; automatisches Upright fehlt |
+| Objektivkorrektur (Profil, Vignette, Verzeichnung, CA) | lensfun + manuell | RAW-Teil |
+| Masken: Pinsel, Auto-Maske | im Editor | im Editor |
+| Verlaufs-/Radialfilter, Bereichsmasken | `gradient_mask`, `radial_mask`, `parametric_mask` | nur Baustein, nicht im Editor |
 | Kamera-Kalibrierung an Farbkarte (ΔE) | Fuji X-T4-Datei mit ColorChecker liegt in `testdata/raw` | fehlt, als Nächstes messbar |
-| Geometrie / Upright (Perspektive) | — | fehlt |
-| Körnung, Effekt-Vignette | — | fehlt |
-| Reparieren / Stempel | — | fehlt |
+| Reparieren / Stempel | Retusche holt nur scharfe Stellen aus einem Quellfoto (Fokus-Stacking) | fehlt |
 | KI-Masken (Motiv, Himmel) | — | fehlt; nur mit freiem Modell (06_KI) |
 | Verlauf/Schnappschüsse, Einstellungen auf viele Bilder übertragen | im Arbeitsplatz (Rezepte), nicht im RAW-Teil | teilweise |
 | Durchgängiges Farbmanagement (ICC in der Ausgabe) | Arbeitsfarbraum-Funktionen da | nicht durchgängig (05) |

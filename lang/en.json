@@ -1435,5 +1435,20 @@
   "Wie die Kamera": "Like the camera",
   "Neutral (für die Weiterbearbeitung)": "Neutral (for further editing)",
   "Aussehen": "Look",
-  "„Wie die Kamera“: Helligkeit, Kontrast und Farbe werden an das Bild angeglichen, das die Kamera selbst in die RAW-Datei legt — wie Camera Raw ab Werk. „Neutral“: dunkler und flacher, für die eigene Bearbeitung. HDR-Reihen werden immer neutral entwickelt.": "“Like the camera”: brightness, contrast and colour are matched to the picture the camera itself stores in the RAW file — like Camera Raw out of the box. “Neutral”: darker and flatter, for your own editing. HDR brackets are always developed neutral."
+  "„Wie die Kamera“: Helligkeit, Kontrast und Farbe werden an das Bild angeglichen, das die Kamera selbst in die RAW-Datei legt — wie Camera Raw ab Werk. „Neutral“: dunkler und flacher, für die eigene Bearbeitung. HDR-Reihen werden immer neutral entwickelt.": "“Like the camera”: brightness, contrast and colour are matched to the picture the camera itself stores in the RAW file — like Camera Raw out of the box. “Neutral”: darker and flatter, for your own editing. HDR brackets are always developed neutral.",
+  "Rauschminderung": "Noise reduction",
+  "Color Grading": "Color grading",
+  "Schatten Farbton": "Shadows hue",
+  "Schatten Stärke": "Shadows amount",
+  "Mitten Farbton": "Midtones hue",
+  "Mitten Stärke": "Midtones amount",
+  "Lichter Farbton": "Highlights hue",
+  "Lichter Stärke": "Highlights amount",
+  "Balance": "Balance",
+  "Effekte": "Effects",
+  "Körnung": "Grain",
+  "Korngröße": "Grain size",
+  "Perspektive senkrecht": "Vertical perspective",
+  "Perspektive waagerecht": "Horizontal perspective",
+  "Anpassung fehlgeschlagen:": "Adjustment failed:"
 }

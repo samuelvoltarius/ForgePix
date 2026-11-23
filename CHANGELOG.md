@@ -8,6 +8,25 @@ All notable changes to ForgePix. Format based on
 
 ## [Unreleased]
 
+### Camera Raw editor completed, stacking measured against Siril
+
+* **Checked what the editor can really adjust.** New in Edit → Camera Raw: noise reduction
+  (luminance, colour), colour grading (shadows/midtones/highlights with hue and amount, balance),
+  effect vignette, grain with grain size, vertical/horizontal perspective. Measured: luminance 50
+  lowers brightness noise 0.030 → 0.014 with the edge kept; colour grading shifts colour without
+  brightness (deviation < 0.01); grain is tied to the image width, so the preview shows the same
+  grain as the saved full image (0.0109 vs 0.0114). On a 61 MP photo: everything together takes
+  0.3 s in the preview and 9 s when saving.
+* **Fixed:** dehaze and capture sharpening swallowed errors (`except: pass`) — the slider then did
+  nothing without a word. The error is now shown in red in the window.
+* The Camera Raw gap list was wrong in one place: the HSL colour mixer already existed.
+* **Astro stacking against Siril on the same 28 Seestar frames** (IC 5146, sigma 3/3, no
+  post-processing, one measurement for both; `docs/vergleich/SIRIL.md`, repeatable with
+  `docs/vergleich/siril_vergleich.py`): ForgePix has 29 % less noise (4.3e-5 vs 6.0e-5), Siril has
+  2 % sharper stars (HFR 2.011 vs 2.056 px) and is 10× faster (5 s vs 51 s). The lead comes from
+  colour reconstruction, not softer interpolation — that guess was wrong, Siril smooths more when
+  registering (16 % vs 3 %).
+
 ### RAW like the camera
 
 * **New look “Like the camera”** (`core/kameralook.py`, default; `--raw-look kamera|neutral`, in

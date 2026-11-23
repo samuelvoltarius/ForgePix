@@ -101,7 +101,11 @@ HSL_BANDS = {"Rot": 0, "Orange": 30, "Gelb": 60, "Grün": 120,
 
 def adjust_image(img, p):
     """Treue Camera-Raw-Anpassungen (kein Erfinden von Inhalten). Werte -100..100.
-    Reihenfolge: Belichtung -> Weißabgleich -> Kontrast -> Tonwerte -> Klarheit -> Farbe."""
+    Reihenfolge: Belichtung -> Weißabgleich -> Kontrast -> Tonwerte -> Kurve -> HSL ->
+    Rauschminderung -> Klarheit/Dunst/Schärfe -> Farbe -> Color Grading -> Vignette -> Körnung.
+    Fehler eines Bausteins werden NICHT verschluckt (früher `except: pass` bei Dunst und
+    Schärfe: der Regler tat dann kommentarlos nichts) — der Dialog zeigt sie an."""
+    import develop as _dev   # core/ ist beim App-Start auf sys.path
     maxv = 65535.0 if img.dtype == np.uint16 else 255.0
     f = img.astype(np.float32) / maxv
     if p.get("exposure"):
@@ -147,27 +151,16 @@ def adjust_image(img, p):
             if dl:
                 hsv[..., 2] = np.clip(hsv[..., 2] * (1 + (dl / 100.0) * mask), 0, 1)
         f = np.clip(cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR), 0, 1)
+    if p.get("nr_luma") or p.get("nr_color"):           # Rauschminderung Luminanz / Farbe (Wavelet)
+        f = _dev.denoise_chroma_luma(f.astype(np.float32), luma=p.get("nr_luma", 0) / 50.0,
+                                     chroma=p.get("nr_color", 0) / 25.0)
     if p.get("clarity"):  # lokaler Kontrast-Equalizer (multiskalig, halo-arm) — darktable/RT-Stil
-        try:
-            import develop as _dev   # core/ ist beim App-Start auf sys.path
-            f = np.clip(_dev.local_contrast(f.astype(np.float32), amount=p["clarity"] / 100.0), 0, 1)
-        except Exception:                                # Fallback: einfaches Großradius-Unsharp
-            r = max(3.0, min(f.shape[0], f.shape[1]) / 90.0)
-            blur = cv2.GaussianBlur(f, (0, 0), r)
-            f = np.clip(f + (p["clarity"] / 100.0) * (f - blur), 0, 1)
+        f = np.clip(_dev.local_contrast(f.astype(np.float32), amount=p["clarity"] / 100.0), 0, 1)
     if p.get("dehaze"):                                  # Dark-Channel-Prior Dunst-Entfernung
-        try:
-            import develop as _dev
-            f = np.clip(_dev.dehaze(f.astype(np.float32), strength=p["dehaze"] / 100.0), 0, 1)
-        except Exception:
-            pass
+        f = np.clip(_dev.dehaze(f.astype(np.float32), strength=p["dehaze"] / 100.0), 0, 1)
     if p.get("capture_sharpen"):                         # RL-Capture-Sharpening (Aufnahme-Unschärfe)
-        try:
-            import develop as _dev
-            it = int(6 + 0.2 * p["capture_sharpen"])     # Stärke → Iterationen
-            f = np.clip(_dev.capture_sharpen(f.astype(np.float32), sigma=0.8, iterations=it), 0, 1)
-        except Exception:
-            pass
+        it = int(6 + 0.2 * p["capture_sharpen"])         # Stärke → Iterationen
+        f = np.clip(_dev.capture_sharpen(f.astype(np.float32), sigma=0.8, iterations=it), 0, 1)
     if p.get("vibrance") or p.get("saturation"):
         hsv = cv2.cvtColor(f, cv2.COLOR_BGR2HSV)
         s = hsv[..., 1]
@@ -177,7 +170,17 @@ def adjust_image(img, p):
             s = s * (1.0 + p["saturation"] / 100.0)
         hsv[..., 1] = np.clip(s, 0, 1)
         f = np.clip(cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR), 0, 1)
-    return (f * maxv).astype(img.dtype)
+    if p.get("cg_s_amt") or p.get("cg_m_amt") or p.get("cg_l_amt"):
+        f = _dev.color_grade(f.astype(np.float32),
+                             schatten=(p.get("cg_s_hue", 0), p.get("cg_s_amt", 0)),
+                             mitten=(p.get("cg_m_hue", 0), p.get("cg_m_amt", 0)),
+                             lichter=(p.get("cg_l_hue", 0), p.get("cg_l_amt", 0)),
+                             balance=p.get("cg_balance", 0))
+    if p.get("vignette"):
+        f = _dev.vignette_effect(f.astype(np.float32), p["vignette"])
+    if p.get("grain"):
+        f = _dev.add_grain(f.astype(np.float32), p["grain"], p.get("grain_size", 25))
+    return (np.clip(f, 0, 1) * maxv + (0.5 if img.dtype != np.float32 else 0.0)).astype(img.dtype)
 
 
 def histogram_pixmap(img, w=256, h=90):
@@ -282,7 +285,19 @@ class AdjustDialog(QDialog):
         ("clarity", "Klarheit", "Präsenz"), ("dehaze", "Dunst entfernen", "Präsenz"),
         ("capture_sharpen", "Capture-Schärfung", "Präsenz"),
         ("vibrance", "Dynamik", "Farbe"), ("saturation", "Sättigung", "Farbe"),
+        ("nr_luma", "Luminanz", "Rauschminderung"), ("nr_color", "Farbe", "Rauschminderung"),
+        ("cg_s_hue", "Schatten Farbton", "Color Grading"), ("cg_s_amt", "Schatten Stärke", "Color Grading"),
+        ("cg_m_hue", "Mitten Farbton", "Color Grading"), ("cg_m_amt", "Mitten Stärke", "Color Grading"),
+        ("cg_l_hue", "Lichter Farbton", "Color Grading"), ("cg_l_amt", "Lichter Stärke", "Color Grading"),
+        ("cg_balance", "Balance", "Color Grading"),
+        ("vignette", "Vignette", "Effekte"), ("grain", "Körnung", "Effekte"),
+        ("grain_size", "Korngröße", "Effekte"),
     ]
+    # Spannen, die von -100..100 abweichen, und Startwerte, die nicht 0 sind
+    BEREICHE = {"nr_luma": (0, 100), "nr_color": (0, 100), "grain": (0, 100), "grain_size": (0, 100),
+                "cg_s_hue": (0, 360), "cg_m_hue": (0, 360), "cg_l_hue": (0, 360),
+                "cg_s_amt": (0, 100), "cg_m_amt": (0, 100), "cg_l_amt": (0, 100)}
+    START = {"grain_size": 25, "cg_s_hue": 220, "cg_m_hue": 30, "cg_l_hue": 45}
 
     def __init__(self, img_bgr, save_path, parent=None):
         super().__init__(parent)
@@ -292,7 +307,8 @@ class AdjustDialog(QDialog):
         s = min(1.0, 900 / img_bgr.shape[1])
         self.base = cv2.resize(img_bgr, (int(img_bgr.shape[1] * s), int(img_bgr.shape[0] * s)),
                                interpolation=cv2.INTER_AREA) if s < 1.0 else img_bgr.copy()
-        self.vals = {k: 0 for k, _, _ in self.SLIDERS}
+        self.vals = {k: self.START.get(k, 0) for k, _, _ in self.SLIDERS}
+        self.persp = {"persp_v": 0, "persp_h": 0}   # Perspektive senkrecht/waagerecht
         self.curve = None                 # Tonwertkurve-Punkte oder None
         self.hsl = {}                     # Farbband -> [Farbton, Sättigung, Luminanz]
         self.angle = 0                    # Drehen (Grad)
@@ -330,9 +346,10 @@ class AdjustDialog(QDialog):
                 side.addWidget(gl); last_group = group
             row = QHBoxLayout()
             name = QLabel(tr(lbl)); name.setMinimumWidth(86)
-            val = QLabel("0"); val.setMinimumWidth(32); val.setAlignment(Qt.AlignRight)
+            val = QLabel(str(self.vals[key])); val.setMinimumWidth(32); val.setAlignment(Qt.AlignRight)
             self.value_labels[key] = val
-            sld = QSlider(Qt.Horizontal); sld.setRange(-100, 100); sld.setValue(0)
+            sld = QSlider(Qt.Horizontal); sld.setRange(*self.BEREICHE.get(key, (-100, 100)))
+            sld.setValue(self.vals[key])
             sld.valueChanged.connect(lambda v, k=key: self._on_slider(k, v))
             self._slider_widgets[key] = sld              # stabil per Key (statt findChildren-Index)
             row.addWidget(name); row.addWidget(sld, 1); row.addWidget(val)
@@ -365,7 +382,9 @@ class AdjustDialog(QDialog):
         gl = QLabel(tr("Geometrie")); gl.setObjectName("sectionHeader")
         side.addWidget(gl)
         self.geo_sliders = {}
-        for key, lbl, lo, hi in [("angle", "Drehen", -45, 45), ("top", "Beschnitt oben", 0, 45),
+        for key, lbl, lo, hi in [("persp_v", "Perspektive senkrecht", -100, 100),
+                                 ("persp_h", "Perspektive waagerecht", -100, 100),
+                                 ("angle", "Drehen", -45, 45), ("top", "Beschnitt oben", 0, 45),
                                  ("bottom", "Beschnitt unten", 0, 45), ("left", "Beschnitt links", 0, 45),
                                  ("right", "Beschnitt rechts", 0, 45)]:
             r = QHBoxLayout(); n = QLabel(tr(lbl)); n.setMinimumWidth(110)
@@ -414,6 +433,8 @@ class AdjustDialog(QDialog):
         pv.addLayout(btns)
         note = QLabel(tr("Treue Anpassung — keine Inhalte erfunden."))
         note.setStyleSheet("color:#9aa09a;"); pv.addWidget(note)
+        self.fehler = QLabel(""); self.fehler.setWordWrap(True)
+        self.fehler.setStyleSheet("color:#e06c6c;"); pv.addWidget(self.fehler)
         lay.addWidget(panel)
         self.resize(1200, 800)
         self._update()
@@ -443,12 +464,17 @@ class AdjustDialog(QDialog):
     def _on_geo(self, key, v):
         if key == "angle":
             self.angle = v
+        elif key in self.persp:
+            self.persp[key] = v
         else:
             self.crop[key] = v
         self._update_spaeter()
 
     def _geometry(self, img):
         out = img
+        if self.persp["persp_v"] or self.persp["persp_h"]:
+            import develop as _dev
+            out = _dev.perspective(out, self.persp["persp_v"], self.persp["persp_h"])
         if self.angle:
             h, w = out.shape[:2]
             M = cv2.getRotationMatrix2D((w / 2, h / 2), self.angle, 1.0)
@@ -566,8 +592,13 @@ class AdjustDialog(QDialog):
     def _update(self):
         if getattr(self, "_entprell", None) is not None:
             self._entprell.stop()
-        g = self._geometry(self.base)
-        out = self._masked(g, adjust_image(g, self._params()))
+        try:
+            g = self._geometry(self.base)
+            out = self._masked(g, adjust_image(g, self._params()))
+        except Exception as e:                           # sichtbar machen, nicht verschlucken
+            self.fehler.setText(tr("Anpassung fehlgeschlagen:") + " %s: %s" % (type(e).__name__, e))
+            return
+        self.fehler.setText("")
         pix, _ = _bgr_to_pixmap(out, max_w=900)
         disp = pix.scaled(self.preview.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
         # Anzeige-Geometrie fürs Maus-Mapping merken (zentriert im Label)
@@ -618,9 +649,10 @@ class AdjustDialog(QDialog):
 
     def _reset(self):
         for k in self.vals:
-            self.vals[k] = 0
-        for lbl in self.value_labels.values():
-            lbl.setText("0")
+            self.vals[k] = self.START.get(k, 0)
+        for k, lbl in self.value_labels.items():
+            lbl.setText(str(self.vals[k]))
+        self.persp = {"persp_v": 0, "persp_h": 0}
         self._sync_sliders()
         self.curve = None; self.curve_widget.reset()
         self.hsl = {}
