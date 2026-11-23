@@ -8,6 +8,25 @@ All notable changes to ForgePix. Format based on
 
 ## [Unreleased]
 
+### RAW like the camera
+
+* **New look “Like the camera”** (`core/kameralook.py`, default; `--raw-look kamera|neutral`, in
+  the GUI under RAW → Look): the development is matched to the picture the camera itself stores in
+  the RAW file — exposure, tone curve and saturation, the same way for every manufacturer, without
+  third-party camera profiles. Where the camera JPEG burns out but the RAW still has detail, a soft
+  shoulder runs instead. Without a preview (Sigma fp): a reported filmic curve with median 0.40.
+  HDR brackets are still developed neutral.
+* Measured on 19 RAWs from 18 manufacturers: brightness relative to the camera, median
+  **0.58 → 0.989** (0.81 … 1.28), true white clipping as with neutral (one overexposed landscape
+  14.3 → 15.7 %), colour within ±5 % on average.
+* Found and fixed along the way: the first version copied the camera JPEG's burn-out (Phase One
+  26 %, Samsung 25 % white pixels instead of 6 % and 0 %), drove one channel into the limit on dark,
+  colourful pictures (Sigma fp 52 % of pixels), squeezed the top 10 % of the RAW into 0.0003 of
+  brightness, and the fallback landed at median 0.45 instead of 0.40 while the report said 0.40.
+  Now: curve per channel, shoulder with limited slope (0.0072), median searched and measured on
+  the result.
+* What a complete Camera Raw still needs: `docs/plan/08_QUALITAET.md`.
+
 ### Test data from all manufacturers, RAW formats
 
 * `testdaten_holen.py` fetches freely usable test data into `testdata/` (not in the repository): RAW

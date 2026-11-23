@@ -88,12 +88,16 @@ def load_gray(path, max_side=1600):
 
 
 def develop_raw_to_bgr(path, wb="camera", auto_bright=False, bps=16, half=False,
-                       demosaic="auto", reconstruct_highlights=False, lens=None):
+                       demosaic="auto", reconstruct_highlights=False, lens=None, look="neutral"):
     """RAW treu entwickeln (rawpy) und als BGR-Array zurückgeben (cv2-Konvention).
     Nicht-generativ: nur Demosaicing/WB/Gamma, keine erfundenen Inhalte.
     demosaic: 'auto'(=AHD) | 'dht' | 'dcb' | 'vng' | 'ahd' (AMaZE braucht GPL-LibRaw-Build).
     reconstruct_highlights: ausgebrannte Lichter rekonstruieren (Kanal-Verhältnis + Entsättigen).
-    lens: optionales Dict mit Objektivkorrekturen {auto, vignette, distortion, ca}."""
+    lens: optionales Dict mit Objektivkorrekturen {auto, vignette, distortion, ca}.
+    look: 'neutral' (treu, für Weiterbearbeitung) | 'kamera' (an das eingebettete Kamerabild
+    angeglichen, wie Camera Raw ab Werk — siehe kameralook.py)."""
+    if look not in ("kamera", "neutral"):
+        raise ValueError("RAW-Aussehen %r unbekannt (kamera | neutral)" % look)
     import rawpy
     with raw_oeffnen(path) as raw:
         kw = dict(output_bps=bps, no_auto_bright=not auto_bright, half_size=half,
@@ -124,6 +128,9 @@ def develop_raw_to_bgr(path, wb="camera", auto_bright=False, bps=16, half=False,
         bgr = develop.lens_correct(bgr, vignette=lens.get("vignette", 0.0),
                                    distortion=lens.get("distortion", 0.0), ca=lens.get("ca", 0.0),
                                    auto=lens.get("auto", False), exif_path=path)
+    if look == "kamera":
+        import kameralook
+        bgr, _ = kameralook.angleichen(bgr, kameralook.vorschau(path))
     return bgr
 
 
@@ -151,7 +158,8 @@ def develop_all(paths, dev_dir, args):
                                      lens={"auto": getattr(args, "lens_auto", False),
                                            "vignette": getattr(args, "lens_vignette", 0.0),
                                            "distortion": getattr(args, "lens_distortion", 0.0),
-                                           "ca": getattr(args, "lens_ca", 0.0)})
+                                           "ca": getattr(args, "lens_ca", 0.0)},
+                                     look=getattr(args, "raw_look", "kamera"))
             imwrite(outp, bgr, [int(cv2.IMWRITE_TIFF_COMPRESSION), 1])
             return outp
         dst = os.path.join(dev_dir, f"{i:04d}_" + name)
@@ -1688,6 +1696,11 @@ def main():
                     help="Manuelle Verzeichnungs-Korrektur k1 (<0 Tonnen-, >0 Kissenverzeichnung)")
     ap.add_argument("--lens-ca", type=float, default=0.0,
                     help="Manuelle Farbquerfehler-Korrektur (laterale CA, ~0.001..0.01)")
+    ap.add_argument("--raw-look", choices=["kamera", "neutral"], default="kamera",
+                    help="RAW-Aussehen: kamera = wie das Bild der Kamera (Helligkeit, Tonkurve, "
+                         "Saettigung an das eingebettete Kamerabild angeglichen, wie Camera Raw ab "
+                         "Werk); neutral = treu und dunkler, fuer die Weiterbearbeitung. HDR-Reihen "
+                         "werden immer neutral entwickelt.")
     ap.add_argument("--raw-auto-bright", action="store_true",
                     help="Auto-Helligkeit aktivieren (Default aus = treu)")
     ap.add_argument("--raw-bps", type=int, choices=[8, 16], default=16,
@@ -3797,7 +3810,8 @@ def run_hdr(input_dir, work_dir, args):
 
     def load(p):                                         # RAW treu entwickeln, sonst einlesen
         if os.path.splitext(p)[1].lower() in constants.RAW_EXTS:
-            return develop_raw_to_bgr(p, wb=getattr(args, "raw_wb", "camera"), bps=8)
+            # HDR bleibt neutral: die Belichtungsunterschiede der Reihe müssen unverfälscht ankommen
+            return develop_raw_to_bgr(p, wb=getattr(args, "raw_wb", "camera"), bps=8, look="neutral")
         return imread(p, cv2.IMREAD_UNCHANGED)
 
     groups = hdr.split_brackets(paths, size=getattr(args, "hdr_bracket", 0))

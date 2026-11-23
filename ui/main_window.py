@@ -334,6 +334,9 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, ProjectM
                                    "ganze Kette in hoher Bit-Tiefe läuft. Nicht-RAW bleibt unberührt."))
         self.raw_wb = QComboBox(); self.raw_wb.addItems(["camera", "auto", "daylight"])
         self.raw_bps = QComboBox(); self.raw_bps.addItems(["16", "8"])
+        self.raw_look = QComboBox()
+        self.raw_look.addItem(tr("Wie die Kamera"), "kamera")
+        self.raw_look.addItem(tr("Neutral (für die Weiterbearbeitung)"), "neutral")
         self.raw_auto_bright = QCheckBox(tr("Auto-Helligkeit (sonst treu)"))
         self.raw_half = QCheckBox(tr("Halbe Auflösung (schneller)"))
         self.raw_demosaic = QComboBox()
@@ -347,7 +350,7 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, ProjectM
         self.lens_distortion.setSingleStep(0.02); self.lens_distortion.setValue(0.0)
         self.lens_ca = QDoubleSpinBox(); self.lens_ca.setRange(-0.02, 0.02)
         self.lens_ca.setDecimals(3); self.lens_ca.setSingleStep(0.001); self.lens_ca.setValue(0.0)
-        for w in (self.raw_wb, self.raw_bps, self.raw_auto_bright, self.raw_half,
+        for w in (self.raw_wb, self.raw_bps, self.raw_look, self.raw_auto_bright, self.raw_half,
                   self.raw_demosaic, self.raw_highlights, self.lens_auto,
                   self.lens_vignette, self.lens_distortion, self.lens_ca):
             self.raw_dev.toggled.connect(w.setEnabled)
@@ -376,6 +379,11 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, ProjectM
         _lens_lab.setStyleSheet("color:#7bd36a;font-weight:bold;margin-top:6px;")
         rg.addWidget(_lens_lab, 7, 0, 1, 3)
         rg.addWidget(self.lens_auto, 8, 0, 1, 2)
+        rg.addWidget(QLabel(tr("Aussehen")), 11, 0); rg.addWidget(self.raw_look, 11, 1)
+        rg.addWidget(help_btn("„Wie die Kamera“: Helligkeit, Kontrast und Farbe werden an das Bild "
+                              "angeglichen, das die Kamera selbst in die RAW-Datei legt — wie Camera Raw "
+                              "ab Werk. „Neutral“: dunkler und flacher, für die eigene Bearbeitung. "
+                              "HDR-Reihen werden immer neutral entwickelt."), 11, 2)
         rg.addWidget(help_btn("Korrigiert Vignette, Verzeichnung und Farbquerfehler automatisch aus der "
                               "lensfun-Datenbank (wenn lensfunpy installiert und das Objektiv bekannt "
                               "ist). Sonst die manuellen Regler unten nutzen."), 8, 2)
@@ -1938,7 +1946,8 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, ProjectM
             args += ["--work", os.path.abspath(self.work_edit.text().strip())]
         if self.raw_dev.isChecked():
             args += ["--raw-wb", self.raw_wb.currentText(), "--raw-bps", self.raw_bps.currentText(),
-                     "--raw-demosaic", self.raw_demosaic.currentText()]
+                     "--raw-demosaic", self.raw_demosaic.currentText(),
+                     "--raw-look", self.raw_look.currentData()]
             if self.raw_auto_bright.isChecked():
                 args += ["--raw-auto-bright"]
             if self.raw_half.isChecked():

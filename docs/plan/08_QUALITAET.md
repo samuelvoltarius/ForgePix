@@ -37,9 +37,33 @@ Holen mit `python3 testdaten_holen.py`.
 | Bereich | Ergebnis | Folge |
 |---|---|---|
 | RAW-Lesen | 19/20 Dateien von 18 Herstellern + A7 V/A7 III; GoPro .gpr nicht | Endungsliste ergänzt (Hasselblad/Phase One wurden nicht erkannt), GPR-Meldung mit Link |
-| RAW-Aussehen | Farbe ±10 % zur Kamera; **Helligkeit im Median 0,58 der Kamera-Vorschau** | Entscheidung offen: Vorgabe „treu“ (heute) oder „wie die Kamera“ |
+| RAW-Aussehen | vorher: Helligkeit im Median **0,58** der Kamera-Vorschau. Mit „Wie die Kamera“ (`core/kameralook.py`, jetzt Vorgabe): **0,989** (0,81 … 1,28), echtes Weiß-Clipping wie neutral, Farbe im Mittel ±5 % | erledigt; Ausreißer Leica Q2 1,28 und Phase One 0,81 offen |
 | Fokus-Stacking | — | als Nächstes: focus-stack_pcb gegen `expected.jpg` |
 | Langzeit | — | als Nächstes: Wasserfall-Video |
+
+## Camera Raw: was zu „vollständig“ fehlt (Stand 23.11.2026)
+
+Bausteine in `core/develop.py` gibt es schon; ob jeder davon in der Oberfläche einzeln
+erreichbar ist, ist nicht durchgeprüft. Darum steht „Baustein“, nicht „fertig“.
+
+| Funktion (Lightroom/Camera Raw) | ForgePix | Stand |
+|---|---|---|
+| Aussehen ab Werk („Adobe Farbe“) | Kamera-Look aus der eingebetteten Vorschau | gemessen, 0,989 der Kamera |
+| Weißabgleich, Belichtung, Lichter-Rekonstruktion | rawpy-Optionen, `highlight_reconstruct` | Baustein |
+| Gradationskurve | `tone_curve_lut` (PCHIP) | Baustein |
+| Klarheit, Dunst entfernen | `local_contrast`, `dehaze` | Baustein |
+| Rauschminderung Luminanz/Farbe | `denoise_chroma_luma` | Baustein |
+| Objektivkorrektur (Profil, Vignette, Verzeichnung, CA) | lensfun + manuell | Baustein |
+| Verlaufs-/Radialfilter, Bereichsmasken | `gradient_mask`, `radial_mask`, `parametric_mask` | Baustein |
+| Farbmischer HSL | Farbton-Masken vorhanden, kein HSL-Regler | fehlt |
+| Color Grading (Lichter/Mitten/Tiefen) | — | fehlt |
+| Kamera-Kalibrierung an Farbkarte (ΔE) | Fuji X-T4-Datei mit ColorChecker liegt in `testdata/raw` | fehlt, als Nächstes messbar |
+| Geometrie / Upright (Perspektive) | — | fehlt |
+| Körnung, Effekt-Vignette | — | fehlt |
+| Reparieren / Stempel | — | fehlt |
+| KI-Masken (Motiv, Himmel) | — | fehlt; nur mit freiem Modell (06_KI) |
+| Verlauf/Schnappschüsse, Einstellungen auf viele Bilder übertragen | im Arbeitsplatz (Rezepte), nicht im RAW-Teil | teilweise |
+| Durchgängiges Farbmanagement (ICC in der Ausgabe) | Arbeitsfarbraum-Funktionen da | nicht durchgängig (05) |
 
 ## Was dafür gebraucht wird
 

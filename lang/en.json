@@ -1431,5 +1431,9 @@
   "Das Programm ist nicht installiert (oder in den Einstellungen nicht eingetragen).": "The program is not installed (or not entered in the settings).",
   "GoPro-RAW (.gpr) in DNG umwandeln": "Convert GoPro RAW (.gpr) to DNG",
   "Windows, macOS, Linux (selbst bauen)": "Windows, macOS, Linux (build yourself)",
-  "Frei (MIT/Apache). Die eingebaute RAW-Bibliothek liest .gpr nicht.": "Free (MIT/Apache). The built-in RAW library cannot read .gpr."
+  "Frei (MIT/Apache). Die eingebaute RAW-Bibliothek liest .gpr nicht.": "Free (MIT/Apache). The built-in RAW library cannot read .gpr.",
+  "Wie die Kamera": "Like the camera",
+  "Neutral (für die Weiterbearbeitung)": "Neutral (for further editing)",
+  "Aussehen": "Look",
+  "„Wie die Kamera“: Helligkeit, Kontrast und Farbe werden an das Bild angeglichen, das die Kamera selbst in die RAW-Datei legt — wie Camera Raw ab Werk. „Neutral“: dunkler und flacher, für die eigene Bearbeitung. HDR-Reihen werden immer neutral entwickelt.": "“Like the camera”: brightness, contrast and colour are matched to the picture the camera itself stores in the RAW file — like Camera Raw out of the box. “Neutral”: darker and flatter, for your own editing. HDR brackets are always developed neutral."
 }
