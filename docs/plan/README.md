@@ -55,14 +55,22 @@ Die vollständige Lückenliste von heute steht in [../LUECKEN.de.md](../LUECKEN.
 * **Arbeitsplatz-Werkzeuge gegen PixInsight:** PixInsight ist nicht auf dem Rechner.
 * **KI** (Entrauschen, Schärfen, Sterne entfernen): Gegen RC-Astro, GraXpert und Cosmic Clarity
   ist noch nichts gemessen. Das eigene Entrauschen liegt bisher hinter dem klassischen.
-* **Astro-Stapeln mit ASI294MC Pro und ASI533MC Pro:** Der Vergleich gegen Siril fehlt noch.
+* **Astro-Stapeln mit ASI533MC Pro:** Der Vergleich gegen Siril fehlt noch. Die ASI294MC Pro ist
+  gemessen: 30 % weniger Rauschen, 4 % breitere Sterne.
 * **Aufnahme-Ablauf:** Bedingungen im Plan (Höhe, Dämmerung), Flat-Assistent, Polausrichtung,
   Rotator, Kuppel und Flat-Panel fehlen.
 * **Camera Raw:** Reparatur-Pinsel, KI-Masken, automatisches Upright und Verlaufsfilter im Editor
   fehlen.
 
+**Dauerauftrag** (Alfred, 24.11.2026): Das Ziel steht oben. Jeder Lauf arbeitet die Liste hier
+ohne Rückfrage ab, misst an echten Daten, speichert und lädt Schritt für Schritt hoch und
+schreibt den Stand hier nach. Ein „mach weiter“ genügt, um den nächsten Lauf zu starten.
+
 **Nächste Schritte**, in dieser Reihenfolge:
-1. ASI294- und ASI533-Serie gegen Siril.
-2. Geschwindigkeit beim Ausrichten.
-3. HDR-Geister messen.
-4. KI-Werkzeuge gegen GraXpert am selben Stapel.
+1. Sternschonende Hotpixel-Erkennung auf den Rohdaten, danach den Debayer MHC erneut messen.
+   Er hat Siril-Schärfe, erzeugt ohne Darks aber Artefaktpunkte
+   ([../vergleich/SIRIL.md](../vergleich/SIRIL.md)).
+2. Die ASI533MC-Pro-Serie gegen Siril messen.
+3. Geschwindigkeit beim Ausrichten (ForgePix 72 s gegen Siril 36 s an der ASI294-Serie).
+4. HDR-Geister messen.
+5. KI-Werkzeuge gegen GraXpert am selben Stapel messen.
