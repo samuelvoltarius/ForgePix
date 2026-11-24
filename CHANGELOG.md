@@ -8,6 +8,18 @@ All notable changes to ForgePix. Format based on
 
 ## [Unreleased]
 
+### Focus stacking measured, “average” repaired
+
+* **Focus stacking measured for the first time** (`docs/vergleich/FOKUS.md`, repeatable with
+  `docs/vergleich/fokus_vergleich.py`): sharpness per tile against the sharpest single frame at
+  the same spot, on focus-stack's PCB series with its result as the reference. pyramid,
+  pyramid-consistent, halofix, depthmap and wavelet hit focus everywhere (0 % missed; focus-stack
+  2.6 %) and overshoot less (11–22 % of spots against 47 %).
+* **Fixed: `--focus-method average` was a blur.** Weights rose linearly with sharpness, so the
+  sharp frame barely outweighed the blurred ones: yield 0.33, focus missed at 100 % of spots.
+  Now weight ∝ sharpness⁵ (chosen from 1–16 on two series): yield 1.07, missed 0.7 %. Test with
+  counter-check: `tests/test_fokus_average.py`.
+
 ### Sigma stacking three times faster
 
 * Sigma and winsor stacking now work in row bands: each frame is read once instead of four

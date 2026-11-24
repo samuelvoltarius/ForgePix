@@ -8,6 +8,18 @@ Alle nennenswerten Änderungen an ForgePix. Format orientiert an
 
 ## [Unreleased]
 
+### Fokus-Stacking gemessen, „average“ repariert
+
+* **Fokus-Stacking erstmals gemessen** (`docs/vergleich/FOKUS.md`, wiederholbar mit
+  `docs/vergleich/fokus_vergleich.py`): Schärfe je Kachel gegen das schärfste Einzelbild an
+  derselben Stelle, an der Platinen-Reihe von focus-stack mit deren Ergebnis als Referenz.
+  pyramid, pyramid-consistent, halofix, depthmap und wavelet treffen überall den Fokus (0 %
+  verpasst; focus-stack 2,6 %) und überzeichnen weniger (11–22 % der Stellen gegen 47 %).
+* **Fehler behoben: `--focus-method average` war ein Weichzeichner.** Die Gewichte stiegen linear
+  mit der Schärfe, das scharfe Bild bekam so kaum mehr Gewicht als die unscharfen: Ausbeute 0,33,
+  an 100 % der Stellen Fokus verpasst. Jetzt Gewicht ∝ Schärfe⁵ (gewählt aus 1–16 an zwei
+  Reihen): Ausbeute 1,07, verpasst 0,7 %. Test mit Gegenprobe: `tests/test_fokus_average.py`.
+
 ### Sigma-Stapeln dreimal so schnell
 
 * Sigma- und Winsor-Stapeln rechnen jetzt in Zeilenstreifen: jede Aufnahme wird einmal gelesen

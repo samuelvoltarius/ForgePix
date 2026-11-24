@@ -20,7 +20,7 @@ nachbauen können, einen Download zu dem Projekt verlinken**, das die Leute selb
 |---|---|---|---|---|
 | Astro-Stapeln (Kalibrieren, Ausrichten, Integration) | Siril, PixInsight WBPP | Sternform (FWHM, Exzentrizität), Rauschen im Hintergrund, SNR, Abdeckung | D:\astro (Seestar, ASI294, ASI533) | **gegen Siril gemessen** (IC 5146, [../vergleich/SIRIL.md](../vergleich/SIRIL.md)): 29 % weniger Rauschen, 2 % breitere Sterne, 4× langsamer (war 10×); ASI294/533 offen |
 | Automatik / Anfänger-Modus | — | richtige Moduswahl, sinnvolle Standardwerte, keine stillen Fehler | gemischte Ordner | offen |
-| Fokus-Stacking (Makro) | Helicon Focus, Zerene Stacker | Schärfe je Region, Halos, Geister an Kanten | Makro-Fokusreihen (Beispieldaten-Download) | algorithmisch gebaut (DEEP_GAPS), Vergleich offen |
+| Fokus-Stacking (Makro) | Helicon Focus, Zerene Stacker | Schärfe je Region, Halos, Geister an Kanten | Makro-Fokusreihen (Beispieldaten-Download) | **gemessen** ([../vergleich/FOKUS.md](../vergleich/FOKUS.md)): Fokus überall getroffen, weniger Überzeichnung als focus-stack; Helicon/Zerene nicht da |
 | Langzeitbelichtung aus Einzelbildern | Sequator, StarStaX, Photoshop-Mittelwert | Rauschen, Bewegungsunschärfe, Geister | Serien normaler Kameras | offen |
 | RAW-Konverter | darktable, RawTherapee, Lightroom | Farbtreue (ΔE an Farbkarte), Rauschen, Details, Lichterrekonstruktion | RAW-Dateien mehrerer Kameras | Farbmanagement nicht durchgängig (05) |
 | PixInsight-Werkzeuge (Arbeitsplatz) | PixInsight | je Werkzeug gleiches Bild, Differenzbild, Kennzahl | eigener Stapel | 50 Werkzeuge gebaut, kein Vergleich gegen PixInsight |
@@ -40,7 +40,7 @@ Holen mit `python3 testdaten_holen.py`.
 | RAW-Aussehen | vorher: Helligkeit im Median **0,58** der Kamera-Vorschau. Mit „Wie die Kamera“ (`core/kameralook.py`, jetzt Vorgabe): **0,989** (0,81 … 1,28), echtes Weiß-Clipping wie neutral, Farbe im Mittel ±5 % | erledigt; Ausreißer Leica Q2 1,28 und Phase One 0,81 offen |
 | Astro gegen Siril | Rauschen 4,3·10⁻⁵ gegen 6,0·10⁻⁵, HFR 2,056 gegen 2,011 px, 21 s (war 51 s) gegen 5 s | Stapeln in Streifen: 30 s → 10 s, bitgenau gleich; Farbrekonstruktion und Ausrichten als Nächstes |
 | Camera-Raw-Editor | Rauschminderung, Color Grading, Vignette, Körnung, Perspektive ergänzt; je Regler eine gemessene Wirkung (`tests/test_camera_raw_editor.py`) | stille Fehler bei Dunst/Schärfe behoben |
-| Fokus-Stacking | — | als Nächstes: focus-stack_pcb gegen `expected.jpg` |
+| Fokus-Stacking | Platine: alle Methoden 0 % verpasster Fokus (focus-stack 2,6 %), 11–22 % überzeichnet (focus-stack 47 %) | `average` war ein Weichzeichner (0,33, 100 % verpasst) → behoben (1,07, 0,7 %) |
 | Langzeit | — | als Nächstes: Wasserfall-Video |
 
 ## Camera Raw: was zu „vollständig“ fehlt (Stand 23.11.2026)

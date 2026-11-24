@@ -714,21 +714,34 @@ def _focus_measure(bgr):
     return np.abs(lx) + np.abs(ly)
 
 
-def focus_stack_average(images, radius=9, smoothing=0, log=log_print):
+def focus_stack_average(images, radius=9, smoothing=0, steilheit=5, log=log_print):
     """Method A (Helicon): **gewichteter Mittelwert** nach lokalem Schärfemaß. Rauscharm und
     farbtreu — ideal für kurze/Freihand-Stacks und weiche Motive.
       • radius    = Fenster des Schärfemaßes (größer = ruhiger/weicher).
-      • smoothing = zusätzliche Weichheit der Gewichtskarten (Feathering der Übergänge; 0 = aus)."""
+      • smoothing = zusätzliche Weichheit der Gewichtskarten (Feathering der Übergänge; 0 = aus).
+      • steilheit = Gewicht ∝ Schärfe^steilheit.
+
+    Warum nicht linear (so stand es bis 24.11.2026): ist ein Bild an einer Stelle dreimal so
+    scharf wie sechs andere, bekommt es linear nur ein Drittel Gewicht — das Ergebnis bleibt
+    unscharf. Gemessen (docs/vergleich/fokus_vergleich.py, Schärfe je Kachel ÷ schärfstes
+    Einzelbild): linear 0,29 bzw. 0,15, an 100 % der Stellen Fokus verpasst — die Methode war
+    ein Weichzeichner. Steilheit 5: 0,965 / 0,951, verpasst 2,6 % / 16,8 %, überzeichnet 3,2 % /
+    8,1 % (Platine / zweite Reihe). Ab 8 schaltet es hart um und überzeichnet 16–24 % der
+    Stellen; das können pyramid und depthmap besser."""
     n = len(images)
     if n < 2:
         return images[0] if images else None
     radius = max(1, int(radius))
+    if not 1 <= float(steilheit) <= 16:
+        raise ValueError("focus_stack_average: steilheit %r außerhalb 1..16" % steilheit)
     dtype = images[0].dtype
     maxval = 65535.0 if dtype == np.uint16 else 255.0
     fl = [im.astype(np.float32) if im.ndim == 3 else cv2.cvtColor(im, cv2.COLOR_GRAY2BGR).astype(np.float32)
           for im in images]
-    W = np.stack([cv2.boxFilter(_focus_measure(im), cv2.CV_32F, (radius, radius)) for im in images])
-    W = (W + 1e-6)
+    # auf den Wertebereich normiert, damit 8 und 16 bit gleich gewichten und die Potenz nicht überläuft
+    W = np.stack([cv2.boxFilter((_focus_measure(im) / maxval) ** float(steilheit), cv2.CV_32F,
+                                (radius, radius)) for im in images])
+    W = (W + 1e-20)
     if smoothing and smoothing > 0:
         W = np.stack([cv2.GaussianBlur(W[i], (0, 0), float(smoothing)) for i in range(n)])
     W /= W.sum(axis=0, keepdims=True)
