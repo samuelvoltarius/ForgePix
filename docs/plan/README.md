@@ -37,6 +37,8 @@ Die vollständige Lückenliste von heute steht in [../LUECKEN.de.md](../LUECKEN.
 * **Langzeitbelichtung:** Mittel und Median sind exakt. Aus der Hand hält die neue Ausrichtung
   „Perspektive“ feste Felsen bei 0,6 der Einzelbild-Schärfe statt 0,22
   ([../vergleich/LANGZEIT.md](../vergleich/LANGZEIT.md)).
+* **HDR:** So hell wie die Kamera, fünfmal weniger ausgebrannt, doppelt so viel Zeichnung in
+  Lichtern und Schatten wie das Einzelbild ([../vergleich/HDR.md](../vergleich/HDR.md)).
 * **N.I.N.A.-Fernsteuerung** gegen ein echtes N.I.N.A. 3.2 (Simulator-Kamera).
 * **GraXpert** ist echt aufgerufen worden, mit 6 s Laufzeit.
 
@@ -48,7 +50,6 @@ Die vollständige Lückenliste von heute steht in [../LUECKEN.de.md](../LUECKEN.
 * macOS und Linux sind nur über die Einrichtung vorbereitet, aber nicht auf echten Rechnern gelaufen.
 
 **Noch nicht gemessen oder fehlt**
-* **HDR:** Belichtungsreihen in `Y:\Backup\fell`.
 * **RAW-Farbtreue an der Farbkarte (ΔE):** Die Fuji-Datei mit ColorChecker liegt bereit.
 * **Arbeitsplatz-Werkzeuge gegen PixInsight:** PixInsight ist nicht auf dem Rechner.
 * **KI** (Entrauschen, Schärfen, Sterne entfernen): Gegen RC-Astro, GraXpert und Cosmic Clarity
@@ -60,7 +61,7 @@ Die vollständige Lückenliste von heute steht in [../LUECKEN.de.md](../LUECKEN.
   fehlen.
 
 **Nächste Schritte**, in dieser Reihenfolge:
-1. HDR messen.
-2. ΔE an der Farbkarte messen.
-3. ASI294- und ASI533-Serie gegen Siril.
-4. Geschwindigkeit beim Ausrichten.
+1. ΔE an der Farbkarte messen.
+2. ASI294- und ASI533-Serie gegen Siril.
+3. Geschwindigkeit beim Ausrichten.
+4. HDR-Geister messen.

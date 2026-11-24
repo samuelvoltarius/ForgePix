@@ -8,6 +8,26 @@ Alle nennenswerten Änderungen an ForgePix. Format orientiert an
 
 ## [Unreleased]
 
+### HDR so hell wie die Kamera, Reihen richtig erkannt
+
+* **Gemessen** an 8 Sony-Reihen (−1/0/+1 EV) gegen die normale Kamera-Aufnahme
+  (`docs/vergleich/HDR.md`).
+  * Das alte HDR war **schlechter als das Einzelbild**: halb so hell (0,44), 14 % fast schwarze
+    Fläche und weniger Schattenzeichnung (0,43 gegen 0,53).
+  * Neuer Standard-Look **„Wie die Kamera“**: 16 bit entwickeln, verschmelzen, an das Kamerabild
+    der normalen Belichtung angleichen. Ergebnis: Helligkeit 1,00, ausgebrannt 0,10 % (Kamera
+    0,51 %), Zeichnung in Lichtern 0,71 und Schatten 1,14 (Kamera 0,33 / 0,53).
+  * Die alten Looks bleiben wählbar. „natural“ zusätzlich verschlechtert es messbar.
+* **Fehler behoben: Reihenerkennung.** 462 Aufnahmen wurden zu **einer** Reihe.
+  * PIL liest aus ARW keine Belichtungszeit, und dann galt still „alles eine Reihe“.
+  * Die Sprung-Regel griff bei Sony (0/−1/+1) nicht.
+  * Jetzt liest exifread die Zeiten, und ForgePix sucht das wiederkehrende Belichtungsmuster:
+    154 Reihen zu 3. Ohne Muster gibt es eine klare Meldung.
+* **Fehler behoben: Bezugsbild.** Als normale Belichtung galt das mittlere Bild nach Dateiname,
+  bei Sony also die −1-EV-Aufnahme. Von ihr kamen auch Dateiname und EXIF. Jetzt wird nach
+  Belichtungszeit sortiert, ohne EXIF nach Helligkeit. Unlesbare Bilder einer Reihe werden
+  genannt.
+
 ### Langzeitbelichtung gemessen, neue Freihand-Ausrichtung
 
 * **Gemessen** an einem Freihand-Wasserfall-Video (90 Bilder, `docs/vergleich/LANGZEIT.md`):

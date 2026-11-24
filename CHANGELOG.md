@@ -8,6 +8,26 @@ All notable changes to ForgePix. Format based on
 
 ## [Unreleased]
 
+### HDR as bright as the camera, brackets detected correctly
+
+* **Measured** on 8 Sony brackets (−1/0/+1 EV) against the camera's normal exposure
+  (`docs/vergleich/HDR.md`).
+  * The old HDR was **worse than the single frame**: half as bright (0.44), 14 % near-black area
+    and less shadow detail (0.43 vs 0.53).
+  * New default look **“Like the camera”**: develop at 16 bit, fuse, then match to the camera
+    picture of the normal exposure. Result: brightness 1.00, clipped 0.10 % (camera 0.51 %),
+    detail in highlights 0.71 and shadows 1.14 (camera 0.33 / 0.53).
+  * The old looks remain selectable. Adding “natural” on top makes it measurably worse.
+* **Fixed: bracket detection.** 462 frames became **one** bracket.
+  * PIL reads no exposure time from ARW, and the code then silently treated everything as one
+    bracket.
+  * The jump rule failed on Sony's 0/−1/+1 order.
+  * exifread now reads the times, and ForgePix looks for the repeating exposure pattern: 154
+    brackets of 3. Without a pattern there is a clear message.
+* **Fixed: reference frame.** The “normal” exposure was the middle frame by file name, which on
+  Sony is the −1 EV frame. It also supplied the file name and EXIF. Frames are now sorted by
+  exposure time, or by brightness without EXIF. Unreadable frames in a bracket are named.
+
 ### Long exposure measured, new handheld alignment
 
 * **Measured** on a handheld waterfall video (90 frames, `docs/vergleich/LANGZEIT.md`): mean and

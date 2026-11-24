@@ -41,6 +41,7 @@ Holen mit `python3 testdaten_holen.py`.
 | Astro gegen Siril | Rauschen 4,3·10⁻⁵ gegen 6,0·10⁻⁵, HFR 2,056 gegen 2,011 px, 21 s (war 51 s) gegen 5 s | Stapeln in Streifen: 30 s → 10 s, bitgenau gleich; Farbrekonstruktion und Ausrichten als Nächstes |
 | Camera-Raw-Editor | Rauschminderung, Color Grading, Vignette, Körnung, Perspektive ergänzt; je Regler eine gemessene Wirkung (`tests/test_camera_raw_editor.py`) | stille Fehler bei Dunst/Schärfe behoben |
 | Fokus-Stacking | Platine: alle Methoden 0 % verpasster Fokus (focus-stack 2,6 %), 11–22 % überzeichnet (focus-stack 47 %) | `average` war ein Weichzeichner (0,33, 100 % verpasst) → behoben (1,07, 0,7 %) |
+| HDR | altes HDR schlechter als das Einzelbild (Helligkeit 0,44, 14 % fast schwarz); jetzt 1,00, ausgebrannt 0,10 % (Kamera 0,51 %), Zeichnung Lichter/Schatten 0,71/1,14 (Kamera 0,33/0,53) | Reihenerkennung (462 → 1 Reihe) behoben; Geister offen ([../vergleich/HDR.md](../vergleich/HDR.md)) |
 | Langzeit | Mittel/Median exakt; Freihand-Video: neue Ausrichtung „perspective“ hält beide Felsen bei 0,6 (Stern-Ausrichtung ließ einen bei 0,22) | Moduswahl (declutter beim Wasserfall) offen |
 
 ## Camera Raw: was zu „vollständig“ fehlt (Stand 23.11.2026)

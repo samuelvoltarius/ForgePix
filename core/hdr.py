@@ -9,6 +9,7 @@ freihändige Reihen. Reine OpenCV/NumPy-Abhängigkeiten (MIT-kompatibel).
 
 Wichtig: HDR (Belichtungsreihe) ≠ Fokus-Stacking (Schärfereihe) — zwei verschiedene Dinge.
 """
+import os
 import numpy as np
 import cv2
 from constants import to_uint8, log_print
@@ -79,6 +80,28 @@ def _exposure_times_exiftool(paths):
         return None
 
 
+def _exposure_times_exifread(paths):
+    """Belichtungszeiten via exifread (Pflicht-Abhängigkeit, liest auch RAW wie Sony-ARW, wo PIL
+    nichts findet). Liste von float-oder-None je Pfad, oder None (exifread fehlt)."""
+    try:
+        import exifread
+    except Exception:
+        return None
+    times = []
+    for p in paths:
+        try:
+            with open(p, "rb") as f:
+                tags = exifread.process_file(f, details=False, stop_tag="EXIF ExposureTime")
+            v = tags.get("EXIF ExposureTime")
+            if v is None:
+                times.append(None); continue
+            r = v.values[0]
+            times.append(float(r.num) / float(r.den) if hasattr(r, "num") else float(r))
+        except Exception:
+            times.append(None)
+    return times
+
+
 def read_exposure_times(paths):
     """Echte Belichtungszeiten (Sekunden) aus dem EXIF lesen — EINE Funktion für alle Aufrufer:
     PIL als Primärweg, exiftool (ein Batch-Aufruf für alle Dateien) als Fallback. Gibt ein
@@ -89,6 +112,10 @@ def read_exposure_times(paths):
     if not paths:
         return None
     times = _exposure_times_pil(paths)
+    if times is None or any(t is None for t in times):
+        # PIL liest kein RAW-EXIF (Sony-ARW: gar nichts) — vorher fiel das bis zu exiftool durch,
+        # und ohne exiftool galten alle 462 Aufnahmen eines Ordners als EINE Reihe.
+        times = _exposure_times_exifread(paths)
     if times is None or any(t is None for t in times):
         times = _exposure_times_exiftool(paths)              # Fallback: exiftool, EIN Aufruf
     if times is None or any(t is None or t <= 0 for t in times):
@@ -406,27 +433,61 @@ def apply_look(bgr, preset="natural"):
     return cv2.cvtColor(np.clip(lab, 0, 255).astype(np.uint8), cv2.COLOR_LAB2BGR)
 
 
+def _muster_periode(evs, max_k=9, toleranz=0.2, anteil=0.9):
+    """Kleinste Gruppengröße k, bei der sich das Belichtungsmuster wiederholt: in jeder Gruppe
+    lauter verschiedene Belichtungen, und die Abstände (in EV) zur ersten Aufnahme der Gruppe sind
+    in mindestens `anteil` der Gruppen gleich. Die Reihenfolge innerhalb der Reihe ist egal
+    (Sony: 0, −1, +1; andere: −1, 0, +1). Gibt k oder None."""
+    ev = np.log2(np.asarray(evs, np.float64))
+    n = len(ev)
+    for k in range(2, max_k + 1):
+        if n % k or n // k < 2:
+            continue
+        gruppen = ev.reshape(n // k, k)
+        rel = gruppen - gruppen[:, :1]
+        sortiert = np.sort(gruppen, axis=1)
+        verschieden = (np.diff(sortiert, axis=1) > 0.3).all(axis=1)   # mind. ~1/3 EV Abstand
+        if verschieden.mean() < anteil:
+            continue
+        muster = np.median(rel, axis=0)
+        gleich = (np.abs(rel - muster) <= toleranz).all(axis=1)
+        if gleich.mean() >= anteil:
+            return k
+    return None
+
+
 def split_brackets(paths, size=0, log=log_print):
     """Eine Dateiliste in einzelne Belichtungsreihen aufteilen.
     size>0: feste Gruppengröße (z. B. 3 für klassisches AEB).
-    size=0: automatisch — neue Reihe, sobald die Belichtungszeit deutlich zurückspringt
-            (Reihe startet wieder bei der kürzesten/dunkelsten Belichtung). Klappt EXIF nicht,
-            wird die gesamte Liste als EINE Reihe behandelt."""
+    size=0: automatisch — das wiederkehrende Belichtungsmuster suchen (`_muster_periode`).
+
+    Vorher: „neue Reihe, sobald die Belichtungszeit um mehr als die Hälfte zurückspringt“, und
+    ohne lesbares EXIF still alles als EINE Reihe. An 462 Sony-ARW (Reihen 0/−1/+1 EV) gemessen:
+    beides schlug zu — PIL las keine Zeiten, und selbst mit Zeiten ist der Rücksprung von +1 auf
+    0 EV genau Faktor 2, also nicht „mehr als die Hälfte“. Ergebnis: eine einzige Reihe aus 462
+    Bildern. Jetzt: Muster erkannt → 154 Reihen; nicht erkennbar → klare Meldung."""
     if size and size > 0:
         groups = [paths[i:i + size] for i in range(0, len(paths), size)]
+        rest = [g for g in groups if len(g) < 2]
+        if rest:
+            log(f"    HDR: {len(rest[0])} Aufnahme(n) am Ende bilden keine Reihe und bleiben weg: "
+                f"{', '.join(os.path.basename(p) for p in rest[0])}")
         return [g for g in groups if len(g) >= 2]
-    evs = read_exposure_times(paths)                     # PIL, Fallback exiftool (ein Batch-Aufruf)
+    evs = read_exposure_times(paths)                     # PIL, exifread, exiftool
     if evs is None:
-        return [paths]                                   # EXIF unklar → eine Reihe
-    groups, cur = [], [paths[0]]
-    for i in range(1, len(paths)):
-        # deutlicher Sprung nach unten (lange → kurze Belichtung) = neue Reihe beginnt
-        if evs[i] < evs[i - 1] * 0.5:
-            groups.append(cur)
-            cur = [paths[i]]
-        else:
-            cur.append(paths[i])
-    groups.append(cur)
-    groups = [g for g in groups if len(g) >= 2]
-    log(f"    HDR: {len(groups)} Belichtungsreihe(n) erkannt")
-    return groups or [paths]
+        if len(paths) <= 9:
+            log(f"    HDR: Belichtungszeiten nicht lesbar — alle {len(paths)} Aufnahmen als EINE Reihe")
+            return [paths]
+        raise ValueError("HDR: Belichtungszeiten nicht lesbar, und %d Aufnahmen sind zu viele für eine "
+                         "Reihe. Bitte die Reihengröße angeben (--hdr-bracket, z. B. 3)." % len(paths))
+    if len(set(np.round(np.log2(evs), 1))) == len(paths) and len(paths) <= 9:
+        log(f"    HDR: eine Reihe aus {len(paths)} verschiedenen Belichtungen")
+        return [paths]
+    k = _muster_periode(evs)
+    if k is None:
+        raise ValueError("HDR: in %d Aufnahmen kein wiederkehrendes Belichtungsmuster gefunden "
+                         "(unvollständige Reihe oder gemischte Ordner?). Bitte die Reihengröße "
+                         "angeben (--hdr-bracket)." % len(paths))
+    groups = [paths[i:i + k] for i in range(0, len(paths), k)]
+    log(f"    HDR: {len(groups)} Belichtungsreihe(n) zu je {k} erkannt")
+    return groups

@@ -1285,10 +1285,11 @@ def main():
                          "durchgezeichnete Lichter + Schatten. NICHT Fokus-Stacking!")
     ap.add_argument("--hdr-bracket", type=int, default=0,
                     help="Feste Gruppengröße der Belichtungsreihe (z. B. 3); 0 = automatisch erkennen")
-    ap.add_argument("--hdr-look", choices=["neutral", "natural", "vivid", "dramatic"],
-                    default="natural",
-                    help="Tonlook fürs HDR (Exposure Fusion ist flach): neutral=aus, "
-                         "natural=dezenter Pop (Standard), vivid=kräftig, dramatic=starker lokaler Kontrast")
+    ap.add_argument("--hdr-look", choices=["kamera", "neutral", "natural", "vivid", "dramatic"],
+                    default="kamera",
+                    help="Tonlook fürs HDR: kamera=Helligkeit und Tonkurve wie das Kamerabild der "
+                         "normalen Belichtung (Standard), neutral=aus, natural=dezenter Pop, "
+                         "vivid=kräftig, dramatic=starker lokaler Kontrast")
     ap.add_argument("--hdr-deghost", choices=["off", "auto", "aggressive"], default="off",
                     help="HDR-Deghosting: in Bewegungszonen (Blätter/Personen/Autos) nur das "
                          "best-belichtete Referenzbild statt der Fusion — gegen Doppelbilder")
@@ -3815,9 +3816,19 @@ def run_hdr(input_dir, work_dir, args):
 
     def load(p):                                         # RAW treu entwickeln, sonst einlesen
         if os.path.splitext(p)[1].lower() in constants.RAW_EXTS:
-            # HDR bleibt neutral: die Belichtungsunterschiede der Reihe müssen unverfälscht ankommen
-            return develop_raw_to_bgr(p, wb=getattr(args, "raw_wb", "camera"), bps=8, look="neutral")
+            # HDR bleibt neutral: die Belichtungsunterschiede der Reihe müssen unverfälscht ankommen.
+            # 16 statt 8 bit: die neutrale Entwicklung ist dunkel, in 8 bit fehlen gerade dort Stufen.
+            return develop_raw_to_bgr(p, wb=getattr(args, "raw_wb", "camera"), bps=16, look="neutral")
         return imread(p, cv2.IMREAD_UNCHANGED)
+
+    def kamera_vorlage(p):
+        """Das Bild, an das der Look „kamera“ angleicht: bei RAW das eingebettete Kamerabild, sonst
+        die normale Belichtung selbst (ein JPEG IST das Kamerabild)."""
+        if os.path.splitext(p)[1].lower() in constants.RAW_EXTS:
+            import kameralook
+            return kameralook.vorschau(p)
+        b = imread(p, cv2.IMREAD_COLOR)
+        return b if b is not None and b.dtype == np.uint8 else None
 
     groups = hdr.split_brackets(paths, size=getattr(args, "hdr_bracket", 0))
     phase("merge")
@@ -3829,7 +3840,23 @@ def run_hdr(input_dir, work_dir, args):
     made = []
     for gi, grp in enumerate(groups):
         print(f"  Reihe {gi + 1}/{len(groups)} ({len(grp)} Belichtungen) …")
-        imgs = [im for im in (load(p) for p in grp) if im is not None]
+        # nach Belichtungszeit ordnen: die MITTLERE ist dann die normale Belichtung (Bezug für
+        # Ausrichtung, Look, Dateiname und EXIF). Nach Dateiname war das bei Sony (0/−1/+1 EV)
+        # die −1-EV-Aufnahme.
+        zeiten = hdr.read_exposure_times(grp)
+        geladen = [(p, load(p)) for p in grp]
+        unlesbar = [os.path.basename(p) for p, im in geladen if im is None]
+        if unlesbar:
+            print("    nicht lesbar, weggelassen: " + ", ".join(unlesbar))
+        if zeiten is not None:
+            reihenfolge = np.argsort(zeiten)
+        else:
+            # ohne EXIF-Zeiten (z. B. JPEGs ohne Metadaten) nach gemessener Helligkeit ordnen
+            reihenfolge = np.argsort([float(np.median(im)) / (65535.0 if im.dtype == np.uint16 else 255.0)
+                                      if im is not None else -1.0 for _, im in geladen])
+        geladen = [geladen[i] for i in reihenfolge if geladen[i][1] is not None]
+        grp = [p for p, _ in geladen]
+        imgs = [im for _, im in geladen]
         if len(imgs) < 2:
             print("    (übersprungen — zu wenige lesbare Bilder)")
             continue
@@ -3849,7 +3876,24 @@ def run_hdr(input_dir, work_dir, args):
             result = hdr.merge_exposures(imgs, align=not getattr(args, "no_align", False),
                                          deghost=getattr(args, "hdr_deghost", "off"),
                                          flow=getattr(args, "hdr_deghost_flow", False))
-        result = hdr.apply_look(result, getattr(args, "hdr_look", "natural"))
+        look = getattr(args, "hdr_look", "kamera")
+        if look == "kamera":
+            # Gemessen an 8 Sony-Reihen (−1/0/+1 EV) gegen die normale Kamera-Aufnahme: der alte
+            # Standard (8 bit neutral + „natural“) war halb so hell (0,44) mit 14 % fast schwarzer
+            # Fläche und WENIGER Schattenzeichnung als das Einzelbild. An das Kamerabild
+            # angeglichen: Helligkeit 1,00, ausgebrannt 0,10 % (Kamera 0,51 %), Zeichnung in
+            # Lichtern 0,71 und Schatten 1,14 (Kamera 0,33 / 0,53). „natural“ danach verschlechtert
+            # es wieder (ausgebrannt 1,7 %, fast schwarz 4,3 %) — darum nicht zusätzlich.
+            vorlage = kamera_vorlage(grp[len(grp) // 2])
+            if vorlage is not None:
+                import kameralook
+                result, _ = kameralook.angleichen(result, vorlage)
+            else:
+                print("    Look „kamera“: kein Kamerabild der normalen Belichtung gefunden — "
+                      "stattdessen „natural“")
+                result = hdr.apply_look(result, "natural")
+        else:
+            result = hdr.apply_look(result, look)
         base = os.path.splitext(os.path.basename(grp[len(grp) // 2]))[0]
         out_jpg = os.path.join(stack_dir, f"{args.prefix}{base}_hdr.jpg")
         imwrite(out_jpg, result, [int(cv2.IMWRITE_JPEG_QUALITY), 95])

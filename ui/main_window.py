@@ -981,6 +981,7 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, ProjectM
                               "0 = automatisch erkennen. Mehrere Reihen im Ordner werden einzeln zu "
                               "je einem HDR verrechnet."), 0, 2)
         self.hdr_look = QComboBox()
+        self.hdr_look.addItem(tr("Wie die Kamera"), "kamera")
         self.hdr_look.addItem(tr("Natürlich (dezenter Pop)"), "natural")
         self.hdr_look.addItem(tr("Neutral (flach, treu)"), "neutral")
         self.hdr_look.addItem(tr("Kräftig"), "vivid")
