@@ -350,7 +350,14 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, ProjectM
         self.lens_distortion.setSingleStep(0.02); self.lens_distortion.setValue(0.0)
         self.lens_ca = QDoubleSpinBox(); self.lens_ca.setRange(-0.02, 0.02)
         self.lens_ca.setDecimals(3); self.lens_ca.setSingleStep(0.001); self.lens_ca.setValue(0.0)
-        for w in (self.raw_wb, self.raw_bps, self.raw_look, self.raw_auto_bright, self.raw_half,
+        self.raw_farbprofil = QLineEdit()
+        self.raw_farbprofil.setPlaceholderText(tr("keins"))
+        self.raw_farbprofil_waehlen = QPushButton("…")
+        self.raw_farbprofil_waehlen.clicked.connect(self._farbprofil_waehlen)
+        self.raw_farbprofil_karte = QPushButton(tr("Aus Farbkarte …"))
+        self.raw_farbprofil_karte.clicked.connect(self._farbprofil_aus_karte)
+        for w in (self.raw_farbprofil, self.raw_farbprofil_waehlen, self.raw_farbprofil_karte,
+                  self.raw_wb, self.raw_bps, self.raw_look, self.raw_auto_bright, self.raw_half,
                   self.raw_demosaic, self.raw_highlights, self.lens_auto,
                   self.lens_vignette, self.lens_distortion, self.lens_ca):
             self.raw_dev.toggled.connect(w.setEnabled)
@@ -380,6 +387,16 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, ProjectM
         rg.addWidget(_lens_lab, 7, 0, 1, 3)
         rg.addWidget(self.lens_auto, 8, 0, 1, 2)
         rg.addWidget(QLabel(tr("Aussehen")), 11, 0); rg.addWidget(self.raw_look, 11, 1)
+        _fp = QHBoxLayout()
+        _fp.addWidget(self.raw_farbprofil, 1); _fp.addWidget(self.raw_farbprofil_waehlen)
+        _fp.addWidget(self.raw_farbprofil_karte)
+        rg.addWidget(QLabel(tr("Farbprofil")), 12, 0); rg.addLayout(_fp, 12, 1)
+        rg.addWidget(help_btn("Farben nach einer Farbkarte (X-Rite ColorChecker Classic), wie "
+                              "„Kalibrierung“ in Camera Raw: ein Foto mit der Karte im selben Licht "
+                              "aufnehmen, „Aus Farbkarte …“ wählen — die Karte wird selbst gefunden. "
+                              "Das Profil gilt dann für alle RAWs dieser Aufnahme und ersetzt das "
+                              "Aussehen „Wie die Kamera“. Gemessen an einer Fuji X-T4: Farbabstand "
+                              "ΔE 2000 von 7,2 auf 2,7 (Kamera-JPEG 9,7)."), 12, 2)
         rg.addWidget(help_btn("„Wie die Kamera“: Helligkeit, Kontrast und Farbe werden an das Bild "
                               "angeglichen, das die Kamera selbst in die RAW-Datei legt — wie Camera Raw "
                               "ab Werk. „Neutral“: dunkler und flacher, für die eigene Bearbeitung. "
@@ -1950,6 +1967,8 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, ProjectM
             args += ["--raw-wb", self.raw_wb.currentText(), "--raw-bps", self.raw_bps.currentText(),
                      "--raw-demosaic", self.raw_demosaic.currentText(),
                      "--raw-look", self.raw_look.currentData()]
+            if self.raw_farbprofil.text().strip():
+                args += ["--raw-farbprofil", os.path.abspath(self.raw_farbprofil.text().strip())]
             if self.raw_auto_bright.isChecked():
                 args += ["--raw-auto-bright"]
             if self.raw_half.isChecked():
@@ -2195,6 +2214,46 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, ProjectM
             proc.start(sys.executable, ["--cli"] + args[1:])   # args[0] = SCRIPT-Pfad weglassen
         else:
             proc.start(sys.executable, ["-u"] + args)
+
+    def _farbprofil_waehlen(self):
+        pfad, _ = QFileDialog.getOpenFileName(self, tr("Farbprofil wählen"), "",
+                                              tr("ForgePix-Farbprofil (*.farbprofil.json *.json)"))
+        if pfad:
+            self.raw_farbprofil.setText(pfad)
+
+    def _farbprofil_aus_karte(self):
+        """Aus einem Foto mit Farbkarte ein Profil machen (core/farbkarte.py)."""
+        from PySide6.QtWidgets import QMessageBox
+        pfad, _ = QFileDialog.getOpenFileName(self, tr("Foto mit Farbkarte wählen"))
+        if not pfad:
+            return
+        import sys as _sys
+        _sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "core"))
+        import farbkarte
+        import focus_cull_stack as _fcs
+        QApplication.setOverrideCursor(Qt.WaitCursor)
+        try:
+            if os.path.splitext(pfad)[1].lower() in _fcs.RAW_EXTS:
+                bild = _fcs.develop_raw_to_bgr(pfad, wb=self.raw_wb.currentText(), look="neutral")
+            else:
+                bild = _fcs.imread(pfad, -1)
+            if bild is None:
+                raise ValueError(tr("Bild nicht lesbar:") + " " + pfad)
+            profil = farbkarte.profil_erstellen(bild, pfad, log=self._append)
+            ziel = os.path.splitext(pfad)[0] + ".farbprofil.json"
+            farbkarte.profil_speichern(profil, ziel)
+        except ValueError as e:
+            QApplication.restoreOverrideCursor()
+            QMessageBox.warning(self, tr("Farbprofil"), str(e))
+            return
+        QApplication.restoreOverrideCursor()
+        self.raw_farbprofil.setText(ziel)
+        de = profil["delta_e"]
+        QMessageBox.information(
+            self, tr("Farbprofil"),
+            tr("Profil gespeichert:") + "\n%s\n\n" % ziel
+            + tr("Farbabstand (ΔE 2000): vorher %(v)s, nachher %(n)s, ehrlich geprüft %(e)s")
+            % {"v": de["vorher"], "n": de["nachher"], "e": de["eins_ausgelassen"]})
 
     def run(self, auto=False):
         # Doppelstart verhindern (Tastenkürzel umgehen die deaktivierten Buttons)

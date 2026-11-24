@@ -8,6 +8,21 @@ All notable changes to ForgePix. Format based on
 
 ## [Unreleased]
 
+### Colour accuracy measured, colour profile from a colour chart
+
+* **Measured:** ΔE 2000 on a Fuji X-T4 shot with a ColorChecker Classic
+  (`docs/vergleich/FARBKARTE.md`), each after white balance on the grey patches: camera JPEG
+  7.9, ForgePix “Like the camera” 8.0, ForgePix neutral **3.5**. The neutral development is
+  therefore more colour-accurate than the camera itself.
+* **New: colour profile from a colour chart** (`core/farbkarte.py`), like “Calibration” in
+  Camera Raw.
+  * The chart is found automatically, in any orientation, at most 6.8 px from hand-placed marks.
+  * The result is a 3×3 matrix. With it, the neutral development reaches ΔE **2.4**, or 2.7
+    when checked honestly (leave one out).
+  * GUI: RAW → Colour profile → “From colour chart …”. Command line: `--farbprofil-erstellen`
+    and `--raw-farbprofil`.
+  * ΔE 2000 is computed in-house and checked against the test pairs of Sharma et al. 2005.
+
 ### HDR as bright as the camera, brackets detected correctly
 
 * **Measured** on 8 Sony brackets (−1/0/+1 EV) against the camera's normal exposure

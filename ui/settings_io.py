@@ -37,6 +37,7 @@ class SettingsMixin:
             "task_i": (lambda v: self.task_box.setCurrentIndex(int(v)), self.task_box.currentIndex),
             "raw_dev": (self.raw_dev.setChecked, self.raw_dev.isChecked),
             "raw_wb": (self.raw_wb.setCurrentText, self.raw_wb.currentText),
+            "raw_farbprofil": (self.raw_farbprofil.setText, self.raw_farbprofil.text),
             "raw_look": (lambda v: self.raw_look.setCurrentIndex(max(0, self.raw_look.findData(v))),
                          self.raw_look.currentData),
             "raw_bps": (self.raw_bps.setCurrentText, self.raw_bps.currentText),

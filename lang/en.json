@@ -1451,5 +1451,15 @@
   "Perspektive senkrecht": "Vertical perspective",
   "Perspektive waagerecht": "Horizontal perspective",
   "Anpassung fehlgeschlagen:": "Adjustment failed:",
-  "Freihand mit Wasser/Wolken — Perspektive": "Handheld with water/clouds — perspective"
+  "Freihand mit Wasser/Wolken — Perspektive": "Handheld with water/clouds — perspective",
+  "keins": "none",
+  "Aus Farbkarte …": "From colour chart …",
+  "Farbprofil": "Colour profile",
+  "Farbprofil wählen": "Choose colour profile",
+  "ForgePix-Farbprofil (*.farbprofil.json *.json)": "ForgePix colour profile (*.farbprofil.json *.json)",
+  "Foto mit Farbkarte wählen": "Choose photo with colour chart",
+  "Bild nicht lesbar:": "Image not readable:",
+  "Profil gespeichert:": "Profile saved:",
+  "Farbabstand (ΔE 2000): vorher %(v)s, nachher %(n)s, ehrlich geprüft %(e)s": "Colour difference (ΔE 2000): before %(v)s, after %(n)s, honestly checked %(e)s",
+  "Farben nach einer Farbkarte (X-Rite ColorChecker Classic), wie „Kalibrierung“ in Camera Raw: ein Foto mit der Karte im selben Licht aufnehmen, „Aus Farbkarte …“ wählen — die Karte wird selbst gefunden. Das Profil gilt dann für alle RAWs dieser Aufnahme und ersetzt das Aussehen „Wie die Kamera“. Gemessen an einer Fuji X-T4: Farbabstand ΔE 2000 von 7,2 auf 2,7 (Kamera-JPEG 9,7).": "Colours from a colour chart (X-Rite ColorChecker Classic), like “Calibration” in Camera Raw: take a photo of the chart in the same light and choose “From colour chart …” — the chart is found automatically. The profile then applies to all RAWs of that shoot and replaces the “Like the camera” look. Measured on a Fuji X-T4: colour difference ΔE 2000 from 7.2 to 2.7 (camera JPEG 9.7)."
 }

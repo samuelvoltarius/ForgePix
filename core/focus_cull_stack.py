@@ -88,7 +88,8 @@ def load_gray(path, max_side=1600):
 
 
 def develop_raw_to_bgr(path, wb="camera", auto_bright=False, bps=16, half=False,
-                       demosaic="auto", reconstruct_highlights=False, lens=None, look="neutral"):
+                       demosaic="auto", reconstruct_highlights=False, lens=None, look="neutral",
+                       farbprofil=None):
     """RAW treu entwickeln (rawpy) und als BGR-Array zurückgeben (cv2-Konvention).
     Nicht-generativ: nur Demosaicing/WB/Gamma, keine erfundenen Inhalte.
     demosaic: 'auto'(=AHD) | 'dht' | 'dcb' | 'vng' | 'ahd' (AMaZE braucht GPL-LibRaw-Build).
@@ -128,6 +129,12 @@ def develop_raw_to_bgr(path, wb="camera", auto_bright=False, bps=16, half=False,
         bgr = develop.lens_correct(bgr, vignette=lens.get("vignette", 0.0),
                                    distortion=lens.get("distortion", 0.0), ca=lens.get("ca", 0.0),
                                    auto=lens.get("auto", False), exif_path=path)
+    if farbprofil is not None:
+        # Farben nach Farbkarte (core/farbkarte.py). Der Kamera-Look würde sie wieder an das
+        # Kamera-JPEG angleichen — gemessen ΔE 6,5 statt 2,4 —, darum dann nicht zusätzlich.
+        import farbkarte
+        bgr = farbkarte.kalibrierung_anwenden(bgr, farbprofil)
+        return bgr
     if look == "kamera":
         import kameralook
         bgr, _ = kameralook.angleichen(bgr, kameralook.vorschau(path))
@@ -141,6 +148,12 @@ def develop_all(paths, dev_dir, args):
         shutil.rmtree(dev_dir)
     os.makedirs(dev_dir)
     from parallel import pmap
+    _profil = None
+    if getattr(args, "raw_farbprofil", None):
+        import farbkarte
+        _profil = farbkarte.profil_laden(args.raw_farbprofil)
+        print(f"  Farbprofil aktiv: {os.path.basename(args.raw_farbprofil)} — Farben nach Farbkarte, "
+              f"Kamera-Look dafür aus")
 
     # Index-Präfix erhält die Aufnahmereihenfolge (Nachbar-Logik des Cullings hängt davon ab).
     # Über alle Kerne entwickeln (rawpy/cv2 geben den GIL frei); pmap erhält die Reihenfolge.
@@ -159,7 +172,8 @@ def develop_all(paths, dev_dir, args):
                                            "vignette": getattr(args, "lens_vignette", 0.0),
                                            "distortion": getattr(args, "lens_distortion", 0.0),
                                            "ca": getattr(args, "lens_ca", 0.0)},
-                                     look=getattr(args, "raw_look", "kamera"))
+                                     look=getattr(args, "raw_look", "kamera"),
+                                     farbprofil=_profil)
             imwrite(outp, bgr, [int(cv2.IMWRITE_TIFF_COMPRESSION), 1])
             return outp
         dst = os.path.join(dev_dir, f"{i:04d}_" + name)
@@ -1703,6 +1717,13 @@ def main():
                          "Saettigung an das eingebettete Kamerabild angeglichen, wie Camera Raw ab "
                          "Werk); neutral = treu und dunkler, fuer die Weiterbearbeitung. HDR-Reihen "
                          "werden immer neutral entwickelt.")
+    ap.add_argument("--raw-farbprofil", metavar="PROFIL.json", default=None,
+                    help="RAW-Farben nach einem Farbprofil aus einer Farbkarte (erstellt mit "
+                         "--farbprofil-erstellen). Ersetzt den Kamera-Look.")
+    ap.add_argument("--farbprofil-erstellen", metavar="BILD", default=None,
+                    help="Aus einem Foto mit ColorChecker-Karte (RAW oder Bild) ein Farbprofil "
+                         "machen: Karte wird selbst gefunden; schreibt BILD.farbprofil.json und "
+                         "nennt den Farbabstand (Delta E 2000) vorher und nachher.")
     ap.add_argument("--raw-auto-bright", action="store_true",
                     help="Auto-Helligkeit aktivieren (Default aus = treu)")
     ap.add_argument("--raw-bps", type=int, choices=[8, 16], default=16,
@@ -1760,7 +1781,7 @@ def main():
                     help="Sekunden ohne Änderung, bevor gestackt wird (Default 5)")
     args = ap.parse_args()
 
-    _NUR_AUFLISTEN = ("pixelmath_liste", "filter_liste", "blink")
+    _NUR_AUFLISTEN = ("pixelmath_liste", "filter_liste", "blink", "farbprofil_erstellen")
     if not args.input and not any(getattr(args, n, False) for n in _NUR_AUFLISTEN):
         ap.error("the following arguments are required: --input")
 
@@ -1772,6 +1793,29 @@ def main():
 
     if getattr(args, "pixelmath", None):
         return _pixelmath_lauf(args)
+
+    if getattr(args, "farbprofil_erstellen", None):
+        import farbkarte
+        quelle = args.farbprofil_erstellen
+        if os.path.splitext(quelle)[1].lower() in RAW_EXTS:
+            bild = develop_raw_to_bgr(quelle, wb=args.raw_wb, look="neutral")
+        else:
+            bild = imread(quelle, cv2.IMREAD_UNCHANGED)
+            if bild is None:
+                print(f"Bild nicht lesbar: {quelle}", file=sys.stderr)
+                return 1
+        try:
+            profil = farbkarte.profil_erstellen(bild, quelle, log=print)
+        except ValueError as e:
+            print(str(e), file=sys.stderr)
+            return 1
+        ziel = os.path.splitext(quelle)[0] + ".farbprofil.json"
+        farbkarte.profil_speichern(profil, ziel)
+        de = profil["delta_e"]
+        print(f"Farbabstand (Delta E 2000) vorher {de['vorher']}, nachher {de['nachher']}, "
+              f"ehrlich geprüft (eins ausgelassen) {de['eins_ausgelassen']}")
+        print(f"FARBPROFIL:{ziel}")
+        return 0
 
     if getattr(args, "blink", None):
         # Daumenkino: laeuft eigenstaendig, ohne Stapeln. Der schnellste Weg, eine Nacht zu

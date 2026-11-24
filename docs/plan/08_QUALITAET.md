@@ -22,7 +22,7 @@ nachbauen können, einen Download zu dem Projekt verlinken**, das die Leute selb
 | Automatik / Anfänger-Modus | — | richtige Moduswahl, sinnvolle Standardwerte, keine stillen Fehler | gemischte Ordner | offen |
 | Fokus-Stacking (Makro) | Helicon Focus, Zerene Stacker | Schärfe je Region, Halos, Geister an Kanten | Makro-Fokusreihen (Beispieldaten-Download) | **gemessen** ([../vergleich/FOKUS.md](../vergleich/FOKUS.md)): Fokus überall getroffen, weniger Überzeichnung als focus-stack; Helicon/Zerene nicht da |
 | Langzeitbelichtung aus Einzelbildern | Sequator, StarStaX, Photoshop-Mittelwert | Rauschen, Bewegungsunschärfe, Geister | Serien normaler Kameras | **gemessen** ([../vergleich/LANGZEIT.md](../vergleich/LANGZEIT.md)): exakt; aus der Hand jetzt 0,62/0,63 der Einzelbild-Schärfe (vorher 0,77/0,22) |
-| RAW-Konverter | darktable, RawTherapee, Lightroom | Farbtreue (ΔE an Farbkarte), Rauschen, Details, Lichterrekonstruktion | RAW-Dateien mehrerer Kameras | Farbmanagement nicht durchgängig (05) |
+| RAW-Konverter | darktable, RawTherapee, Lightroom | Farbtreue (ΔE an Farbkarte), Rauschen, Details, Lichterrekonstruktion | RAW-Dateien mehrerer Kameras | **ΔE gemessen** ([../vergleich/FARBKARTE.md](../vergleich/FARBKARTE.md)): neutral 3,5, Kamera-JPEG 7,9, mit Farbprofil 2,4; nur eine Kamera mit Karte |
 | PixInsight-Werkzeuge (Arbeitsplatz) | PixInsight | je Werkzeug gleiches Bild, Differenzbild, Kennzahl | eigener Stapel | 50 Werkzeuge gebaut, kein Vergleich gegen PixInsight |
 | KI (Entrauschen, Schärfen, Sterne, Hintergrund) | RC-Astro, GraXpert, Cosmic Clarity | Rauschen, Sternfluss, Artefakte | eigener Stapel | eigenes Entrauschen gemessen, Rest schlechter als klassisch |
 
@@ -66,7 +66,7 @@ Hauptfenster einstellbar, nicht im Editor.
 | Objektivkorrektur (Profil, Vignette, Verzeichnung, CA) | lensfun + manuell | RAW-Teil |
 | Masken: Pinsel, Auto-Maske | im Editor | im Editor |
 | Verlaufs-/Radialfilter, Bereichsmasken | `gradient_mask`, `radial_mask`, `parametric_mask` | nur Baustein, nicht im Editor |
-| Kamera-Kalibrierung an Farbkarte (ΔE) | Fuji X-T4-Datei mit ColorChecker liegt in `testdata/raw` | fehlt, als Nächstes messbar |
+| Kamera-Kalibrierung an Farbkarte (ΔE) | `core/farbkarte.py`, Karte wird selbst gefunden | **neu**, RAW-Teil; ΔE 7,2 → 2,4 (eins ausgelassen 2,7) |
 | Reparieren / Stempel | Retusche holt nur scharfe Stellen aus einem Quellfoto (Fokus-Stacking) | fehlt |
 | KI-Masken (Motiv, Himmel) | — | fehlt; nur mit freiem Modell (06_KI) |
 | Verlauf/Schnappschüsse, Einstellungen auf viele Bilder übertragen | im Arbeitsplatz (Rezepte), nicht im RAW-Teil | teilweise |

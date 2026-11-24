@@ -8,6 +8,21 @@ Alle nennenswerten Änderungen an ForgePix. Format orientiert an
 
 ## [Unreleased]
 
+### Farbtreue gemessen, Farbprofil aus Farbkarte
+
+* **Gemessen:** ΔE 2000 an einer Fuji-X-T4-Aufnahme mit ColorChecker Classic
+  (`docs/vergleich/FARBKARTE.md`), jeweils nach Weißabgleich über Grau: Kamera-JPEG 7,9,
+  ForgePix „Wie die Kamera“ 8,0, ForgePix neutral **3,5**. Die neutrale Entwicklung ist also
+  farbtreuer als die Kamera selbst.
+* **Neu: Farbprofil aus Farbkarte** (`core/farbkarte.py`), wie „Kalibrierung“ in Camera Raw.
+  * Die Karte wird selbst gefunden, in jeder Lage. Die Abweichung zu Hand-Markierungen beträgt
+    höchstens 6,8 px.
+  * Daraus entsteht eine 3×3-Matrix. Mit ihr liegt die neutrale Entwicklung bei ΔE **2,4**,
+    ehrlich geprüft (eins ausgelassen) bei 2,7.
+  * Oberfläche: RAW → Farbprofil → „Aus Farbkarte …“. Kommandozeile: `--farbprofil-erstellen`
+    und `--raw-farbprofil`.
+  * ΔE 2000 ist selbst gerechnet und an den Testpaaren von Sharma et al. 2005 geprüft.
+
 ### HDR so hell wie die Kamera, Reihen richtig erkannt
 
 * **Gemessen** an 8 Sony-Reihen (−1/0/+1 EV) gegen die normale Kamera-Aufnahme
