@@ -34,6 +34,9 @@ Die vollständige Lückenliste von heute steht in [../LUECKEN.de.md](../LUECKEN.
   0,989 der Kamera-Helligkeit, die Farbe liegt im Mittel bei ±5 %.
 * **Camera-Raw-Editor:** Jeder Regler hat eine gemessene Wirkung. Rauschminderung, Color Grading,
   Vignette, Körnung und Perspektive sind neu.
+* **Langzeitbelichtung:** Mittel und Median sind exakt. Aus der Hand hält die neue Ausrichtung
+  „Perspektive“ feste Felsen bei 0,6 der Einzelbild-Schärfe statt 0,22
+  ([../vergleich/LANGZEIT.md](../vergleich/LANGZEIT.md)).
 * **N.I.N.A.-Fernsteuerung** gegen ein echtes N.I.N.A. 3.2 (Simulator-Kamera).
 * **GraXpert** ist echt aufgerufen worden, mit 6 s Laufzeit.
 
@@ -45,7 +48,6 @@ Die vollständige Lückenliste von heute steht in [../LUECKEN.de.md](../LUECKEN.
 * macOS und Linux sind nur über die Einrichtung vorbereitet, aber nicht auf echten Rechnern gelaufen.
 
 **Noch nicht gemessen oder fehlt**
-* **Langzeitbelichtung** aus Einzelbildern: Das Wasserfall-Video liegt bereit.
 * **HDR:** Belichtungsreihen in `Y:\Backup\fell`.
 * **RAW-Farbtreue an der Farbkarte (ΔE):** Die Fuji-Datei mit ColorChecker liegt bereit.
 * **Arbeitsplatz-Werkzeuge gegen PixInsight:** PixInsight ist nicht auf dem Rechner.
@@ -58,8 +60,7 @@ Die vollständige Lückenliste von heute steht in [../LUECKEN.de.md](../LUECKEN.
   fehlen.
 
 **Nächste Schritte**, in dieser Reihenfolge:
-1. Langzeitbelichtung messen.
-2. HDR messen.
-3. ΔE an der Farbkarte messen.
-4. ASI294- und ASI533-Serie gegen Siril.
-5. Geschwindigkeit beim Ausrichten.
+1. HDR messen.
+2. ΔE an der Farbkarte messen.
+3. ASI294- und ASI533-Serie gegen Siril.
+4. Geschwindigkeit beim Ausrichten.

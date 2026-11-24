@@ -1319,8 +1319,9 @@ def main():
                     default="smooth",
                     help="smooth=Mitteln (Wasser), trails=Aufhellen (Lichtspuren), "
                          "declutter=Median (Störer weg), bright=additiv (dunkel aufhellen)")
-    ap.add_argument("--longexp-align", choices=["none", "shift", "feature"], default="none",
-                    help="Ausrichten: none=Stativ, shift=leichtes Verwackeln, feature=Freihand")
+    ap.add_argument("--longexp-align", choices=["none", "shift", "feature", "perspective"], default="none",
+                    help="Ausrichten: none=Stativ, shift=leichtes Verwackeln (Sterne), feature=Freihand "
+                         "(Merkmale), perspective=Freihand mit Wasser/Wolken (empfohlen bei Verwackeln)")
     ap.add_argument("--longexp-strength", type=int, default=100,
                     help="Virtuelle Belichtungszeit 0–100 %% (gewichtetes Teil-Mitteln; "
                          "100=volle Glättung/Spuren, 0=Einzelbild eingefroren)")
@@ -3653,7 +3654,11 @@ def run_longexp(input_dir, work_dir, args):
             print(f"    → Ausrichtung automatisch auf „{eff_align}“ gesetzt (Kamerabewegung erkannt)")
     except Exception as e:
         print(f"  (Modus-Vorschlag übersprungen: {e})", file=sys.stderr)
-    strength = max(0, min(100, getattr(args, "longexp_strength", 100))) / 100.0
+    staerke_prozent = getattr(args, "longexp_strength", 100)
+    if not 0 <= staerke_prozent <= 100:                      # nicht still beschneiden (CLAUDE.md)
+        print(f"--longexp-strength {staerke_prozent} liegt außerhalb 0..100.", file=sys.stderr)
+        return None
+    strength = staerke_prozent / 100.0
     phase("longexp")
     print(f"== Langzeitbelichtung: {len(paths)} Aufnahmen, Modus={mode}, "
           f"Ausrichten={eff_align}, virtuelle Belichtung={int(strength*100)} % ==")

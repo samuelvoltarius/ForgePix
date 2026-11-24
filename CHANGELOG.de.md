@@ -8,6 +8,22 @@ Alle nennenswerten Änderungen an ForgePix. Format orientiert an
 
 ## [Unreleased]
 
+### Langzeitbelichtung gemessen, neue Freihand-Ausrichtung
+
+* **Gemessen** an einem Freihand-Wasserfall-Video (90 Bilder, `docs/vergleich/LANGZEIT.md`):
+  Mittel und Median sind exakt. Die Schärfe fester Felsen gegenüber dem Einzelbild lag mit der
+  vorgeschlagenen Stern-Ausrichtung „shift“ bei 0,77 / **0,22**, mit „feature“ bei 0,67 / 0,34
+  (143 s).
+* **Neue Ausrichtung „perspective“** (Freihand mit Wasser/Wolken; ECC-Homographie, grob nach fein):
+  0,61 / 0,60 in 36 s. Die Automatik wählt sie bei Verwackeln; über die Kommandozeile 0,62 / 0,63.
+  Auch in der Oberfläche wählbar.
+* **Fehler behoben:**
+  * Ein unbekannter Langzeit-Modus wurde still zu „smooth“.
+  * Die Stärke wurde still beschnitten.
+  * Unlesbare Bilder fielen ohne Meldung heraus.
+  * „shift“ endete an Tagesszenen mit „keine Frames zum Stacken“; jetzt sagt es, dass Sterne
+    fehlen, und nennt „perspective“.
+
 ### Fokus-Stacking gemessen, „average“ repariert
 
 * **Fokus-Stacking erstmals gemessen** (`docs/vergleich/FOKUS.md`, wiederholbar mit

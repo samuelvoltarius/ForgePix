@@ -8,6 +8,21 @@ All notable changes to ForgePix. Format based on
 
 ## [Unreleased]
 
+### Long exposure measured, new handheld alignment
+
+* **Measured** on a handheld waterfall video (90 frames, `docs/vergleich/LANGZEIT.md`): mean and
+  median are exact. Sharpness of fixed rocks relative to a single frame was 0.77 / **0.22** with
+  the suggested star alignment “shift”, and 0.67 / 0.34 with “feature” (143 s).
+* **New alignment “perspective”** (handheld with water/clouds; ECC homography, coarse to fine):
+  0.61 / 0.60 in 36 s. Auto mode picks it when it detects shake; via the command line 0.62 / 0.63.
+  Also selectable in the GUI.
+* **Fixed:**
+  * An unknown long-exposure mode silently became “smooth”.
+  * The strength was silently clipped.
+  * Unreadable frames were dropped without a word.
+  * “shift” ended on daytime scenes with “no frames to stack”; it now says that stars are
+    missing and points to “perspective”.
+
 ### Focus stacking measured, “average” repaired
 
 * **Focus stacking measured for the first time** (`docs/vergleich/FOKUS.md`, repeatable with

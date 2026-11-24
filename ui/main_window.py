@@ -922,6 +922,7 @@ class MainWindow(WelcomeMixin, SettingsMixin, ExportMixin, ResultMixin, ProjectM
         self.longexp_align.addItem(tr("Stativ — nicht ausrichten"), "none")
         self.longexp_align.addItem(tr("Leichtes Verwackeln — Versatz"), "shift")
         self.longexp_align.addItem(tr("Freihand — Merkmale"), "feature")
+        self.longexp_align.addItem(tr("Freihand mit Wasser/Wolken — Perspektive"), "perspective")
         lg.addWidget(QLabel(tr("Ausrichten")), 1, 0); lg.addWidget(self.longexp_align, 1, 1, 1, 2)
         lg.addWidget(help_btn("Vom Stativ: „nicht ausrichten“. Bei leichtem Verwackeln „Versatz“ "
                               "(verschiebt), aus der Hand „Merkmale“ (richtet voll aus)."), 1, 3)

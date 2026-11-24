@@ -205,6 +205,73 @@ def _star_affine(refg, img_g):
     return M
 
 
+ALIGNS = ("none", "shift", "feature", "perspective")
+
+
+def _perspektive(paths, adir, log=log_print):
+    """Freihand-Serien mit bewegtem Wasser/Wolken ausrichten: perspektivisch (Homographie) per ECC,
+    grob nach fein (Viertel-, dann halbe Auflösung), auf das mittlere Bild.
+
+    Warum nicht die Merkmals-Ausrichtung: Merkmale sitzen bei einem Wasserfall fast alle im
+    schäumenden Wasser, das sich ständig bewegt. Gemessen an einem Freihand-Video (90 Bilder,
+    bis ~15 px Versatz; Schärfe fester Felsen ÷ Einzelbild, zwei Stellen): ohne Ausrichtung
+    0,26 / 0,24; „shift“ (Stern-Ausrichtung) 0,77 / 0,22; „feature“ (ORB, starr) 0,67 / 0,34 in
+    143 s; diese hier 0,61 / 0,60 in 36 s. Nur auf ruhigen Flächen auszurichten war SCHLECHTER
+    (0,30 / 0,20): die Maske traf glatten Schnee statt Felsen.
+
+    Bilder, die sich nicht ausrichten lassen, werden genannt und weggelassen."""
+    imgs = [imread(p, cv2.IMREAD_UNCHANGED) for p in paths]
+    unlesbar = [os.path.basename(p) for p, im in zip(paths, imgs) if im is None]
+    if unlesbar:
+        log("    nicht lesbar, weggelassen: %s" % ", ".join(unlesbar))
+    paare = [(p, im) for p, im in zip(paths, imgs) if im is not None]
+    if len(paare) < 2:
+        raise RuntimeError("weniger als zwei lesbare Aufnahmen für die Ausrichtung")
+    from hdr import _resize_like_first
+    mitte = len(paare) // 2
+    bilder = _resize_like_first([im for _, im in paare], paare[mitte][1].shape[:2])
+    maxv = 65535.0 if bilder[0].dtype == np.uint16 else 255.0
+
+    def klein(b, s):
+        g = cv2.cvtColor(b, cv2.COLOR_BGR2GRAY) if b.ndim == 3 else b
+        return cv2.resize(g.astype(np.float32) / maxv, None, fx=s, fy=s, interpolation=cv2.INTER_AREA)
+
+    stufen = (0.25, 0.5)
+    ref = {s: klein(bilder[mitte], s) for s in stufen}
+    os.makedirs(adir, exist_ok=True)
+    h, w = bilder[mitte].shape[:2]
+    aus, verworfen = [], []
+    for i, b in enumerate(bilder):
+        if i != mitte:
+            M = np.eye(3, dtype=np.float32)
+            vorher = None
+            try:
+                for s in stufen:
+                    if vorher is not None:
+                        Sf = np.diag([s / vorher, s / vorher, 1.0]).astype(np.float32)
+                        M = (Sf @ M @ np.linalg.inv(Sf)).astype(np.float32)
+                    _, M = cv2.findTransformECC(ref[s], klein(b, s), M, cv2.MOTION_HOMOGRAPHY,
+                                                (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 60, 1e-5),
+                                                None, 5)
+                    vorher = s
+            except cv2.error as e:
+                verworfen.append("%s (%s)" % (os.path.basename(paare[i][0]), str(e).strip().splitlines()[-1][:60]))
+                continue
+            S = np.diag([1 / vorher, 1 / vorher, 1.0]).astype(np.float32)
+            b = cv2.warpPerspective(b, S @ M @ np.linalg.inv(S), (w, h),
+                                    flags=cv2.INTER_LINEAR | cv2.WARP_INVERSE_MAP, borderMode=cv2.BORDER_REFLECT)
+        op = os.path.join(adir, f"p_{i:04d}.tif")
+        imwrite(op, b, [int(cv2.IMWRITE_TIFF_COMPRESSION), 1])
+        aus.append(op)
+        log(f"    Perspektive {i + 1}/{len(bilder)}")
+    if verworfen:
+        log("    nicht ausrichtbar, weggelassen (%d): %s" % (len(verworfen), "; ".join(verworfen[:5])
+                                                           + (" …" if len(verworfen) > 5 else "")))
+    if len(aus) < 2:
+        raise RuntimeError("weniger als zwei Aufnahmen ließen sich ausrichten")
+    return aus
+
+
 def combine(paths, mode="smooth", align="none", strength=1.0, work_dir=None, detector="ORB",
             transform="rigid", gap_fill=False, comet_decay=0.9, sigma_clip=False,
             freeze_below=None, freeze_auto=False, log=log_print):
@@ -215,15 +282,24 @@ def combine(paths, mode="smooth", align="none", strength=1.0, work_dir=None, det
     (1 = längste Belichtung, maximale Glättung/Spuren). Dazwischen stufenlos."""
     if not paths:
         raise RuntimeError("keine Aufnahmen für die Langzeitbelichtung")
+    # Früher wurde ein unbekannter Modus still zu „smooth“ und die Stärke still auf 0..1
+    # beschnitten — ein Tippfehler rechnete dann klaglos etwas anderes als verlangt.
     if mode not in MODES:
-        mode = "smooth"
-    strength = float(max(0.0, min(1.0, strength)))
+        raise ValueError("Langzeit-Modus %r unbekannt (möglich: %s)" % (mode, ", ".join(MODES)))
+    if align not in ALIGNS:
+        raise ValueError("Langzeit-Ausrichtung %r unbekannt (möglich: %s)" % (align, ", ".join(ALIGNS)))
+    strength = float(strength)
+    if not 0.0 <= strength <= 1.0:
+        raise ValueError("Langzeit-Stärke %r außerhalb 0..1" % strength)
     work_dir = work_dir or os.path.dirname(paths[0])
 
     # 1) Ausrichten (optional). Stativ -> 'none'. Sonst Shift (Phasenkorrelation) oder Feature.
     if align == "feature":
         import stacker
         imgs = [imread(p, cv2.IMREAD_UNCHANGED) for p in paths]
+        unlesbar = [os.path.basename(p) for p, im in zip(paths, imgs) if im is None]
+        if unlesbar:
+            log("    nicht lesbar, weggelassen: %s" % ", ".join(unlesbar))
         imgs = [im for im in imgs if im is not None]
         if not imgs:
             raise RuntimeError("keine lesbaren Aufnahmen für die Ausrichtung")
@@ -239,9 +315,16 @@ def combine(paths, mode="smooth", align="none", strength=1.0, work_dir=None, det
             op = os.path.join(adir, f"a_{i:04d}.tif")
             imwrite(op, im, [int(cv2.IMWRITE_TIFF_COMPRESSION), 1])
             proc.append(op)
+    elif align == "perspective":
+        proc = _perspektive(paths, os.path.join(work_dir, "_le_aligned"), log=log)
     elif align == "shift":
         adir = os.path.join(work_dir, "_le_aligned")
         proc = astro.register_and_cache(paths, adir, do_register=True, log=lambda *a: None)
+        if len(proc) < 2:
+            # An einer Tagesszene endete das sonst als „keine Frames zum Stacken“ im Stapeln.
+            raise RuntimeError("Ausrichtung „shift“ richtet nach Sternen aus und hat nur %d von %d "
+                               "Aufnahmen ausgerichtet. Für Tagesszenen aus der Hand „perspective“ "
+                               "nehmen." % (len(proc), len(paths)))
     else:
         proc = list(paths)
 
@@ -319,7 +402,7 @@ def combine(paths, mode="smooth", align="none", strength=1.0, work_dir=None, det
         result = ref * (1.0 - strength) + result * strength
 
     # Temp-Ausrichtung aufräumen
-    if align in ("shift", "feature"):
+    if align in ("shift", "feature", "perspective"):
         import shutil
         shutil.rmtree(os.path.join(work_dir, "_le_aligned"), ignore_errors=True)
     return np.clip(result, 0, 1)
@@ -376,8 +459,10 @@ def suggest_mode(paths, max_side=900, sample=8):
                                         f"(~{gshift:.0f} px Schwenk) → Ausrichtung „Freihand/Merkmale“ "
                                         f"empfohlen, sonst verschmiert die ganze Szene.")
     elif shift_frac > 0.01:
-        align, align_note = "shift", (f" Leichtes Verwackeln erkannt (~{gshift:.0f} px) → "
-                                      f"Ausrichtung „Versatz“ empfohlen.")
+        # früher „shift“: das ist die Stern-Ausrichtung aus dem Astro-Teil; an einem Freihand-
+        # Wasserfall blieb damit eine Stelle bei 0,22 der Einzelbild-Schärfe (perspective 0,60)
+        align, align_note = "perspective", (f" Verwackeln erkannt (~{gshift:.0f} px) → "
+                                            f"Ausrichtung „Freihand — Perspektive“ empfohlen.")
     else:
         align, align_note = "none", ""                       # wirklich ruhig/Stativ
     if mean_bright < 0.28 and bright_motion > 18:
